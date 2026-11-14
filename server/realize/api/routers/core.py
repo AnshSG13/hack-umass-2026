@@ -214,6 +214,14 @@ def demo_samples(user: dict | None = Depends(optional_user)) -> list[dict]:
     return demo.list_samples(user)
 
 
+@router.get("/api/demo/story")
+def demo_story(user: dict = Depends(current_user)) -> dict:
+    """The guided first open's pieces for this demo session."""
+    if not user.get("is_demo"):
+        raise HTTPException(status_code=404, detail="Not found.")
+    return demo.story(user)
+
+
 @router.get("/api/demo/hero")
 def demo_hero() -> dict:
     """A real ticket in the proposed state for the landing page, built from the

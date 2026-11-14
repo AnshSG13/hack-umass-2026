@@ -19,6 +19,11 @@ LIVE_LIMIT = 3
 CHAT_LIMIT = 20
 LIVE_LIMIT_MESSAGE = "That's the live limit for this demo. The samples still work."
 CHAT_LIMIT_MESSAGE = "That's the chat limit for this demo."
+# The guided first open: the reel the viewer saves themself, and the reel whose trip plan
+# is already built. Results for both are built once by scripts.build_demo_story and kept on
+# the samples (story_discussion, story_trip), then copied into each demo session.
+STORY_RECIPE = "Dfs7pYmMFOy"
+STORY_TRIP = "DfkgVpfAb1S"
 TRIP_LIMIT = 3  # trip plans per demo session; each one is paid searches
 TRIP_LIMIT_MESSAGE = "That's the trip limit for this demo."
 
@@ -70,6 +75,60 @@ def plan_sample(save_id, user_id: str) -> None:
         planner.cached_plan_fallback(save, user, sample.get("cached_plan"))
     now = now_utc()
     db.saves().update_one({"_id": save_id}, {"$set": {"status": "ready", "planned_at": now, "ready_at": now}})
+    if user.get("is_demo"):
+        attach_story(db.saves().find_one({"_id": save_id, "user_id": user_id}), user, sample)
+
+
+def attach_story(save: dict | None, user: dict, sample: dict) -> None:
+    """Copy a sample's prebuilt story results (a discussion, a trip plan) into this demo
+    session's save. Free: nothing is asked of a model. Does nothing when there are none."""
+    if not save:
+        return
+    from bson import ObjectId
+
+    from . import trip as trip_mod
+
+    now = now_utc()
+    msgs = sample.get("story_discussion") or []
+    if msgs and not db.discussions().find_one({"save_id": save["_id"], "user_id": user["_id"]}):
+        doc = {"_id": ObjectId(), "user_id": user["_id"], "save_id": save["_id"],
+               "title": " ".join(str(msgs[0].get("text") or "Discussion").split())[:60],
+               "messages": [{**m, "at": now} for m in msgs], "count": len(msgs),
+               "created_at": now, "updated_at": now, "from_story": True}
+        if user.get("expires_at"):
+            doc["expires_at"] = user["expires_at"]
+        db.discussions().insert_one(doc)
+    story = sample.get("story_trip")
+    if story and not trip_mod.get_for_save(save["_id"], user["_id"]):
+        plan = {k: story[k] for k in ("days", "sources", "city", "region", "country", "weather_place",
+                                      "stay", "heads_up") if k in story}
+        start = trip_mod.default_start(save, user)
+        plan["days"] = [{**d} for d in plan.get("days") or []]
+        trip_mod.apply_dates(plan, start, user)
+        doc = {**plan, "user_id": user["_id"], "save_id": save["_id"], "status": "ready", "error": None,
+               "first_start": plan["start_date"], "share_token": __import__("secrets").token_urlsafe(16)[:22],
+               "created_at": now, "updated_at": now, "from_story": True}
+        if user.get("expires_at"):
+            doc["expires_at"] = user["expires_at"]
+        db.trips().insert_one(doc)
+
+
+def story(user: dict) -> dict:
+    """What the guided first open needs: the reel to save, and the saved reel with a trip."""
+    recipe = sample_for(STORY_RECIPE) or {}
+    trip_save = db.saves().find_one({"user_id": user["_id"], "shortcode": STORY_TRIP}, {"_id": 1})
+    saved = db.saves().find_one({"user_id": user["_id"], "shortcode": STORY_RECIPE}, {"_id": 1})
+    meta = recipe.get("metadata") or {}
+    handle = (meta.get("creator") or {}).get("handle")
+    return {
+        "recipe": {"url": recipe.get("url"), "shortcode": STORY_RECIPE,
+                   "title": (recipe.get("enrichment") or {}).get("title"),
+                   "creator": f"@{handle}" if handle else None,
+                   "thumb_url": f"/api/t/{recipe['thumb_id']}" if recipe.get("thumb_id") else None,
+                   "save_id": str(saved["_id"]) if saved else None,
+                   "has_answer": bool(recipe.get("story_discussion"))} if recipe else None,
+        "trip_save_id": str(trip_save["_id"]) if trip_save else None,
+    }
 
 
 def create_session(timezone: str | None) -> tuple[dict, str]:
@@ -114,6 +173,15 @@ def create_session(timezone: str | None) -> tuple[dict, str]:
             planops.accept(plan, doc, plan["options"][0], user, "web")
         elif doc["_id"] != waiting_id:
             planops.decline(plan)
+
+    # The story's trip reel, with its prebuilt trip plan, so "Make it a trip" opens ready.
+    trip_sample = sample_for(STORY_TRIP)
+    if trip_sample and not db.saves().find_one({"user_id": user["_id"], "shortcode": STORY_TRIP}):
+        doc = save_doc_from_sample(user, trip_sample, status="ready", source="sample")
+        doc["created_at"] = doc["planned_at"] = base - timedelta(minutes=1)
+        doc["_id"] = db.saves().insert_one(doc).inserted_id
+        planner.cached_plan_fallback(doc, user, trip_sample.get("cached_plan") or {})
+        attach_story(doc, user, trip_sample)
     return user, key
 
 
