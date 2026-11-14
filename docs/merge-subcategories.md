@@ -19,14 +19,12 @@ git merge --no-ff origin/feature/subcategories
 git push origin realize-build
 ```
 
-If `feature/email-login` is merged first, expect small conflicts in these files. Keep both
-sides of each:
+If `feature/email-login` is merged first, the only conflict is in `BUILD_LOG.md`, where both
+branches add an entry at the end. Keep both entries. Everything else, including
+`web/lib/types.ts`, merges on its own (checked with `git merge-tree` against both branches).
 
-- `web/lib/types.ts`: login adds `email` to `Me`; this branch adds `subcategory` to `Ticket`,
-  `SavePatch` and `Taste`.
-- `BUILD_LOG.md`: keep both entries.
-- `scripts/backfill_subcategories.py --email` only works once login is merged, because that's
-  what adds emails. `--user u_...` and `--all-users` work either way.
+`scripts/backfill_subcategories.py --email` only works once login is merged, because that's
+what adds emails. `--user u_...` and `--all-users` work either way.
 
 Then run `cd web && npx tsc --noEmit && npx eslint app components lib` and
 `cd server && python -m pytest -q`.
