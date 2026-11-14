@@ -144,7 +144,7 @@ def delete_user_data(user_id: str) -> dict:
     for name, coll in (("saves", db.saves()), ("plans", db.plans()), ("jobs", db.jobs()),
                        ("agent_runs", db.agent_runs()), ("trips", db.trips()),
                        ("sessions", db.sessions()), ("discussions", db.discussions()),
-                       ("bundles", db.bundles())):
+                       ("bundles", db.bundles()), ("deliverables", db.deliverables())):
         counts[name] = coll.delete_many({"user_id": user_id}).deleted_count
     counts["thumbnails"] = db.thumbnails().delete_many({"owner_user_id": user_id}).deleted_count
     counts["users"] = db.users().delete_one({"_id": user_id}).deleted_count

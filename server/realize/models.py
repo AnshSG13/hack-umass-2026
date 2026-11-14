@@ -144,6 +144,14 @@ class SavePatch(BaseModel):
     note: str | None = Field(default=None, max_length=NOTE_MAX)
 
 
+class DeliverableRequest(BaseModel):
+    """Make something to send from one reel."""
+    kind: Literal["itinerary", "invite", "grocery_list", "recipe_card", "workout_card", "shortlist",
+                  "places_list", "key_points", "chat_notes"]
+    discussion_id: str | None = None
+    servings: int | None = Field(default=None, ge=1, le=24)
+
+
 class TripRequest(BaseModel):
     """Build a trip plan, or move it to other dates."""
     start_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
