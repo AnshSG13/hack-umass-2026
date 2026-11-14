@@ -11,8 +11,9 @@ import { AgentTrace } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
 import { Icon, type IconName } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
+import { AskAboutButton, Discussions, ReelChat } from "@/components/reel-chat";
 import { ReelSections } from "@/components/reel-sections";
-import { useApp, useAskStore } from "@/components/shell";
+import { useApp } from "@/components/shell";
 import { useToast } from "@/components/toast";
 import { SEEDED_SAMPLE_NOTE } from "@/components/trace";
 import { TripPlan } from "@/components/trip-plan";
@@ -217,7 +218,6 @@ export default function ReelPage() {
   const now = useNow();
   const { appName } = useConfig();
   const { goBack, forget } = useApp();
-  const { ask } = useAskStore();
   const { data, error, isLoading, mutate } = useSaveDetail(id);
 
   const [servings, setServings] = useState<number | null>(null);
@@ -247,6 +247,35 @@ export default function ReelPage() {
     const moved = t.type !== before.type || (t.subcategory ?? null) !== before.sub;
     toast.show(moved ? `Re-sorted under ${where}` : `Read again. Still under ${where}`);
   }, [data, id, refresh, toast]);
+
+  // The reel's own chat: open or not, and which saved discussion (null is a new one).
+  const [chatOpen, setChatOpen] = useState(false);
+  const [discussionId, setDiscussionId] = useState<string | null>(null);
+
+  // A moment in the video to show: from a link (?t=11) or from an answer's "Said at 0:11".
+  const [atSec, setAtSec] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const t = new URLSearchParams(window.location.search).get("t");
+    return t && /^\d{1,5}$/.test(t) ? Number(t) : null;
+  });
+  const foldRef = useRef<HTMLDetailsElement>(null);
+  const saidRef = useRef<HTMLDetailsElement>(null);
+  const hasTranscript = (data?.details.transcript?.length ?? 0) > 0;
+  useEffect(() => {
+    if (atSec === null || !hasTranscript) return;
+    if (foldRef.current) foldRef.current.open = true;
+    if (saidRef.current) saidRef.current.open = true;
+    // After the chat layer has closed and the rows have opened.
+    const scroll = window.setTimeout(() => {
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      saidRef.current?.querySelector(".is-at")?.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+    }, 340);
+    const clear = window.setTimeout(() => setAtSec(null), 6000);
+    return () => {
+      window.clearTimeout(scroll);
+      window.clearTimeout(clear);
+    };
+  }, [atSec, hasTranscript]);
 
   const backButton = (
     <button type="button" className="round back" aria-label="Back" onClick={goBack}>
@@ -314,6 +343,14 @@ export default function ReelPage() {
   const onScreen = details.on_screen_text ?? [];
   const unverified = details.unverified ?? [];
   const watched = ticket.processing === "ready" && !details.enrich_error;
+  // The spoken line a moment falls in: the last one that starts at or before it.
+  const atLine =
+    atSec === null ? -1 : transcript.reduce((best, line, i) => (line.start_sec <= atSec + 0.5 ? i : best), -1);
+
+  function openChat(id: string | null) {
+    setDiscussionId(id);
+    setChatOpen(true);
+  }
 
   // What the plan card changed, without waiting for the next poll.
   function applyTicket(next: Ticket) {
@@ -509,10 +546,7 @@ export default function ReelPage() {
               Make a grocery list
             </button>
           )}
-          <button type="button" className="btn" onClick={() => ask(`About "${title}": `, false)}>
-            <Icon name="ask" />
-            Ask about this
-          </button>
+          <AskAboutButton onClick={() => openChat(null)} disabled={reading} />
           <a className="btn" href={ticket.url} target="_blank" rel="noopener noreferrer">
             <Icon name="out" />
             Open original
@@ -520,6 +554,8 @@ export default function ReelPage() {
         </div>
 
         <TripPlan saveId={ticket.save_id} type={type} settled={!reading} />
+
+        <Discussions saveId={ticket.save_id} onOpen={openChat} />
 
         <Note note={note} onSave={saveNote} />
 
@@ -531,10 +567,17 @@ export default function ReelPage() {
           onServings={setServings}
         />
 
-        <section className="sec" aria-labelledby="read-h">
-          <h2 className="sec-title" id="read-h">
-            How {appName} read this
-          </h2>
+        {/* How it was read and planned: there when wanted, one closed row otherwise. */}
+        <details className="said fold" ref={foldRef}>
+          <summary>
+            <span className="fold-label">
+              Details
+              <small>
+                {transcript.length > 0 ? "The transcript, and how" : "How"} {appName} read and planned this
+              </small>
+            </span>
+            <Icon name="down" />
+          </summary>
           <ul className="read">
             {details.caption?.trim() && (
               <li>
@@ -579,14 +622,14 @@ export default function ReelPage() {
           )}
 
           {transcript.length > 0 && (
-            <details className="said">
+            <details className="said" ref={saidRef}>
               <summary>
                 What&apos;s said in the video
                 <Icon name="down" />
               </summary>
               <ul className="lines">
                 {transcript.map((line, i) => (
-                  <li key={i}>
+                  <li key={i} className={i === atLine ? "is-at" : undefined}>
                     <time>{clock(line.start_sec)}</time>
                     <span>{line.text}</span>
                   </li>
@@ -616,7 +659,7 @@ export default function ReelPage() {
               <AgentTrace runs={runs} live={working} emptyText={ticket.is_sample ? SEEDED_SAMPLE_NOTE : undefined} />
             </div>
           </details>
-        </section>
+        </details>
 
         {ticket.processing !== "failed" && (
           <div className="reanalyze">
@@ -761,6 +804,18 @@ export default function ReelPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <ReelChat
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+        saveId={ticket.save_id}
+        title={title}
+        type={type}
+        thumbUrl={ticket.thumb_url}
+        discussionId={discussionId}
+        onDiscussionId={setDiscussionId}
+        onJump={setAtSec}
+      />
 
       <GrocerySheet
         open={sheet === "grocery"}

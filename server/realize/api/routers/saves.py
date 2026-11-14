@@ -316,6 +316,7 @@ def delete_save(save_id: str, user: dict = Depends(current_user)) -> dict:
     db.agent_runs().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
     db.jobs().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
     db.trips().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
+    db.discussions().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
     if save.get("thumb_id"):
         db.thumbnails().delete_one({"_id": save["thumb_id"], "owner_user_id": user["_id"]})
     db.saves().delete_one({"_id": save["_id"], "user_id": user["_id"]})

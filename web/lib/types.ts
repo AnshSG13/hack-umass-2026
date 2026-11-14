@@ -284,12 +284,102 @@ export interface AskCard {
   saved_on: string;
   snippet: string;
   url: string;
+  /** Set when the snippet is a line spoken in the video: the tile opens the reel there. */
+  at_sec?: number;
+  at_label?: string; // "0:11"
 }
 
 export type ChatEvent =
   | { type: "step"; label: string }
   | { type: "cards"; cards: AskCard[] }
   | { type: "plans"; tickets: Ticket[] }
-  | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[] }
+  | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[]; follow_ups?: string[] }
   | { type: "done" }
   | { type: "error"; message: string };
+
+// ---- discussions: chats about one reel, saved with it ----
+export interface DiscussionMessage {
+  role: "user" | "assistant";
+  text: string;
+  at: string | null;
+  /** The transcript line the answer leans on, checked by the server. Assistant only. */
+  at_sec?: number | null;
+  at_label?: string | null; // "0:11"
+  /** false: general knowledge, not something the reel says. Assistant only. */
+  from_reel?: boolean;
+}
+export interface DiscussionSummary {
+  id: string;
+  title: string; // the first question
+  questions: number;
+  updated_at: string;
+  preview: string;
+}
+export interface Discussion extends DiscussionSummary {
+  save_id: string;
+  messages: DiscussionMessage[];
+}
+
+// ---- GET /api/tastes/{type}: one taste as a board ----
+export interface BoardItem {
+  save_id: string;
+  title: string;
+  thumb_url: string | null;
+  meta: string; // "20 min · 7 ingredients", or "" when the reel gave nothing to say
+  tags: string[];
+  has_note: boolean;
+  is_new: boolean; // saved in the last day
+}
+export interface Board {
+  type: SaveType;
+  label: string;
+  count: number;
+  tags: { tag: string; count: number }[]; // the filter chips, at most 6
+  items: BoardItem[];
+}
+
+// ---- bundles: "Ready for you", plans built from several saves ----
+export interface BundleItem {
+  save_id: string;
+  title: string;
+  thumb_url: string | null;
+  meta: string;
+  note: string; // why it sits where it does; "" until the words arrive
+  when: string | null; // "Mon 6:30 pm": the time Start would pick, or the accepted time
+  plan_status: PlanStatus | null;
+}
+export interface GroceryGroup {
+  aisle: string;
+  items: { key: string; text: string; from: string[] }[]; // from: the save_ids that need it
+}
+export interface BundleProduct {
+  save_id: string;
+  name: string;
+  brand: string;
+  price_hint: string;
+  why: string;
+  where_to_buy: string;
+}
+export interface Bundle {
+  id: string;
+  type: SaveType;
+  status: "ready" | "started" | "dismissed";
+  title: string;
+  blurb: string;
+  count_label: string; // "3 dinners"
+  items: BundleItem[];
+  thumbs: string[];
+  polishing: boolean; // the name and notes are still being written
+  cta: string; // "Start Monday", "Compare them", "Open"
+  can_start: boolean;
+  first_when: string | null;
+  // GET /api/bundles/{id} only:
+  groceries?: GroceryGroup[];
+  grocery_count?: number;
+  products?: BundleProduct[];
+  pick?: { save_id: string; name: string; why: string } | null;
+}
+export interface BundlesResponse {
+  ready: Bundle[];
+  started: Bundle[];
+}
