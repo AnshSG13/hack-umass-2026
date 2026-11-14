@@ -2,6 +2,7 @@
 
 **Date:** 2026-11-14
 **Status:** Approved design. This document is the single source of truth for the build. It replaces `Saved Reels Second Brain — System Design.md`.
+**Visual reference:** `mockups/index.html`, a clickable mockup of Home and the Reel page (section 19.7).
 **Audience:** a coding agent that builds the whole product from this document, and the team reviewing what it builds.
 
 > Working name is **Reel Brain**, the iOS Shortcut is **Save to Brain**, and the in-app assistant is **Brain**. All three come from `APP_NAME` / `ASSISTANT_NAME` constants so they can be renamed in one place.
@@ -137,6 +138,7 @@ Monorepo. Keep the existing `prototype/` folder untouched as a reference for the
 /
 ├─ SPEC.md                         ← this document
 ├─ prototype/                      ← existing tested Shortcut prototype (reference only)
+├─ mockups/                        ← clickable Home + Reel page mockup (visual reference, section 19.7)
 ├─ web/                            ← Next.js app (deployed to Vercel, root dir = web)
 │  ├─ app/
 │  │  ├─ (app)/                    ← signed-in pages, shared layout with bottom bar + orb
@@ -368,7 +370,7 @@ Indexes: `{ status: 1, runAfter: 1 }`, `{ reelId: 1 }`, and a TTL index `{ updat
   "name": "Food",
   "parentId": null | ObjectId,       // null = top-level category; set = subcategory
   "description": "Recipes, restaurants, cooking techniques",  // AI-written, editable
-  "emoji": "🍜",
+  "icon": "food",                    // an icon key from section 19.6
   "color": "peach",                  // one of the pastel tokens (section 19)
   "origin": "seed" | "auto" | "user",
   "reelCount": 12,                   // ready reels directly in this (sub)category
@@ -393,7 +395,7 @@ A built-in top-level category **"Unsorted"** (`origin: "seed"`, color `sand`) ex
   "userId": "user_…",
   "title": "4-Day Ball-Handling Week",
   "kind": "training week",           // free text chosen by the agent
-  "emoji": "🏀",
+  "icon": "basketball",              // an icon key from section 19.6
   "color": "sky",
   "sourceReelIds": [ObjectId],
   "startDate": "2026-11-17" | null,  // local calendar dates (YYYY-MM-DD) in the user's timezone
@@ -574,6 +576,7 @@ Runs in the worker. It uses the Gemini **Pro** model (`GEMINI_PRO_MODEL`) with f
 - **Thumbnail** as an inline image part.
 - **The user's category tree**, compact: `Food (id …) > [Thai, Baking]; Fragrance (id …) > [Summer]; …`, with each category's description.
 - **The card schemas** (the section 9 field lists in compact form).
+- **The icon keys** a new category may use (section 19.6).
 
 ### 8.2 Tools
 
@@ -599,13 +602,13 @@ Runs in the worker. It uses the Gemini **Pro** model (`GEMINI_PRO_MODEL`) with f
   "fieldSources": { "card.ingredients": "caption|speech|on_screen|visual|linked_page" },
   "category": {
     "existingCategoryId": "…" | null,
-    "newCategory": { "name": "…", "emoji": "…", "description": "…" } | null,
+    "newCategory": { "name": "…", "icon": "…", "description": "…" } | null,
     "existingSubcategoryId": "…" | null,
     "newSubcategory": { "name": "…", "description": "…" } | null
   }
 }
 ```
-Exactly one of `existingCategoryId` / `newCategory` must be set. At most one of `existingSubcategoryId` / `newSubcategory` may be set.
+Exactly one of `existingCategoryId` / `newCategory` must be set. At most one of `existingSubcategoryId` / `newSubcategory` may be set. `newCategory.icon` must be one of the icon keys in section 19.6 (the list is included in the agent's first message); any other value is stored as `other`.
 
 For Gemini's function-declaration schema, declare `card` as an object whose properties are the seven type keys, all optional. Pydantic enforces "exactly one, matching `type`".
 
@@ -772,18 +775,18 @@ Every card field is optional unless marked required (`*`). Arrays default to `[]
 
 "What do you save?" offers multi-select chips:
 
-| Chip | Emoji | Color |
+| Chip | Icon key | Color |
 |---|---|---|
-| Food | 🍜 | peach |
-| Fragrance | 🌸 | rose |
-| Travel | ✈️ | sky |
-| Basketball | 🏀 | butter |
-| Fitness | 💪 | mint |
-| Learning | 📚 | lavender |
-| Motivation | ✨ | sage |
-| Style | 👟 | sand |
-| Gaming | 🎮 | lavender |
-| Home | 🏡 | sage |
+| Food | `food` | peach |
+| Fragrance | `fragrance` | rose |
+| Travel | `travel` | sky |
+| Basketball | `basketball` | butter |
+| Fitness | `fitness` | mint |
+| Learning | `learning` | lavender |
+| Motivation | `motivation` | sage |
+| Style | `style` | sand |
+| Gaming | `gaming` | lavender |
+| Home | `home` | sage |
 
 There's also a "+ Add your own" text chip. Each selected chip becomes a top-level category (`origin: "seed"`) with an AI-free default description. "Unsorted" is always created.
 
@@ -793,7 +796,7 @@ The agent chooses existing or new (section 8). Then the worker applies these saf
 
 1. **Near-duplicate guard:** if the agent proposes a **new** category/subcategory but an existing sibling has centroid similarity ≥ `NEW_CATEGORY_DUP_THRESHOLD` (default 0.86) to the reel embedding, **or** a case-insensitive name match, use the existing one instead.
 2. **Cap:** at most 12 top-level categories and 8 subcategories per category. Beyond that, the agent's new-category proposal falls back to the closest existing one.
-3. New categories get the next unused pastel color, the agent's emoji, and `origin: "auto"`.
+3. New categories get the next unused pastel color, the agent's icon key (or `other`), and `origin: "auto"`.
 
 ### 10.3 Centroids
 
@@ -807,7 +810,7 @@ When a reel leaves a category (move or delete), recompute that category's centro
 
 ### 10.4 User edits (Profile → Categories)
 
-- Rename, change emoji or color, reorder (drag), delete. Deleting moves reels to "Unsorted", and a deleted subcategory's reels go to its parent.
+- Rename, change icon or color, reorder (drag), delete. Deleting moves reels to "Unsorted", and a deleted subcategory's reels go to its parent.
 - **Merge A into B:** move all reels and subcategories from A to B, recompute B's centroid, delete A.
 - **Promote a subcategory** to top-level, or **demote** a top-level category under another.
 - Moving a reel adds `categoryId` / `subcategoryId` to its `userEdited` list.
@@ -897,7 +900,7 @@ The text pipeline can't filter on `categoryId` (it isn't in the text index). Whe
   {"type":"status","text":"Searching your saves…"}
   {"type":"reels","reels":[{reelId,title,type,thumbnailUrl,categoryPath}]}
   {"type":"text","delta":"Here's your grocery list…"}
-  {"type":"plan","plan":{planId,title,kind,emoji,color}}
+  {"type":"plan","plan":{planId,title,kind,icon,color}}
   {"type":"reminder","reminder":{reminderId,title,fireAt}}
   {"type":"done","conversationId":"…"}
   {"type":"error","message":"…"}
@@ -914,7 +917,7 @@ Every tool is scoped to the authenticated `userId` on the server. The model neve
 | `get_reel` | `reelId: string` | Full reel: title, summary, card, userNote, tags, onScreenText, transcriptText (truncated to 4,000 chars), sourceUrl |
 | `list_categories` | none | Tree with names, ids, reel counts |
 | `get_category_reels` | `category: string`, `limit?: number` (default 20) | `[{ reelId, title, type, summary }]`, most recent first |
-| `create_plan` | `title`, `kind`, `emoji`, `sourceReelIds[]`, `blocks[]` (section 13), `startDate?`, `endDate?` | `{ planId }`. Also creates auto reminders (section 14.2) |
+| `create_plan` | `title`, `kind`, `icon` (a key from section 19.6), `sourceReelIds[]`, `blocks[]` (section 13), `startDate?`, `endDate?` | `{ planId }`. Also creates auto reminders (section 14.2) |
 | `update_plan` | `planId`, plus any of the `create_plan` fields, plus `appendBlocks?` | `{ planId }` |
 | `create_reminder` | `title`, `body`, `fireAt` (ISO local datetime, interpreted in the user's timezone), `planId?`, `reelId?` | `{ reminderId, fireAtUtc }` |
 | `list_plans` | `limit?` | `[{ planId, title, kind, startDate, endDate }]` |
@@ -947,7 +950,7 @@ Rules:
 
 - Assistant text is rendered as Markdown (react-markdown).
 - `[[reel:ID]]` tokens become inline **ReelChips** (thumbnail, title, tap opens the Reel page).
-- `plan` events render as a **PlanCard** (emoji, title, kind, "Open plan").
+- `plan` events render as a **PlanCard** (icon, title, kind, "Open plan").
 - `reminder` events render as a small **ReminderPill** ("🔔 Sun 6:00 PM").
 - `status` events show as a subtle animated line above the typing indicator.
 
@@ -996,7 +999,7 @@ The agent produces blocks without ids. The server assigns ids, validates with zo
 
 ### 13.3 Plan page
 
-- Header: emoji, title, kind, date range, and source reel thumbnails.
+- Header: icon, title, kind, date range, and source reel thumbnails.
 - Blocks render in order. Checklist items and schedule items are tappable to check/uncheck (`PATCH`, optimistic update).
 - Actions: **Ask about this plan** (opens Ask with plan context in the prefill), **Edit dates**, **Delete**.
 
@@ -1015,7 +1018,7 @@ The agent produces blocks without ids. The server assigns ids, validates with zo
 
 When a plan is created or its dates change, delete its `scheduled` reminders with `origin: "auto_plan"` and create new ones:
 
-- **Day before start,** 18:00 local: "{emoji} {title} starts tomorrow". Body: the first schedule day's first 2 items.
+- **Day before start,** 18:00 local: "{title} starts tomorrow". Body: the first schedule day's first 2 items.
 - **Each dated schedule day,** 08:00 local (max 7): "Today: {day label}". Body: that day's first 3 items.
 - Skip any reminder whose `fireAt` is already in the past.
 
@@ -1085,9 +1088,9 @@ All routes are under `web/app/api`. Unless noted, they require a Clerk session (
 | `POST /api/reels/:id/reprocess` | session | Re-run extraction (keeps `userEdited` fields) |
 | `POST /api/reels/:id/viewed` | session | Update `lastViewedAt`, `viewCount` |
 | `GET /api/thumbnails/:reelId` | session | Image bytes, `Cache-Control: private, max-age=86400` |
-| `GET /api/categories` | session | Tree: `[{ id, name, emoji, color, reelCount, totalCount, subcategories: [...] }]` (`totalCount` includes subcategories) |
-| `POST /api/categories` | session | `{ name, parentId?, emoji?, color? }` |
-| `PATCH /api/categories/:id` | session | `{ name?, emoji?, color?, description?, parentId?, sortOrder? }` |
+| `GET /api/categories` | session | Tree: `[{ id, name, icon, color, reelCount, totalCount, subcategories: [...] }]` (`totalCount` includes subcategories) |
+| `POST /api/categories` | session | `{ name, parentId?, icon?, color? }` |
+| `PATCH /api/categories/:id` | session | `{ name?, icon?, color?, description?, parentId?, sortOrder? }` |
 | `POST /api/categories/:id/merge` | session | `{ intoId }` |
 | `DELETE /api/categories/:id` | session | Moves reels to the parent or "Unsorted" |
 | `GET /api/categories/:id/suggestions` | session | Cached suggestions |
@@ -1097,7 +1100,7 @@ All routes are under `web/app/api`. Unless noted, they require a Clerk session (
 | `GET /api/conversations` | session | Recent conversations `[{ id, title, updatedAt }]` |
 | `GET /api/conversations/:id` | session | Messages for display |
 | `POST /api/voice/transcribe` | session | multipart `audio` → `{ text }` |
-| `GET /api/plans` | session | `[{ id, title, kind, emoji, color, startDate, endDate, updatedAt }]` |
+| `GET /api/plans` | session | `[{ id, title, kind, icon, color, startDate, endDate, updatedAt }]` |
 | `GET /api/plans/:id` | session | Full plan |
 | `PATCH /api/plans/:id` | session | `{ title?, startDate?, endDate?, blocks? }` (regenerates auto reminders when dates change) |
 | `PATCH /api/plans/:id/items/:itemId` | session | `{ checked }` or `{ done }`, toggles a checklist/schedule item |
@@ -1123,27 +1126,37 @@ All routes are under `web/app/api`. Unless noted, they require a Clerk session (
 ### 18.1 App shell (signed-in layout)
 
 - **Top area:** page title in the display serif. On Home, a greeting plus an avatar button (→ Profile).
-- **Bottom bar,** fixed and floating, with a white frosted background (`backdrop-blur`), rounded 28 px, padded by `env(safe-area-inset-bottom)`:
-  - Left: **Home** (house icon + label).
-  - Center: **the Orb**, 72 px, raised 16 px above the bar. Soft pastel conic gradient (peach → lavender → sky → mint), slowly rotating (20 s loop), with a gentle breathing scale (1 → 1.03, 4 s). Accessible label: "Ask Brain (hold to speak)". Tap and hold behavior is in section 15.
+- **Bottom bar,** fixed and floating: inset 20 px from each side and 14 px from the bottom (plus `env(safe-area-inset-bottom)`), 66 px tall, radius 33 px. White at 84% opacity with `backdrop-filter: blur(22px) saturate(1.6)`, a hairline ring, and a soft drop shadow.
+  - Left: **Home** (house icon + 11 px label). The current tab is `--ink`; the other is `--ink-3`.
+  - Center: **the Orb**, 70 px, raised 30 px above the bar, with a 5 px white ring and a lavender-tinted shadow. Its fill is a conic gradient of the six orb tones (section 19.1), blurred 9 px and rotating once every 16 s, under a white highlight at the top-left. It breathes (scale 1 → 1.035, 4.5 s). Accessible label: "Ask Brain. Hold to speak." Tap and hold behavior is in section 15.
+  - While recording: the orb scales to 1.2 with a soft lavender halo, its gradient spins faster, and a dark pill appears above the bar with a 5-bar waveform and "Listening. Release to send."
   - Right: **Plans** (calendar-check icon + label). A small dot appears when a reminder fires within 24 h.
 - Bottom bar hidden on: Ask (it has its own composer), onboarding, sign-in.
 
 ### 18.2 Home (dashboard of your tastes)
 
-Top to bottom:
-1. **Greeting:** "Good evening, Ali", plus a subline: "{n} saves · {m} categories".
-2. **Search bar** (rounded, pastel-tinted). As you type (debounced 250 ms), an overlay sheet shows results from `/api/search` as ReelRows, plus a final row **"Ask Brain: '{query}' →"** that sends the query to Ask.
-3. **Recently saved:** a horizontal scroll of **ReelTiles** (thumbnail 3:4, title, type badge). Processing reels show a shimmer skeleton with the live `stage` text, refreshed every 3 s while any reel is not `ready`/`failed`. When one becomes ready it cross-fades in, with a soft confetti puff on the first ready of the session. Failed tiles show a muted card with "Couldn't grab this reel · Retry".
-4. **Suggested for you:** up to 3 suggestion chips (pastel pills with a sparkle icon).
-5. **Your tastes:** a 2-column grid of **CategoryTiles**. Each tile has a pastel background in its color, the emoji large, the name in the display serif, "{totalCount} saves", and up to 3 overlapping mini thumbnails. The last tile is **"+ New category"**.
-6. A **"+"** floating action (small, top-right of "Recently saved") opens the **Add sheet**: "Share from Instagram/TikTok" (how-to with Shortcut steps, if not set up) and **Paste link** (text field with a paste button using `navigator.clipboard.readText()` on tap, plus an optional note).
+Built to match `mockups/index.html`. In the interface, categories are called **tastes**.
 
-**Empty state (no reels):** an illustration-style composition from pastel shapes and the orb, "Your saved reels will live here", and two buttons: **Set up sharing** and **Paste a link**.
+Top to bottom:
+1. **Greeting:** "Good evening, Ali" in the display serif at 32 px, with the subline "{n} saves across {m} tastes" (14 px, `--ink-3`). A 44 px round avatar button (lavender, the user's initial) sits top-right and opens Profile.
+2. **Search field:** 52 px tall, radius 18, `--surface` fill, search icon, placeholder "Search your saves". As you type (debounced 250 ms), an overlay sheet shows results from `/api/search` as ReelRows, plus a final row **"Ask Brain: '{query}' →"** that sends the query to Ask.
+3. **Recently saved:** a header row with the title (16 px, weight 600) and an **Add** pill button (36 px, hairline border, plus icon) that opens the Add sheet. Below it, a horizontal rail of **ReelTiles**, 148 px wide with a 12 px gap and scroll snapping, bleeding to the screen edges.
+   - Each tile: thumbnail (3:4, radius 20), then a meta row (type pill + relative time), then the title (14.5 px, weight 600, clamped to 2 lines). The meta row comes before the title so tiles stay aligned whatever the title length.
+   - Type pill: 22 px tall, in the card type's pastel pair (section 19.1). Labels: Recipe, Product, Travel, Drill, Workout, Lesson, Motivation.
+   - **Processing tile:** the thumbnail area shows a slow-drifting pastel gradient (lavender → sky → peach) with the live `stage` text and four step dashes that fill as stages complete; the text area shows two skeleton bars. Poll every 3 s while any reel is not `ready`/`failed`. When the reel becomes ready, the thumbnail fades in from blurred and slightly enlarged (about 0.8 s), the text is filled in, the counts on the page update, and a toast says "{title} filed under {category path}".
+   - Failed tiles show a muted card with "Couldn't grab this reel · Retry".
+4. **Make something of it:** up to 3 suggestion chips (section 16.1) in a horizontal rail. Each is a 44 px pill in its category's pastel pair with a sparkle icon.
+5. **Your tastes:** a 2-column grid with a 12 px gap.
+   - The taste with the most saves gets a **wide tile** spanning both columns: icon, name (display serif, 30 px), "{n} saves", a fan of three portrait thumbnails (62 × 82 px, radius 16, rotated −8°, 0° and 8°), and chips for its top 3 subcategories (name + count, on white at 62% opacity).
+   - Every other taste gets a **standard tile:** minimum height 156 px, radius 24, padding 16, pastel background. Icon (22 px) top-left; a stack of three overlapping 40 px thumbnails (radius 13, bordered in the tile's pastel) top-right; name (display serif, 23 px, `--ink`) and "{n} saves" (13 px, the pastel's deep color) at the bottom.
+   - The last tile is **New taste:** a dashed outline with a plus icon.
+6. **Add sheet** ("Add a reel"): a link field with a **Save** button (plus an optional note field), then "Or send it straight from the app" with three numbered steps: tap Share on any reel, choose Save to Brain, it shows up here in under a minute. If the Shortcut isn't set up yet, the steps link to Profile → Sharing. Pasting a link that's already saved shows "Already in your saves".
+
+**Empty state (no reels):** a composition of pastel shapes and the orb, "Your saved reels will live here", and two buttons: **Set up sharing** and **Paste a link**.
 
 ### 18.3 Category page (`/c/[categoryId]`)
 
-- **Header:** a full-width pastel band in the category color with the emoji, name, description (one line, muted) and count. Overflow menu: rename, change color/emoji, merge, delete.
+- **Header:** a full-width pastel band in the category color with the icon, name, description (one line, muted) and count. Overflow menu: rename, change color/icon, merge, delete.
 - **Subcategory chips** (horizontal): "All", then each subcategory with its count. Selecting one filters the grid. Long-press a chip to rename it.
 - **Plan it row:** that category's 3 suggestion chips.
 - **Reel grid:** 2 columns of ReelCards (thumbnail, title, 1-line summary, type icon). Infinite scroll.
@@ -1151,10 +1164,25 @@ Top to bottom:
 
 ### 18.4 Reel page (`/r/[reelId]`)
 
-Layout per section 9.8.
-- **Hero:** a 16:9 crop of the thumbnail with a soft gradient at the bottom, platform badge, and duration.
-- **Sticky action row** under the hero: **Open original**, **Ask about this**, plus a type-specific primary action (Make grocery list, Plan a trip, Add to training week, Build weekly plan, Compare, Save quote).
-- **Category pill** opens a bottom sheet to move the reel (categories, then subcategories, with "+ New subcategory").
+Built to match `mockups/index.html`, which shows the recipe card. The other card types use the same skeleton and swap the facts row, the primary action and the type card body (section 9). Where this order differs from section 9.8, this section wins.
+
+- **Hero:** the thumbnail, full-bleed, 318 px tall, with no gradient or badge on it. Two round white 44 px buttons sit 16 px from the top: **Back** (left) and **More** (right; edit title, reprocess, delete).
+- **Panel:** a white sheet with 30 px top corners that overlaps the hero by 30 px. Inside, top to bottom:
+  1. A row with the **category pill** (36 px, the category's pastel pair, icon + "Food › Thai" + a small chevron) and "Saved {relative time}" on the right.
+  2. **Title** in the display serif at 34 px.
+  3. **Byline:** "@{handle} on {Platform} · {duration}" (13.5 px, `--ink-3`).
+  4. **Summary** (16 px, `--ink-2`).
+  5. **Facts row:** icon + text items. Recipe: total time, "Serves {n}", difficulty.
+  6. **Actions:** a full-width primary button (52 px, `--ink`, fully rounded) for the type's main action, then two secondary buttons side by side: **Ask about this** and **Open original**. The row is not sticky.
+  7. **Your note:** a butter-pastel block (radius 20) with the label "Your note" and the note text. Tap to edit.
+  8. **The type card.** Section titles use the display serif at 24 px. For a recipe:
+     - **Ingredients**, with a servings stepper on the right (minus, "{n} servings", plus; range 1–8). Changing it rescales every amount: grams round to the nearest 5 g, other amounts to the nearest quarter shown with fraction glyphs (¼ ½ ¾), and count nouns switch between singular and plural. It also updates "Serves {n}" in the facts row.
+     - Each ingredient is a checklist row (minimum 52 px tall, hairline divider) with a round tick. Checked rows fill the tick in peach-deep and strike through the text.
+     - **Steps:** numbered, each number in a 34 px peach circle set in the display serif.
+     - **Tip:** a mint circle with a lightbulb icon, then the tip with its first phrase in bold.
+  9. **How Brain read this:** a `--surface` block (radius 22) with one row per source: the source name, then what was taken from it. A source that was ignored is struck through and says why (e.g. "Caption: Skipped. It was about a giveaway, not the recipe."). Rows come from `captionAssessment`, `extraction.tiersUsed` and `extraction.fieldSources`.
+  10. **What's said in the video:** a collapsible row that expands to the transcript, with timestamps in lavender-deep tabular numerals. Tapping a timestamp opens the original link.
+- **File under sheet:** opened by the category pill. One 54 px row per destination: a 34 px rounded icon square in the category's pastel, "Category › Subcategory", and a check on the current one, ending with "+ New subcategory". Choosing a row moves the reel, updates the pill's color, icon and label, and shows the toast "Moved to {path}".
 - **Processing state:** if not ready, show the live stage with step dots (Grabbing → Reading → Watching → Filing).
 - **Failed state:** reason, message, **Retry**.
 
@@ -1170,8 +1198,8 @@ Layout per section 9.8.
 ### 18.6 Plans & Reminders (`/plans`)
 
 Three sections:
-1. **Coming up:** the next 5 scheduled reminders (time, title, plan emoji). Swipe to cancel.
-2. **Your plans:** PlanCards in a single column (emoji, title, kind, date range, source thumbnails), sorted by `updatedAt`.
+1. **Coming up:** the next 5 scheduled reminders (time, title, plan icon). Swipe to cancel.
+2. **Your plans:** PlanCards in a single column (icon, title, kind, date range, source thumbnails), sorted by `updatedAt`.
 3. **From your archive:** Rediscover reels (16.2) as a horizontal row.
 
 Empty state: "Ask Brain to turn your saves into a plan", with a button that opens Ask with a suggestion.
@@ -1184,7 +1212,7 @@ Per section 13.3. Block components: `HeadingBlock`, `TextBlock`, `ChecklistBlock
 
 Sections, as grouped rounded lists:
 1. **You:** name, timezone (auto-detected, editable).
-2. **Your tastes:** category manager. Drag to reorder; tap a category to edit name, emoji, color (pastel swatches), and description, and to manage its subcategories (rename, promote, merge, delete). "Merge into…" and "Delete" open confirmation sheets.
+2. **Your tastes:** category manager. Drag to reorder; tap a category to edit name, icon, color (pastel swatches), and description, and to manage its subcategories (rename, promote, merge, delete). "Merge into…" and "Delete" open confirmation sheets.
 3. **Interests:** the onboarding chips, editable. Adding a chip creates a category.
 4. **Sharing:** shows the token state ("Token ending …k3F"), **Copy token / Regenerate**, an **Install "Save to Brain"** button (opens `NEXT_PUBLIC_SHORTCUT_URL`), and a step-by-step guide with small illustrations.
 5. **Notifications:** status and the Enable button (14.1).
@@ -1206,65 +1234,104 @@ Four short steps with a progress dot row:
 
 ## 19. Design system
 
-**Feel:** bright, friendly, calm. White space, soft pastels, elegant serif headings, and tactile motion. Built for a phone held in one hand.
+**Feel:** bright, friendly, calm. White space, soft pastels, elegant serif headings, and tactile motion. Built for a phone held in one hand. `mockups/index.html` shows it applied (section 19.7).
 
 ### 19.1 Color tokens (CSS variables, Tailwind theme)
 
 | Token | Value | Use |
 |---|---|---|
 | `--bg` | `#FFFFFF` | page |
-| `--surface` | `#FAF9F7` | grouped lists, inputs |
-| `--line` | `#EFEDE9` | hairlines |
+| `--surface` | `#F8F6F2` | search field, inputs, grouped blocks |
+| `--line` | `#ECE9E3` | hairlines, secondary button borders |
 | `--ink` | `#1E1F24` | primary text, primary buttons |
-| `--ink-2` | `#5C5F6A` | secondary text |
-| `--ink-3` | `#9A9CA5` | placeholder, meta |
-| `--focus` | `#7C6CF2` | focus rings |
+| `--ink-2` | `#4A4D58` | secondary text |
+| `--ink-3` | `#6E717C` | placeholder, meta |
+| `--focus` | `#6A58E6` | focus rings, text caret |
 
-Pastel pairs for categories, badges and the orb (background / ink-on-pastel):
+Pastel pairs for categories, badges and tinted blocks. The pastel is always a background; text and icons on it use its deep color or `--ink`. Every deep color is dark enough to pass WCAG AA (4.5:1) on its pastel.
 
 | Name | Pastel | Deep |
 |---|---|---|
-| peach | `#FFE3D3` | `#B4532A` |
-| butter | `#FFF3C4` | `#8A6A00` |
-| mint | `#D6F2E2` | `#1F7A4D` |
+| peach | `#FFE3D3` | `#8F3D18` |
+| butter | `#FFF3C4` | `#735700` |
+| mint | `#D6F2E2` | `#1A6B43` |
 | sky | `#D8EBFF` | `#1F5FA8` |
 | lavender | `#E7E0FF` | `#5B48C2` |
-| rose | `#FFDDE7` | `#B23A63` |
+| rose | `#FFDDE7` | `#A2305A` |
 | sage | `#E3ECD6` | `#4D6B2E` |
 | sand | `#F2E8DA` | `#7A5B34` |
 
 Card type colors: recipe = peach, product = rose, travel = sky, sports_drill = butter, workout_plan = mint, educational = lavender, motivational = sage.
 
-Primary button: `--ink` background, white text, fully rounded. Secondary: white with a `--line` border. Destructive: rose-deep text.
+Orb tones (brighter than the pastels, used only in the orb's gradient and the listening waveform): `#FFB896`, `#B9A6FF`, `#8EC5FF`, `#9BE3BE`, `#FFE38A`, `#FFA6C1`.
+
+Primary button: `--ink` background, white text, fully rounded, 52 px tall. Secondary: white with a `--line` border. Destructive: rose-deep text.
+
+Text selection uses the lavender pastel. Toasts are `--ink` with white text, radius 18.
 
 **Light theme only.** The design is intentionally white. Set `color-scheme: light`, and set `theme-color` to `#FFFFFF`.
 
 ### 19.2 Typography
 
-- Display: **Fraunces** (Google Fonts, opsz axis, weights 500–600) for page titles, category names, card titles, and quotes.
-- UI/body: **Plus Jakarta Sans** (400, 500, 600).
-- Scale (px): 34 / 28 / 22 / 18 / 16 (body) / 14 / 12. Line-height 1.25 for headings, 1.5 for body.
-- Load with `next/font/google`.
+- Display: **Hedvig Letters Serif** (Google Fonts; one weight, 400; optical size axis 12–24). Used for the greeting, page and reel titles, taste names, section titles on the Reel page, sheet titles, step numerals, and quotes. Letter-spacing −0.01em to −0.015em, line-height 1.08–1.15. Fallbacks: `"Iowan Old Style", "Palatino Linotype", Georgia, serif`.
+- UI and body: **Figtree** (400, 500, 600, 700). Fallbacks: `"Avenir Next", "Segoe UI", system-ui, sans-serif`.
+- Display sizes (px): 34 reel title · 32 greeting · 30 wide taste name · 24 section and sheet titles · 23 taste names.
+- UI sizes (px): 16 block titles and summary · 15.5 list rows and step text · 15 body · 14.5 tile titles and buttons · 13.5 pills and byline · 12.5 meta · 11 tab labels. Line-height 1.5 for body, 1.3 for tile titles.
+- Use tabular numerals for amounts, timestamps and the servings count.
+- Load both with `next/font/google`.
 
 ### 19.3 Shape, depth, spacing
 
-- Radii: 12 (chips, inputs), 20 (cards, tiles), 28 (sheets, bottom bar), full (buttons, pills, orb).
-- Shadows: very soft. Cards `0 1px 2px rgba(30,31,36,.04), 0 8px 24px rgba(30,31,36,.06)`; orb `0 10px 30px rgba(124,108,242,.35)`.
-- Spacing on a 4-pt grid. Page side padding 20 px. Section gaps 28 px.
+- Radii (px): 18 (search field, inputs, toasts) · 20 (reel thumbnails, note block) · 22–24 (taste tiles, grouped blocks) · 30 (sheets and the Reel page panel) · 33 (bottom bar) · full (buttons, pills, chips, the orb).
+- Shadows are soft and always offset downward. Floating bar: `0 0 0 1px rgba(30,31,36,.06), 0 14px 34px -12px rgba(30,31,36,.28)`. Round hero buttons: `0 6px 18px -6px rgba(30,31,36,.45)`. Orb: `0 0 0 5px #FFFFFF, 0 14px 26px -8px rgba(110,92,230,.55)`. Thumbnail stacks get a small shadow so they lift off the tile.
+- Spacing on a 4-pt grid. Page side padding 20 px. 30 px between Home sections; 38 px between Reel page sections.
 - Minimum tap target 44 × 44 px.
 
 ### 19.4 Motion
 
-- framer-motion springs (`stiffness 400, damping 32`) for sheets, tiles and press states. Pressed elements scale to 0.97.
-- Page transitions: a subtle 8 px slide plus fade.
-- Processing shimmer: a pastel gradient sweep, 1.6 s.
+- One easing for everything: `cubic-bezier(.22, 1, .36, 1)` (or a framer-motion spring that feels the same). Pressed elements scale to 0.97.
+- **Opening a reel:** the Reel page slides in from the right over 0.55 s while Home shifts 24% to the left underneath it. Going back reverses it.
+- **Sheets** slide up over 0.5 s with a 32% `--ink` scrim behind them.
+- **Processing tile:** the gradient drifts back and forth over 5 s; the finished thumbnail fades in from blurred. No confetti.
+- **Toasts** rise 14 px and fade in, then leave after about 2.6 s.
 - The orb animates as described in 18.1. While recording, its scale is driven by the audio level.
-- Respect `prefers-reduced-motion` (disable rotation, confetti and shimmer movement).
+- Respect `prefers-reduced-motion`: stop the orb rotation, gradient drift and waveform, and make transitions near-instant.
 
 ### 19.5 Accessibility
 
 - All text contrast meets WCAG AA. Pastels are backgrounds only; text on pastel uses the matching deep color or `--ink`.
-- Every icon button has an `aria-label`. Focus rings are visible. The orb has a keyboard alternative (Enter opens Ask).
+- Every icon button has an `aria-label`. Focus rings are visible (2 px `--focus`, 2 px offset). The orb has a keyboard alternative (Enter opens Ask).
+- Checklist rows are real checkboxes, sheets are dialogs that trap focus and close on Escape, and the screen behind an open sheet or page is `inert`.
+
+### 19.6 Icons
+
+Never use icon as icons. All icons are line icons from **lucide-react** at a 1.75 stroke width with round caps and joins, in `currentColor`.
+
+Categories and plans store an **icon key**, not an icon. The extraction agent and the chat agent must choose from this list; anything else is stored as `other`.
+
+| Key | lucide-react icon | Key | lucide-react icon |
+|---|---|---|---|
+| `food` | `Utensils` | `tech` | `Cpu` |
+| `fragrance` | custom (`i-scent` in the mockup) | `beauty` | `Sparkles` |
+| `travel` | `Plane` | `money` | `Wallet` |
+| `basketball` | custom (`i-ball` in the mockup) | `nature` | `Leaf` |
+| `fitness` | `Dumbbell` | `groceries` | `ShoppingBasket` |
+| `learning` | `BookOpen` | `calendar` | `CalendarCheck` |
+| `motivation` | `Flame` | `map` | `Map` |
+| `style` | `Shirt` | `compare` | `Scale` |
+| `gaming` | `Gamepad2` | `other` | `Bookmark` |
+| `home` | `House` | `music` | `Music` |
+
+The two custom icons are small inline SVGs; copy them from the `<symbol>` definitions at the top of `mockups/index.html`.
+
+### 19.7 Reference mockup
+
+`mockups/index.html` is a clickable mockup of **Home** and the **Reel page** (recipe card). `mockups/README.md` explains how to open it and what is clickable.
+
+- For **look and layout** (spacing, sizes, colors, type, motion), the mockup is the source of truth for those two screens. Match it, and carry the same language to the screens it doesn't show.
+- For **behavior and data**, this spec is the source of truth. The mockup fakes its data and skips features such as search, real voice capture and note editing.
+- The mockup is plain HTML, CSS and JavaScript. Rebuild it with the stack in section 18 rather than copying its code structure.
+- Its reels, names, counts and recipe are sample content, and its photos are public-domain placeholders for reel thumbnails.
 
 ---
 
@@ -1455,7 +1522,7 @@ The build is done when all of these hold on an iPhone using the home-screen app:
 11. Holding the orb, speaking a question, and releasing sends the transcribed question to Ask.
 12. Categories and subcategories can be renamed, recolored, merged, and deleted in Profile, and reels follow correctly.
 13. A private or unavailable reel shows as failed with a clear reason and a working Retry.
-14. Every screen looks right at 375–430 px wide, respects safe areas, has no horizontal scroll, and matches the design system.
+14. Every screen looks right at 375–430 px wide, respects safe areas, has no horizontal scroll, and matches the design system. Home and the Reel page match `mockups/index.html`.
 
 ---
 

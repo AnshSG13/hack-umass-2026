@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reel Brain Mockup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hedvig+Letters+Serif:opsz@12..24&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Base reset (normally supplied by the page host) */
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Layout: one phone-sized device holding two stacked screens (Home, Reel) and a floating bar;
+   full-bleed on a phone, framed and centered on larger viewports. Single light theme by design. */
+:root {
+  --bg: #FFFFFF;
+  --stage: #F3F1EC;
+  --surface: #F8F6F2;
+  --line: #ECE9E3;
+  --ink: #1E1F24;
+  --ink-2: #4A4D58;
+  --ink-3: #6E717C;
+  --focus: #6A58E6;
+
+  --peach: #FFE3D3;    --peach-ink: #8F3D18;
+  --butter: #FFF3C4;   --butter-ink: #735700;
+  --mint: #D6F2E2;     --mint-ink: #1A6B43;
+  --sky: #D8EBFF;      --sky-ink: #1F5FA8;
+  --lavender: #E7E0FF; --lavender-ink: #5B48C2;
+  --rose: #FFDDE7;     --rose-ink: #A2305A;
+
+  --orb-1: #FFB896; --orb-2: #B9A6FF; --orb-3: #8EC5FF; --orb-4: #9BE3BE; --orb-5: #FFE38A; --orb-6: #FFA6C1;
+
+  --display: "Hedvig Letters Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ui: "Figtree", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --gutter-l: max(20px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(20px, env(safe-area-inset-right, 0px));
+  --shadow-card: 0 1px 2px rgba(30, 31, 36, .05), 0 10px 28px -8px rgba(30, 31, 36, .12);
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+*, *::before, *::after { box-sizing: border-box; }
+::selection { background: var(--lavender); color: var(--ink); }
+button, input { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3, p, ul, ol { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- Stage and device ---------- */
+.stage { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.device { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); isolation: isolate; }
+.stage-note { display: none; }
+
+@media (min-width: 560px) and (min-height: 620px) {
+  body { background: var(--stage); }
+  .stage { padding-block: 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .device {
+    width: 390px; height: min(844px, calc(100% - 44px)); flex: none;
+    border-radius: 44px;
+    box-shadow: 0 0 0 1px rgba(30, 31, 36, .08), 0 0 0 9px #FFFFFF, 0 0 0 10px rgba(30, 31, 36, .1), 0 40px 80px -30px rgba(30, 31, 36, .35);
+  }
+  .stage-note { display: block; font-size: 12.5px; color: var(--ink-3); text-align: center; text-wrap: balance; max-width: 46ch; }
+}
+
+/* ---------- Screens ---------- */
+.screen {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+  background: var(--bg); scrollbar-width: none; overscroll-behavior: contain;
+  padding-bottom: 128px;
+  transition: transform .55s var(--ease), visibility 0s linear 0s;
+}
+.screen::-webkit-scrollbar { display: none; }
+#reel { transform: translateX(100%); visibility: hidden; z-index: 2; box-shadow: -24px 0 48px -24px rgba(30, 31, 36, .25); transition: transform .55s var(--ease), visibility 0s linear .55s; }
+.device[data-view="reel"] #home { transform: translateX(-24%); }
+.device[data-view="reel"] #reel { transform: none; visibility: visible; transition: transform .55s var(--ease), visibility 0s linear 0s; }
+
+.gutter { padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
+
+/* ---------- Home ---------- */
+.home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-top: 30px; }
+.greet { font-family: var(--display); font-weight: 400; font-size: 32px; line-height: 1.12; letter-spacing: -.012em; text-wrap: balance; }
+.greet-sub { margin-top: 6px; color: var(--ink-3); font-size: 14px; }
+.avatar {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: var(--lavender); color: var(--lavender-ink); font-weight: 700; font-size: 15px;
+  transition: transform .2s var(--ease);
+}
+.search {
+  margin-top: 22px; width: 100%; height: 52px; border-radius: 18px;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  background: var(--surface); color: var(--ink-3); font-size: 15px;
+  transition: background .2s, transform .2s var(--ease);
+}
+.search:hover { background: #F2EFE9; }
+
+.block { margin-top: 30px; }
+.block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
+.block-title { font-size: 16px; font-weight: 600; letter-spacing: -.005em; }
+.add {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 10px;
+  border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; font-weight: 600; color: var(--ink);
+  transition: background .2s, transform .2s var(--ease);
+}
+.add .i { width: 16px; height: 16px; stroke-width: 2.2; }
+.add:hover { background: var(--surface); }
+
+.rail {
+  margin-top: 12px; display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none;
+  padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bottom: 4px;
+  scroll-snap-type: x proximity; scroll-padding-left: var(--gutter-l);
+}
+.rail::-webkit-scrollbar { display: none; }
+
+.tile { width: 148px; flex: none; scroll-snap-align: start; display: flex; flex-direction: column; gap: 10px; transition: transform .25s var(--ease); }
+.tile-media { position: relative; aspect-ratio: 3 / 4; border-radius: 20px; overflow: hidden; background: var(--surface); }
+.tile-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .7s var(--ease), filter .9s var(--ease), transform .9s var(--ease); }
+.tile-title { margin-top: -2px; font-size: 14.5px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile-meta { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-3); }
+.kind { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--p); color: var(--d); }
+
+/* processing state */
+.tile.is-processing .tile-media img { opacity: 0; filter: blur(14px); transform: scale(1.08); }
+.proc {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding: 14px;
+  background: linear-gradient(115deg, var(--lavender) 0%, var(--sky) 38%, var(--peach) 72%, var(--lavender) 100%);
+  background-size: 260% 260%; animation: drift 5s ease-in-out infinite alternate;
+  color: var(--lavender-ink); transition: opacity .6s var(--ease);
+}
+.tile:not(.is-processing) .proc { opacity: 0; pointer-events: none; }
+.proc-stage { font-size: 13px; font-weight: 600; line-height: 1.25; }
+.proc-dots { display: flex; gap: 5px; }
+.proc-dots span { width: 18px; height: 4px; border-radius: 4px; background: rgba(91, 72, 194, .22); transition: background .4s; }
+.proc-dots span.on { background: var(--lavender-ink); }
+.skel { display: block; height: 12px; border-radius: 6px; background: var(--surface); }
+.skel + .skel { width: 60%; margin-top: 7px; }
+@keyframes drift { from { background-position: 0% 30%; } to { background-position: 100% 70%; } }
+
+.ideas { margin-top: 12px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
+.ideas::-webkit-scrollbar { display: none; }
+.idea {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 13px;
+  border-radius: 999px; background: var(--p); color: var(--d); font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: transform .2s var(--ease);
+}
+.idea .i { width: 16px; height: 16px; }
+
+.tastes { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.taste {
+  position: relative; min-width: 0; min-height: 156px; border-radius: 24px; padding: 16px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
+  background: var(--p); color: var(--d);
+  transition: transform .25s var(--ease);
+}
+.taste-top { display: flex; align-items: flex-start; justify-content: space-between; }
+.taste-top > .i { width: 22px; height: 22px; }
+.stack { display: flex; padding-right: 4px; }
+.stack img { width: 40px; height: 40px; border-radius: 13px; object-fit: cover; border: 2.5px solid var(--p); margin-left: -12px; box-shadow: 0 4px 10px -4px rgba(30, 31, 36, .3); }
+.stack img:nth-child(1) { transform: rotate(-6deg) translateY(2px); }
+.stack img:nth-child(3) { transform: rotate(6deg) translateY(2px); }
+.taste-name { display: block; font-family: var(--display); font-size: 23px; line-height: 1.1; color: var(--ink); letter-spacing: -.01em; }
+.taste-count { display: block; margin-top: 4px; font-size: 13px; font-weight: 500; }
+
+.taste-wide { grid-column: 1 / -1; min-height: 0; gap: 18px; }
+.taste-wide .taste-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.taste-wide .taste-name { font-size: 30px; margin-top: 14px; }
+.fan { display: flex; padding-right: 6px; flex: none; }
+.fan img { width: 62px; height: 82px; border-radius: 16px; object-fit: cover; border: 3px solid var(--p); margin-left: -18px; box-shadow: 0 8px 16px -8px rgba(30, 31, 36, .4); }
+.fan img:nth-child(1) { transform: rotate(-8deg) translateY(4px); }
+.fan img:nth-child(2) { transform: translateY(-4px); z-index: 1; }
+.fan img:nth-child(3) { transform: rotate(8deg) translateY(4px); }
+.subs { display: flex; flex-wrap: wrap; gap: 6px; }
+.subs span { height: 28px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: rgba(255, 255, 255, .62); font-size: 12.5px; font-weight: 600; }
+.subs b { font-weight: 500; opacity: .8; }
+
+.taste-new { background: none; border: 1.5px dashed #D9D5CC; color: var(--ink-2); align-items: center; justify-content: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.taste-new .i { width: 22px; height: 22px; }
+
+.tile:active, .taste:active, .idea:active, .search:active, .add:active, .avatar:active, .btn:active, .chip-cat:active { transform: scale(.97); }
+
+/* ---------- Bottom bar and orb ---------- */
+.bar {
+  position: absolute; z-index: 5; left: 20px; right: 20px; bottom: 14px; height: 66px;
+  display: grid; grid-template-columns: 1fr 84px 1fr; align-items: center;
+  border-radius: 33px; background: rgba(255, 255, 255, .84);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+  box-shadow: 0 0 0 1px rgba(30, 31, 36, .06), 0 14px 34px -12px rgba(30, 31, 36, .28);
+}
+.tab { height: 66px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--ink-3); border-radius: 33px; transition: color .2s; }
+.tab .i { width: 22px; height: 22px; }
+.tab[aria-current="page"] { color: var(--ink); }
+.orb-slot { display: grid; place-items: center; }
+.orb {
+  position: relative; width: 70px; height: 70px; margin-top: -30px; border-radius: 50%; overflow: hidden;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  box-shadow: 0 0 0 5px #FFFFFF, 0 14px 26px -8px rgba(110, 92, 230, .55);
+  animation: breathe 4.5s ease-in-out infinite;
+  transition: transform .35s var(--ease), box-shadow .35s var(--ease);
+}
+.orb::before {
+  content: ""; position: absolute; inset: -35%;
+  background: conic-gradient(from 0deg, var(--orb-1), var(--orb-2), var(--orb-3), var(--orb-4), var(--orb-5), var(--orb-6), var(--orb-1));
+  filter: blur(9px) saturate(1.25); animation: spin 16s linear infinite;
+}
+.orb::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 44%), radial-gradient(circle at 72% 82%, rgba(255, 255, 255, .4), rgba(255, 255, 255, 0) 46%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55);
+}
+.device.is-listening .orb { transform: scale(1.2); animation: none; box-shadow: 0 0 0 5px #FFFFFF, 0 0 0 14px rgba(185, 166, 255, .28), 0 18px 34px -8px rgba(110, 92, 230, .7); }
+.device.is-listening .orb::before { animation-duration: 3s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+
+.listen {
+  position: absolute; z-index: 6; left: 50%; bottom: 122px; transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 18px 0 16px; border-radius: 999px;
+  background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 14px 30px -10px rgba(30, 31, 36, .5);
+  transition: opacity .25s, transform .35s var(--ease);
+}
+.device.is-listening .listen { opacity: 1; transform: translate(-50%, 0); }
+.wave { display: flex; align-items: center; gap: 3px; height: 18px; }
+.wave span { width: 3px; height: 100%; border-radius: 3px; background: var(--orb-2); transform: scaleY(.3); animation: wave 1s ease-in-out infinite; }
+.wave span:nth-child(2) { animation-delay: -.8s; background: var(--orb-3); }
+.wave span:nth-child(3) { animation-delay: -.55s; background: var(--orb-4); }
+.wave span:nth-child(4) { animation-delay: -.3s; background: var(--orb-5); }
+.wave span:nth-child(5) { animation-delay: -.1s; background: var(--orb-1); }
+@keyframes wave { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+
+/* ---------- Reel page ---------- */
+.hero { position: relative; height: 318px; background: var(--surface); }
+.hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.round {
+  position: absolute; top: 16px; width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(255, 255, 255, .92); color: var(--ink);
+  box-shadow: 0 6px 18px -6px rgba(30, 31, 36, .45); transition: transform .2s var(--ease);
+}
+.round:active { transform: scale(.94); }
+.round.back { left: var(--gutter-l); }
+.round.more { right: var(--gutter-r); }
+
+.panel { position: relative; margin-top: -30px; border-radius: 30px 30px 0 0; background: var(--bg); padding-top: 22px; }
+.crumbs { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.chip-cat {
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 10px 0 12px; border-radius: 999px;
+  background: var(--peach); color: var(--peach-ink); font-size: 13.5px; font-weight: 600;
+  transition: transform .2s var(--ease), background .3s, color .3s;
+}
+.chip-cat .i { width: 16px; height: 16px; }
+.chip-cat .i:last-child { width: 14px; height: 14px; stroke-width: 2.2; }
+.when { font-size: 12.5px; color: var(--ink-3); }
+.reel-title { margin-top: 16px; font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1.08; letter-spacing: -.015em; text-wrap: balance; }
+.byline { margin-top: 8px; font-size: 13.5px; color: var(--ink-3); }
+.summary { margin-top: 16px; font-size: 16px; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
+.facts { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; font-weight: 500; }
+.facts li { display: inline-flex; align-items: center; gap: 7px; }
+.facts .i { width: 17px; height: 17px; color: var(--ink-3); }
+
+.actions { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  height: 52px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  font-size: 14.5px; font-weight: 600; border: 1px solid var(--line); background: var(--bg);
+  transition: transform .2s var(--ease), background .2s;
+}
+.btn .i { width: 18px; height: 18px; }
+.btn:hover { background: var(--surface); }
+.btn-primary { grid-column: 1 / -1; background: var(--ink); color: #FFFFFF; border-color: var(--ink); font-size: 15.5px; }
+.btn-primary:hover { background: #2C2D34; }
+
+.note { margin-top: 28px; padding: 16px 18px; border-radius: 20px; background: var(--butter); }
+.note-label { font-size: 12.5px; font-weight: 600; color: var(--butter-ink); }
+.note-text { margin-top: 4px; font-size: 15.5px; color: var(--ink); }
+
+.sec { margin-top: 38px; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sec-title { font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 1.15; letter-spacing: -.01em; }
+
+.stepper { display: inline-flex; align-items: center; gap: 2px; height: 44px; padding: 0 2px; border-radius: 999px; background: var(--surface); }
+.stepper button { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); transition: background .2s; }
+.stepper button:hover { background: #FFFFFF; }
+.stepper button:disabled { color: #BDBAB3; cursor: default; }
+.stepper .i { width: 16px; height: 16px; stroke-width: 2.2; }
+.stepper output { min-width: 82px; text-align: center; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.ings { margin-top: 10px; }
+.ing { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.ings li:last-child .ing { border-bottom: 0; }
+.ing input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.tick { width: 24px; height: 24px; border-radius: 50%; border: 1.75px solid #CFCBC2; display: grid; place-items: center; flex: none; color: #FFFFFF; transition: background .25s var(--ease), border-color .25s, transform .25s var(--ease); }
+.tick .i { width: 13px; height: 13px; stroke-width: 3; opacity: 0; transform: scale(.5); transition: opacity .2s, transform .3s var(--ease); }
+.ing input:checked + .tick { background: var(--peach-ink); border-color: var(--peach-ink); }
+.ing input:checked + .tick .i { opacity: 1; transform: none; }
+.ing input:focus-visible + .tick { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ing-text { min-width: 0; font-size: 15.5px; transition: color .25s; }
+.ing-qty { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ing input:checked ~ .ing-text { color: var(--ink-3); text-decoration: line-through; text-decoration-color: #CFCBC2; }
+
+.steps { margin-top: 16px; display: flex; flex-direction: column; gap: 18px; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: start; counter-increment: step; font-size: 15.5px; line-height: 1.55; }
+.steps li::before { content: counter(step); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--peach); color: var(--peach-ink); font-family: var(--display); font-size: 17px; line-height: 1; }
+.steps p { padding-top: 5px; min-width: 0; }
+
+.tip { margin-top: 24px; display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: start; font-size: 15px; color: var(--ink-2); }
+.tip-mark { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--mint); color: var(--mint-ink); }
+.tip-mark .i { width: 17px; height: 17px; }
+.tip p { padding-top: 5px; }
+.tip b { color: var(--ink); font-weight: 600; }
+
+.read { margin-top: 14px; border-radius: 22px; background: var(--surface); padding: 6px 18px; }
+.read li { display: grid; grid-template-columns: 104px 1fr; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.read li:last-child { border-bottom: 0; }
+.read dt, .read .src { font-weight: 600; }
+.read .how { color: var(--ink-2); min-width: 0; }
+.read .skipped .src { color: var(--ink-3); text-decoration: line-through; text-decoration-color: #CFCBC2; }
+
+.said { margin-top: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.said summary { list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 56px; font-weight: 600; font-size: 15px; cursor: pointer; }
+.said summary::-webkit-details-marker { display: none; }
+.said summary .i { color: var(--ink-3); transition: transform .3s var(--ease); }
+.said[open] summary .i { transform: rotate(180deg); }
+.lines { padding-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+.lines li { display: grid; grid-template-columns: 38px 1fr; gap: 12px; font-size: 14.5px; color: var(--ink-2); }
+.lines time { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; color: var(--lavender-ink); padding-top: 1px; }
+
+/* ---------- Sheets ---------- */
+.scrim { position: absolute; inset: 0; z-index: 8; background: rgba(30, 31, 36, .32); opacity: 0; pointer-events: none; transition: opacity .35s; }
+.device.has-sheet .scrim { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: absolute; z-index: 9; left: 0; right: 0; bottom: 0; max-height: 82%; overflow-y: auto; scrollbar-width: none;
+  border-radius: 30px 30px 0 0; background: var(--bg); padding-top: 10px; padding-bottom: 28px;
+  transform: translateY(105%); visibility: hidden;
+  transition: transform .5s var(--ease), visibility 0s linear .5s;
+  box-shadow: 0 -20px 50px -20px rgba(30, 31, 36, .3);
+}
+.sheet.is-open { transform: none; visibility: visible; transition: transform .5s var(--ease), visibility 0s; }
+.grab { width: 40px; height: 4px; border-radius: 4px; background: #DDD9D0; margin: 0 auto 14px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-title { font-family: var(--display); font-weight: 400; font-size: 24px; letter-spacing: -.01em; }
+.close { width: 44px; height: 44px; margin-right: -8px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); }
+.close:hover { background: var(--surface); }
+
+.opts { margin-top: 8px; }
+.opt { width: 100%; min-height: 54px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); font-size: 15.5px; font-weight: 500; }
+.opts li:last-child .opt { border-bottom: 0; }
+.opt-ico { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: var(--p); color: var(--d); flex: none; }
+.opt-ico .i { width: 17px; height: 17px; }
+.opt-name { flex: 1; min-width: 0; }
+.opt-name small { color: var(--ink-3); font-size: 15.5px; font-weight: 400; }
+.opt > .i { color: var(--ink); opacity: 0; width: 18px; height: 18px; stroke-width: 2.4; }
+.opt[aria-pressed="true"] > .i { opacity: 1; }
+
+.paste { margin-top: 14px; display: flex; gap: 8px; }
+.paste input { flex: 1; min-width: 0; height: 52px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); padding: 0 16px; font-size: 16px; caret-color: var(--focus); }
+.paste input::placeholder { color: var(--ink-3); }
+.paste input:focus { outline: 2px solid var(--focus); outline-offset: 1px; background: #FFFFFF; }
+.paste .btn { flex: none; width: 84px; background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
+.sheet-sub { margin-top: 26px; font-size: 14px; font-weight: 600; }
+.how-steps { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; counter-reset: how; }
+.how-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; counter-increment: how; font-size: 15px; color: var(--ink-2); }
+.how-steps li::before { content: counter(how); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--lavender); color: var(--lavender-ink); font-weight: 700; font-size: 13px; }
+.how-steps b { color: var(--ink); font-weight: 600; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: absolute; z-index: 12; left: 50%; bottom: 100px; max-width: calc(100% - 48px);
+  transform: translate(-50%, 14px); opacity: 0; pointer-events: none;
+  padding: 12px 18px; border-radius: 18px; background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 500; line-height: 1.35; text-align: center;
+  box-shadow: 0 14px 30px -10px rgba(30, 31, 36, .5);
+  transition: opacity .25s, transform .4s var(--ease);
+}
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .orb, .orb::before, .proc, .wave span { animation: none; }
+  .screen, #reel, .sheet, .toast, .tile-media img { transition-duration: .01s; }
+}
+</style>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-plans" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-level" viewBox="0 0 24 24"><path d="M5 20v-4"/><path d="M12 20v-9"/><path d="M19 20V4"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+  <symbol id="i-ask" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-basket" viewBox="0 0 24 24"><path d="m15 11-1 9"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="M4.5 15.5h15"/><path d="m5 11 4-7"/><path d="m9 11 1 9"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.6a2 2 0 0 0 1.3 1.3L21 12l-5.8 2.1a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.6a2 2 0 0 0-1.3-1.3L3 12l5.8-2.1a2 2 0 0 0 1.3-1.3z"/></symbol>
+  <symbol id="i-food" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
+  <symbol id="i-scent" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="11" rx="3"/><path d="M10 10V6.5h4V10"/><path d="M9 3.5h6"/><path d="M12 3.5v3"/><path d="M9.5 15h5"/></symbol>
+  <symbol id="i-travel" viewBox="0 0 24 24"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></symbol>
+  <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2v20"/><path d="M5.2 4.7c2 2 3 4.5 3 7.3s-1 5.3-3 7.3"/><path d="M18.8 4.7c-2 2-3 4.5-3 7.3s1 5.3 3 7.3"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M6.5 6.5v11"/><path d="M17.5 6.5v11"/><path d="M3 9v6"/><path d="M21 9v6"/><path d="M6.5 12h11"/></symbol>
+  <symbol id="i-learn" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+  <symbol id="i-tip" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
+</svg>
+
+<div class="stage">
+  <div class="device" id="device" data-view="home">
+
+    <!-- ================= HOME ================= -->
+    <main class="screen" id="home" aria-label="Home">
+      <div class="gutter">
+        <header class="home-head">
+          <div>
+            <h1 class="greet">Good evening, Ali</h1>
+            <p class="greet-sub"><span id="total-saves">123</span> saves across 6 tastes</p>
+          </div>
+          <button class="avatar" type="button" data-soon="Profile" aria-label="Profile">A</button>
+        </header>
+        <button class="search" type="button" data-soon="Search">
+          <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+          <span>Search your saves</span>
+        </button>
+      </div>
+
+      <section class="block" aria-labelledby="recent-h">
+        <div class="gutter block-head">
+          <h2 class="block-title" id="recent-h">Recently saved</h2>
+          <button class="add" type="button" id="open-add"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add</button>
+        </div>
+        <div class="rail" id="rail">
+          <button class="tile is-processing" type="button" id="tile-mango" data-soon="This reel">
+            <span class="tile-media">
+              <img src="img/t-mango.jpg" alt="">
+              <span class="proc">
+                <span class="proc-stage">Grabbing the reel</span>
+                <span class="proc-dots" aria-hidden="true"><span class="on"></span><span></span><span></span><span></span></span>
+              </span>
+            </span>
+            <span class="tile-body"><span class="skel"></span><span class="skel"></span></span>
+          </button>
+
+          <button class="tile" type="button" id="tile-padthai" aria-label="Open Weeknight Pad Thai">
+            <span class="tile-media"><img src="img/t-padthai.jpg" alt=""></span>
+            <span class="tile-meta"><span class="kind" style="--p: var(--peach); --d: var(--peach-ink)">Recipe</span>2 days ago</span>
+            <span class="tile-title">Weeknight Pad Thai</span>
+          </button>
+
+          <button class="tile" type="button" data-soon="This reel">
+            <span class="tile-media"><img src="img/t-perfume.jpg" alt=""></span>
+            <span class="tile-meta"><span class="kind" style="--p: var(--rose); --d: var(--rose-ink)">Product</span>3 days ago</span>
+            <span class="tile-title">Three Fresh Scents for Spring</span>
+          </button>
+
+          <button class="tile" type="button" data-soon="This reel">
+            <span class="tile-media"><img src="img/t-lisbon.jpg" alt=""></span>
+            <span class="tile-meta"><span class="kind" style="--p: var(--sky); --d: var(--sky-ink)">Travel</span>4 days ago</span>
+            <span class="tile-title">48 Hours in Lisbon</span>
+          </button>
+
+          <button class="tile" type="button" data-soon="This reel">
+            <span class="tile-media"><img src="img/t-court.jpg" alt=""></span>
+            <span class="tile-meta"><span class="kind" style="--p: var(--butter); --d: var(--butter-ink)">Drill</span>5 days ago</span>
+            <span class="tile-title">Crossover Counters</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="ideas-h">
+        <div class="gutter block-head"><h2 class="block-title" id="ideas-h">Make something of it</h2></div>
+        <div class="ideas">
+          <button class="idea" type="button" data-soon="Ask" style="--p: var(--peach); --d: var(--peach-ink)"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg>Grocery list for your 6 Thai recipes</button>
+          <button class="idea" type="button" data-soon="Ask" style="--p: var(--butter); --d: var(--butter-ink)"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg>Turn 9 handle drills into a week</button>
+          <button class="idea" type="button" data-soon="Ask" style="--p: var(--rose); --d: var(--rose-ink)"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg>Compare your 4 spring scents</button>
+        </div>
+      </section>
+
+      <section class="block gutter" aria-labelledby="tastes-h">
+        <div class="block-head"><h2 class="block-title" id="tastes-h">Your tastes</h2></div>
+        <div class="tastes">
+          <button class="taste taste-wide" type="button" data-soon="Category pages" style="--p: var(--peach); --d: var(--peach-ink)">
+            <span class="taste-row">
+              <span>
+                <svg class="i" aria-hidden="true" style="width: 24px; height: 24px"><use href="#i-food"/></svg>
+                <span class="taste-name">Food</span>
+                <span class="taste-count"><span id="food-saves">32</span> saves</span>
+              </span>
+              <span class="fan" aria-hidden="true"><img src="img/s-padthai.jpg" alt=""><img src="img/s-ramen.jpg" alt=""><img src="img/s-mango.jpg" alt=""></span>
+            </span>
+            <span class="subs"><span>Quick dinners <b>9</b></span><span>Thai <b id="thai-saves">6</b></span><span>Baking <b>4</b></span></span>
+          </button>
+
+          <button class="taste" type="button" data-soon="Category pages" style="--p: var(--butter); --d: var(--butter-ink)">
+            <span class="taste-top"><svg class="i" aria-hidden="true"><use href="#i-ball"/></svg><span class="stack" aria-hidden="true"><img src="img/s-bball1.jpg" alt=""><img src="img/s-bball2.jpg" alt=""><img src="img/s-bball3.jpg" alt=""></span></span>
+            <span><span class="taste-name">Basketball</span><span class="taste-count">27 saves</span></span>
+          </button>
+
+          <button class="taste" type="button" data-soon="Category pages" style="--p: var(--sky); --d: var(--sky-ink)">
+            <span class="taste-top"><svg class="i" aria-hidden="true"><use href="#i-travel"/></svg><span class="stack" aria-hidden="true"><img src="img/s-lisbon1.jpg" alt=""><img src="img/s-lisbon2.jpg" alt=""><img src="img/s-lisbon3.jpg" alt=""></span></span>
+            <span><span class="taste-name">Travel</span><span class="taste-count">21 saves</span></span>
+          </button>
+
+          <button class="taste" type="button" data-soon="Category pages" style="--p: var(--mint); --d: var(--mint-ink)">
+            <span class="taste-top"><svg class="i" aria-hidden="true"><use href="#i-fit"/></svg><span class="stack" aria-hidden="true"><img src="img/s-gym1.jpg" alt=""><img src="img/s-gym2.jpg" alt=""><img src="img/s-gym3.jpg" alt=""></span></span>
+            <span><span class="taste-name">Fitness</span><span class="taste-count" id="fit-saves">18 saves</span></span>
+          </button>
+
+          <button class="taste" type="button" data-soon="Category pages" style="--p: var(--rose); --d: var(--rose-ink)">
+            <span class="taste-top"><svg class="i" aria-hidden="true"><use href="#i-scent"/></svg><span class="stack" aria-hidden="true"><img src="img/s-perfume1.jpg" alt=""><img src="img/s-perfume2.jpg" alt=""><img src="img/s-perfume3.jpg" alt=""></span></span>
+            <span><span class="taste-name">Fragrance</span><span class="taste-count">14 saves</span></span>
+          </button>
+
+          <button class="taste" type="button" data-soon="Category pages" style="--p: var(--lavender); --d: var(--lavender-ink)">
+            <span class="taste-top"><svg class="i" aria-hidden="true"><use href="#i-learn"/></svg><span class="stack" aria-hidden="true"><img src="img/s-learn1.jpg" alt=""><img src="img/s-learn2.jpg" alt=""><img src="img/s-learn3.jpg" alt=""></span></span>
+            <span><span class="taste-name">Learning</span><span class="taste-count">11 saves</span></span>
+          </button>
+
+          <button class="taste taste-new" type="button" data-soon="New tastes"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New taste</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- ================= REEL ================= -->
+    <main class="screen" id="reel" aria-label="Weeknight Pad Thai" inert>
+      <div class="hero">
+        <img src="img/hero-padthai.jpg" alt="A plate of pad thai with scallions, crushed peanuts and a wedge of lime">
+        <button class="round back" type="button" id="back" aria-label="Back to Home"><svg class="i" aria-hidden="true"><use href="#i-back"/></svg></button>
+        <button class="round more" type="button" data-soon="Reel options" aria-label="More options"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
+      </div>
+
+      <article class="panel gutter">
+        <div class="crumbs">
+          <button class="chip-cat" type="button" id="open-cat" aria-haspopup="dialog">
+            <svg class="i" aria-hidden="true"><use id="cat-ico" href="#i-food"/></svg>
+            <span id="cat-label">Food › Thai</span>
+            <svg class="i" aria-hidden="true"><use href="#i-down"/></svg>
+          </button>
+          <span class="when">Saved 2 days ago</span>
+        </div>
+
+        <h1 class="reel-title">Weeknight Pad Thai</h1>
+        <p class="byline">@wok.this.way on Instagram · 0:48</p>
+        <p class="summary">A 20-minute pad thai with a tamarind sauce you can mix ahead. The trick is soaking the noodles in warm water, not boiling.</p>
+
+        <ul class="facts">
+          <li><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>20 min</li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-users"/></svg><span id="fact-serves">Serves 2</span></li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-level"/></svg>Easy</li>
+        </ul>
+
+        <div class="actions">
+          <button class="btn btn-primary" type="button" data-soon="Plans"><svg class="i" aria-hidden="true"><use href="#i-basket"/></svg>Make a grocery list</button>
+          <button class="btn" type="button" data-soon="Ask"><svg class="i" aria-hidden="true"><use href="#i-ask"/></svg>Ask about this</button>
+          <button class="btn" type="button" data-toast="Opens the original reel on Instagram"><svg class="i" aria-hidden="true"><use href="#i-out"/></svg>Open original</button>
+        </div>
+
+        <div class="note">
+          <p class="note-label">Your note</p>
+          <p class="note-text">Make this Saturday for Zara. Go easy on the chili.</p>
+        </div>
+
+        <section class="sec" aria-labelledby="ing-h">
+          <div class="sec-head">
+            <h2 class="sec-title" id="ing-h">Ingredients</h2>
+            <div class="stepper" role="group" aria-label="Servings">
+              <button type="button" id="serv-down" aria-label="Fewer servings"><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg></button>
+              <output id="serv-out" aria-live="polite">2 servings</output>
+              <button type="button" id="serv-up" aria-label="More servings"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            </div>
+          </div>
+          <ul class="ings" id="ings"></ul>
+        </section>
+
+        <section class="sec" aria-labelledby="steps-h">
+          <h2 class="sec-title" id="steps-h">Steps</h2>
+          <ol class="steps">
+            <li><p>Soak the noodles in warm water for 10 minutes, then drain. Warm, not boiling, keeps them chewy.</p></li>
+            <li><p>Stir the tamarind paste, fish sauce and palm sugar together until the sugar dissolves.</p></li>
+            <li><p>Sear the shrimp in a hot wok for 1 minute per side. Set aside.</p></li>
+            <li><p>Scramble the eggs with the garlic, then add the noodles and sauce. Toss for 2 minutes.</p></li>
+            <li><p>Return the shrimp, add the sprouts and scallions, and toss for 30 seconds. Finish with peanuts and lime.</p></li>
+          </ol>
+          <div class="tip">
+            <span class="tip-mark" aria-hidden="true"><svg class="i"><use href="#i-tip"/></svg></span>
+            <p><b>Don't crowd the wok.</b> If you double the recipe, cook it in two batches.</p>
+          </div>
+        </section>
+
+        <section class="sec" aria-labelledby="read-h">
+          <h2 class="sec-title" id="read-h">How Brain read this</h2>
+          <ul class="read">
+            <li class="skipped"><span class="src">Caption</span><span class="how">Skipped. It was about a giveaway, not the recipe.</span></li>
+            <li><span class="src">On-screen text</span><span class="how">Every ingredient amount</span></li>
+            <li><span class="src">Voiceover</span><span class="how">The steps and the soaking trick</span></li>
+          </ul>
+          <details class="said">
+            <summary>What's said in the video<svg class="i" aria-hidden="true"><use href="#i-down"/></svg></summary>
+            <ul class="lines">
+              <li><time>0:03</time><span>Okay, the secret to pad thai at home is the noodles.</span></li>
+              <li><time>0:11</time><span>Warm water, ten minutes. Not boiling.</span></li>
+              <li><time>0:19</time><span>Sauce is tamarind, fish sauce, palm sugar. Mix it now.</span></li>
+              <li><time>0:31</time><span>Shrimp out, eggs in, then noodles and sauce.</span></li>
+              <li><time>0:42</time><span>Peanuts, lime, done.</span></li>
+            </ul>
+          </details>
+        </section>
+      </article>
+    </main>
+
+    <!-- ================= BAR ================= -->
+    <div class="listen" aria-hidden="true"><span class="wave"><span></span><span></span><span></span><span></span><span></span></span>Listening. Release to send.</div>
+    <nav class="bar" aria-label="Main">
+      <button class="tab" type="button" id="tab-home" aria-current="page"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg>Home</button>
+      <span class="orb-slot"><button class="orb" type="button" id="orb" aria-label="Ask Brain. Hold to speak."></button></span>
+      <button class="tab" type="button" data-soon="Plans"><svg class="i" aria-hidden="true"><use href="#i-plans"/></svg>Plans</button>
+    </nav>
+
+    <!-- ================= SHEETS ================= -->
+    <div class="scrim" id="scrim"></div>
+
+    <div class="sheet gutter" id="sheet-add" role="dialog" aria-modal="true" aria-labelledby="add-h" inert>
+      <div class="grab" aria-hidden="true"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="add-h">Add a reel</h2><button class="close" type="button" data-close aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <form class="paste" id="paste-form">
+        <label class="vh" for="paste-url">Reel link</label>
+        <input id="paste-url" type="url" inputmode="url" placeholder="Paste an Instagram or TikTok link" autocomplete="off">
+        <button class="btn" type="submit">Save</button>
+      </form>
+      <p class="sheet-sub">Or send it straight from the app</p>
+      <ol class="how-steps">
+        <li><span>Tap <b>Share</b> on any reel</span></li>
+        <li><span>Choose <b>Save to Brain</b></span></li>
+        <li><span>It shows up here in under a minute</span></li>
+      </ol>
+    </div>
+
+    <div class="sheet gutter" id="sheet-cat" role="dialog" aria-modal="true" aria-labelledby="cat-h" inert>
+      <div class="grab" aria-hidden="true"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="cat-h">File under</h2><button class="close" type="button" data-close aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <ul class="opts" id="cat-opts">
+        <li><button class="opt" type="button" aria-pressed="true" data-label="Food › Thai" data-ico="i-food" data-c="peach"><span class="opt-ico" style="--p: var(--peach); --d: var(--peach-ink)"><svg class="i" aria-hidden="true"><use href="#i-food"/></svg></span><span class="opt-name">Food <small>› Thai</small></span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+        <li><button class="opt" type="button" aria-pressed="false" data-label="Food › Quick dinners" data-ico="i-food" data-c="peach"><span class="opt-ico" style="--p: var(--peach); --d: var(--peach-ink)"><svg class="i" aria-hidden="true"><use href="#i-food"/></svg></span><span class="opt-name">Food <small>› Quick dinners</small></span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+        <li><button class="opt" type="button" aria-pressed="false" data-label="Food › Baking" data-ico="i-food" data-c="peach"><span class="opt-ico" style="--p: var(--peach); --d: var(--peach-ink)"><svg class="i" aria-hidden="true"><use href="#i-food"/></svg></span><span class="opt-name">Food <small>› Baking</small></span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+        <li><button class="opt" type="button" aria-pressed="false" data-label="Travel" data-ico="i-travel" data-c="sky"><span class="opt-ico" style="--p: var(--sky); --d: var(--sky-ink)"><svg class="i" aria-hidden="true"><use href="#i-travel"/></svg></span><span class="opt-name">Travel</span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+        <li><button class="opt" type="button" aria-pressed="false" data-label="Fitness" data-ico="i-fit" data-c="mint"><span class="opt-ico" style="--p: var(--mint); --d: var(--mint-ink)"><svg class="i" aria-hidden="true"><use href="#i-fit"/></svg></span><span class="opt-name">Fitness</span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+        <li><button class="opt" type="button" aria-pressed="false" data-label="Learning" data-ico="i-learn" data-c="lavender"><span class="opt-ico" style="--p: var(--lavender); --d: var(--lavender-ink)"><svg class="i" aria-hidden="true"><use href="#i-learn"/></svg></span><span class="opt-name">Learning</span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></button></li>
+      </ul>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <p class="stage-note">Tap the pad thai reel to open it, and hold the glowing button to speak. Everything shown is sample content.</p>
+</div>
+
+<script>
+(function () {
+  var device = document.getElementById('device');
+  var home = document.getElementById('home');
+  var reel = document.getElementById('reel');
+  var toastEl = document.getElementById('toast');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- toast ---------- */
+  var toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('is-on'); }, 2600);
+  }
+  device.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-soon], [data-toast]');
+    if (!t || t.classList.contains('is-processing')) return;
+    toast(t.dataset.toast || (t.dataset.soon + (/s$/.test(t.dataset.soon) ? " aren't" : " isn't") + ' in this mockup yet'));
+  });
+
+  /* ---------- routing: #reel shows the reel page, anything else Home ---------- */
+  function show(view) {
+    var isReel = view === 'reel';
+    device.dataset.view = isReel ? 'reel' : 'home';
+    reel.inert = !isReel;
+    home.inert = isReel;
+    if (isReel) reel.scrollTop = 0;
+    if (isReel) $('tab-home').removeAttribute('aria-current'); else $('tab-home').setAttribute('aria-current', 'page');
+  }
+  function route() { show(location.hash === '#reel' ? 'reel' : 'home'); }
+  function go(view) {
+    try { location.hash = view; } catch (err) { /* hash may be unavailable */ }
+    show(view);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+  $('tile-padthai').addEventListener('click', function () { go('reel'); });
+  $('back').addEventListener('click', function () { go('home'); });
+  $('tab-home').addEventListener('click', function () { if (device.dataset.view === 'reel') go('home'); else home.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' }); });
+
+  /* ---------- live processing tile ---------- */
+  var STAGES = ['Grabbing the reel', 'Reading the caption', 'Watching the video', 'Filing it away'];
+  var TIMES = [0, 2200, 4200, 7400, 9000];
+  function runProcessing(tile, done) {
+    var stage = tile.querySelector('.proc-stage');
+    var dots = tile.querySelectorAll('.proc-dots span');
+    STAGES.forEach(function (text, i) {
+      setTimeout(function () {
+        stage.textContent = text;
+        dots.forEach(function (d, j) { d.classList.toggle('on', j <= i); });
+      }, TIMES[i]);
+    });
+    setTimeout(function () {
+      tile.classList.remove('is-processing');
+      tile.querySelector('.tile-body').outerHTML =
+        '<span class="tile-meta"><span class="kind" style="--p: var(--' + done.color + '); --d: var(--' + done.color + '-ink)">' + done.kind + '</span>Just now</span>' +
+        '<span class="tile-title">' + done.title + '</span>';
+      tile.setAttribute('aria-label', done.title);
+      done.after();
+    }, TIMES[4]);
+  }
+  function bump(id, by) { var el = $(id); el.textContent = el.textContent.replace(/\d+/, function (n) { return +n + by; }); }
+  runProcessing($('tile-mango'), {
+    title: 'Mango Sticky Rice', kind: 'Recipe', color: 'peach',
+    after: function () {
+      bump('total-saves', 1); bump('food-saves', 1); bump('thai-saves', 1);
+      if (device.dataset.view === 'home' && !device.classList.contains('has-sheet')) toast('Mango Sticky Rice filed under Food › Thai');
+    }
+  });
+
+  /* ---------- sheets ---------- */
+  var openSheet = null, lastFocus = null;
+  function sheet(id) {
+    closeSheet();
+    openSheet = $(id); lastFocus = document.activeElement;
+    openSheet.inert = false; openSheet.classList.add('is-open'); device.classList.add('has-sheet');
+    var first = openSheet.querySelector('[data-close]');
+    if (first) setTimeout(function () { first.focus({ preventScroll: true }); }, 60);
+  }
+  function closeSheet() {
+    if (!openSheet) return;
+    openSheet.classList.remove('is-open'); openSheet.inert = true; device.classList.remove('has-sheet');
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+    openSheet = null;
+  }
+  $('scrim').addEventListener('click', closeSheet);
+  device.addEventListener('click', function (e) { if (e.target.closest('[data-close]')) closeSheet(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+  $('open-add').addEventListener('click', function () { sheet('sheet-add'); });
+  $('open-cat').addEventListener('click', function () { sheet('sheet-cat'); });
+
+  /* paste a link: adds one more live tile, then behaves like a duplicate */
+  var pasted = false;
+  $('paste-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var input = $('paste-url');
+    if (!input.value.trim()) { input.focus(); toast('Paste a reel link first'); return; }
+    input.value = '';
+    closeSheet();
+    if (pasted) { toast('Already in your saves'); return; }
+    pasted = true;
+    var tile = document.createElement('button');
+    tile.type = 'button'; tile.className = 'tile is-processing'; tile.dataset.soon = 'This reel';
+    tile.innerHTML = '<span class="tile-media"><img src="img/t-barbell.jpg" alt=""><span class="proc"><span class="proc-stage">Grabbing the reel</span><span class="proc-dots" aria-hidden="true"><span class="on"></span><span></span><span></span><span></span></span></span></span><span class="tile-body"><span class="skel"></span><span class="skel"></span></span>';
+    var rail = $('rail');
+    rail.insertBefore(tile, rail.firstChild);
+    rail.scrollTo({ left: 0, behavior: reduce ? 'auto' : 'smooth' });
+    home.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    toast('Saved. Brain is on it.');
+    runProcessing(tile, {
+      title: 'Five Barbell Basics', kind: 'Workout', color: 'mint',
+      after: function () {
+        bump('total-saves', 1); bump('fit-saves', 1);
+        if (device.dataset.view === 'home' && !device.classList.contains('has-sheet')) toast('Five Barbell Basics filed under Fitness');
+      }
+    });
+  });
+
+  /* move the reel to another category */
+  $('cat-opts').addEventListener('click', function (e) {
+    var opt = e.target.closest('.opt');
+    if (!opt) return;
+    this.querySelectorAll('.opt').forEach(function (o) { o.setAttribute('aria-pressed', o === opt ? 'true' : 'false'); });
+    var chip = $('open-cat');
+    $('cat-label').textContent = opt.dataset.label;
+    $('cat-ico').setAttribute('href', '#' + opt.dataset.ico);
+    chip.style.background = 'var(--' + opt.dataset.c + ')';
+    chip.style.color = 'var(--' + opt.dataset.c + '-ink)';
+    closeSheet();
+    toast('Moved to ' + opt.dataset.label);
+  });
+
+  /* ---------- recipe: ingredients scale with servings ---------- */
+  var BASE = 2, servings = 2;
+  var ING = [
+    { q: 200, u: 'g', name: 'flat rice noodles' },
+    { q: 2, u: 'tbsp', name: 'tamarind paste' },
+    { q: 2, u: 'tbsp', name: 'fish sauce' },
+    { q: 1.5, u: 'tbsp', name: 'palm sugar' },
+    { q: 200, u: 'g', name: 'shrimp, peeled' },
+    { q: 2, one: 'egg', many: 'eggs' },
+    { q: 3, one: 'clove garlic, minced', many: 'cloves garlic, minced' },
+    { q: 100, u: 'g', name: 'bean sprouts' },
+    { q: 3, one: 'scallion, sliced', many: 'scallions, sliced' },
+    { q: 2, u: 'tbsp', name: 'crushed peanuts' },
+    { q: 1, one: 'lime, in wedges', many: 'limes, in wedges' }
+  ];
+  var GLYPH = { 0: '', 0.25: '¼', 0.5: '½', 0.75: '¾' };
+  function amount(ing) {
+    var q = ing.q * servings / BASE;
+    if (ing.u === 'g') return { qty: Math.max(5, Math.round(q / 5) * 5) + ' g', name: ing.name };
+    var r = Math.max(0.25, Math.round(q * 4) / 4), whole = Math.floor(r);
+    var text = (whole || '') + GLYPH[r - whole];
+    if (ing.u) return { qty: text + ' ' + ing.u, name: ing.name };
+    return { qty: text, name: r <= 1 ? ing.one : ing.many };
+  }
+  var list = $('ings');
+  ING.forEach(function (ing, i) {
+    var li = document.createElement('li');
+    li.innerHTML = '<label class="ing"><input type="checkbox" id="ing-' + i + '"><span class="tick"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span class="ing-text"><span class="ing-qty"></span> <span class="ing-name"></span></span></label>';
+    list.appendChild(li);
+  });
+  function renderIngredients() {
+    list.querySelectorAll('li').forEach(function (li, i) {
+      var a = amount(ING[i]);
+      li.querySelector('.ing-qty').textContent = a.qty;
+      li.querySelector('.ing-name').textContent = a.name;
+    });
+    $('serv-out').textContent = servings + (servings === 1 ? ' serving' : ' servings');
+    $('fact-serves').textContent = 'Serves ' + servings;
+    $('serv-down').disabled = servings <= 1;
+    $('serv-up').disabled = servings >= 8;
+  }
+  $('serv-down').addEventListener('click', function () { if (servings > 1) { servings--; renderIngredients(); } });
+  $('serv-up').addEventListener('click', function () { if (servings < 8) { servings++; renderIngredients(); } });
+  renderIngredients();
+
+  /* ---------- orb: tap opens Ask, hold records ---------- */
+  var orb = $('orb'), holdTimer = null, listening = false;
+  function startHold() { listening = true; device.classList.add('is-listening'); }
+  function endHold(send) {
+    clearTimeout(holdTimer); holdTimer = null;
+    if (listening) {
+      listening = false; device.classList.remove('is-listening');
+      if (send) toast("Sent. Ask isn't in this mockup yet");
+      return true;
+    }
+    return false;
+  }
+  orb.addEventListener('pointerdown', function (e) {
+    if (e.button) return;
+    try { orb.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+    holdTimer = setTimeout(startHold, 250);
+  });
+  orb.addEventListener('pointerup', function () {
+    var wasPending = holdTimer !== null;
+    if (!endHold(true) && wasPending) toast("Ask isn't in this mockup yet. Try holding to speak.");
+  });
+  orb.addEventListener('pointercancel', function () { endHold(false); });
+  orb.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  orb.addEventListener('click', function (e) { if (e.detail === 0) toast("Ask isn't in this mockup yet. Try holding to speak."); });
+})();
+</script>
+</body>
+</html>
