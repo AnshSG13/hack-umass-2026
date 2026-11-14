@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* Tokens: DESIGN.md section 2. Light theme only. Flat: no gradients, no card shadows. */
+:root {
+  color-scheme: light;
+  --ink: #1b2430;
+  --paper: #f3f5f7;
+  --ticket: #ffffff;
+  --highlighter: #ffd23f;
+  --done: #2e8b57;
+  --done-ink: #1f7a4d;
+  --muted: #5a6472;
+  --line: #e1e5ea;
+  --line-strong: #7d8794;
+  --danger-ink: #a3352b;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-ticket: var(--ticket);
+  --color-highlighter: var(--highlighter);
+  --color-done: var(--done);
+  --color-done-ink: var(--done-ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-danger-ink: var(--danger-ink);
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --radius-ticket: 16px;
+  --radius-control: 12px;
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Wide Archivo (wdth 125): stub time, wordmark, landing headline. */
+.wide {
+  font-stretch: 125%;
+  font-variation-settings: "wdth" 125;
+  font-weight: 600;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visible focus on every interactive element, also on highlighter. */
+:where(a, button, input, textarea, select, summary, [role="button"], [role="switch"], [role="radio"], [tabindex]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+  font-size: 16px; /* prevents iOS zoom */
+}
+
+/* The current step's dot is the only looping motion (DESIGN.md section 8). */
+@keyframes step-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.step-dot-current {
+  animation: step-pulse 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-dot-current {
+    animation: none;
+  }
+}

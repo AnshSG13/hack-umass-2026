@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pymongo
+dnspython
+google-genai
+pydantic
+pydantic-settings
+yt-dlp[default]
+httpx
+Pillow
+numpy
+tzdata
+pytest
