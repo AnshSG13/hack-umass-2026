@@ -4,14 +4,16 @@ A clickable, phone-sized mockup of the **Home** dashboard and the **Reel page** 
 
 ## Open it
 
-It is one static page with no build step.
+It is one self-contained page with no build step. The photos are embedded in the file, so `index.html` works on its own, even downloaded by itself.
 
 ```
 cd mockups
 python3 -m http.server 8080
 ```
 
-Then open `http://localhost:8080`. On a laptop it shows inside a phone frame; in a narrow window or on a phone it fills the screen. Opening `index.html` directly from disk also works.
+Then open `http://localhost:8080`, or just double-click `index.html`. On a laptop it shows inside a phone frame; in a narrow window or on a phone it fills the screen.
+
+GitHub's file view shows the source code, not the page. To see the page, download or clone the repo and open the file in a browser.
 
 ## What you can click
 
