@@ -667,3 +667,33 @@ def test_follow_ups_are_short_and_distinct():
     assert ask.clean_follow_ups(["x", "y" * 80]) == []
     assert ask.clean_follow_ups(None) == []
     assert ask.clean_follow_ups(["a b c", "d e f", "g h i"]) == ["a b c", "d e f"]
+
+
+# ---------- taste boards ----------
+
+
+def test_board_meta_line_uses_only_what_the_reel_gave():
+    from realize import board
+
+    recipe = {"type": "recipe", "fields": {"recipe": {"total_time_min": 20, "ingredients": [{"item": "a"}] * 7}}}
+    assert board.meta_line(recipe) == "20 min · 7 ingredients"
+    assert board.meta_line({"type": "recipe", "fields": {"recipe": {"ingredients": [{"item": "a"}]}}}) == "1 ingredient"
+    assert board.meta_line({"type": "workout", "fields": {"workout": {"duration_min": 15, "exercises": [{}] * 6}}}) == "15 min · 6 moves"
+    place = {"type": "place", "fields": {"place": {"places": [{"name": "A", "city": "Lisbon"}, {"name": "B"}]}}}
+    assert board.meta_line(place) == "Lisbon · 2 places"
+    assert board.meta_line({"type": "product", "fields": {"product": {"items": [{}] * 6}}}) == "6 products"
+    # Nothing to say about it: who posted it, or nothing at all.
+    assert board.meta_line({"type": "other", "creator": {"handle": "ana"}}) == "@ana"
+    assert board.meta_line({"type": "recipe", "fields": {}}) == ""
+
+
+def test_board_tags_drop_the_dull_and_the_universal():
+    from realize import board
+
+    assert board.clean_tags({"tags": ["#Thai", "recipe", "thai", " noodles ", "fyp"]}) == ["thai", "noodles"]
+    chips = board.top_tags([["thai", "dinner"], ["thai", "dinner", "quick"], ["dinner", "baking"]])
+    assert [c["tag"] for c in chips] == ["thai", "baking", "quick"]      # "dinner" is on every save
+    assert board.meta_line({"type": "recipe", "fields": {"recipe": {"total_time_min": 250}}}) == "4 h 10 min"
+    assert board.meta_line({"type": "recipe", "fields": {"recipe": {"total_time_min": 120}}}) == "2 h"
+    assert chips[0] == {"tag": "thai", "count": 2}
+    assert board.top_tags([["solo"]]) == [{"tag": "solo", "count": 1}]    # one save: its tags still show

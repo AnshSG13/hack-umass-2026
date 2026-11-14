@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import accounts, ask, db, demo, jobs, planops, ratelimit, search, thumbs, tickets
+from ... import accounts, ask, board, db, demo, jobs, planops, ratelimit, search, thumbs, tickets
 from ...config import get_settings
 from ...models import (
     ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
@@ -134,6 +134,14 @@ def tastes(user: dict = Depends(current_user)) -> dict:
         out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
                     "tags": [{"tag": k, "count": n} for k, n in top]})
     return {"total": total, "tastes": out}
+
+
+@router.get("/api/tastes/{type}")
+def taste_board(type: str, user: dict = Depends(current_user)) -> dict:
+    """One taste as a board: its saves as cards, and the tags that filter them."""
+    if type not in TYPES:
+        raise HTTPException(status_code=404, detail="That taste doesn't exist.")
+    return board.board(user, type)
 
 
 @router.get("/api/search")

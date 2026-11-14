@@ -39,7 +39,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
   const count = plural(taste.count, "save", "saves");
-  const href = `/library?type=${taste.type}`;
+  const href = `/t/${taste.type}`;
 
   if (wide) {
     return (

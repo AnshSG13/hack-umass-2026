@@ -217,3 +217,14 @@ Measured on the poutine reel (demo account, `gemini-3.5-flash`): three questions
 - **Voice.** Holding the orb already dictated through the browser's speech recognition. It now opens a full layer with the words as they are heard: settled words in ink, the tail in grey while it can still change. On release the question goes to Ask marked "Said out loud". No new dependency; browsers without speech recognition still treat a hold as a tap.
 
 99 unit tests pass (2 new). Checked in headless Chrome at 390x844 with a scripted speech recogniser: hold, words appearing, release, the spoken bubble, the streamed answer, next-question buttons. Not checked: a real microphone, or iOS Safari, where dictation needs https.
+
+## 2026-11-14: taste boards
+
+A taste tile on Home now opens a board (`/t/{type}`), not the plain saves list: two staggered columns of reel thumbnails, each with a short title and one line of facts. The saves list stays as the search screen and is one tap away from the board.
+
+- `GET /api/tastes/{type}` (`server/realize/board.py`), no model call. The facts line is built from fields the reel gave ("20 min · 7 ingredients", "Lisbon · 2 places", "6 products"); a save with none shows who posted it. Times of 90 minutes or more read as hours.
+- Filter chips are the tags the board's saves carry: shared tags first, never a tag that is on every save, never generic hashtags (`board.DULL_TAGS`).
+- Marks on a card: "New" for the last day, a pen for a save with your note.
+- Reel thumbnails all have one shape, so the board crops them to five heights chosen from the save's id (stable between visits), and fills the shorter column first so reading order stays left to right.
+
+101 unit tests pass (2 new). Checked in headless Chrome at 390x844 on a demo account: Food board with 3 saves, a chip narrowing it to 1, a board for another type, and an unknown type.

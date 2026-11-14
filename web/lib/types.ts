@@ -272,3 +272,21 @@ export interface Discussion extends DiscussionSummary {
   save_id: string;
   messages: DiscussionMessage[];
 }
+
+// ---- GET /api/tastes/{type}: one taste as a board ----
+export interface BoardItem {
+  save_id: string;
+  title: string;
+  thumb_url: string | null;
+  meta: string; // "20 min · 7 ingredients", or "" when the reel gave nothing to say
+  tags: string[];
+  has_note: boolean;
+  is_new: boolean; // saved in the last day
+}
+export interface Board {
+  type: SaveType;
+  label: string;
+  count: number;
+  tags: { tag: string; count: number }[]; // the filter chips, at most 6
+  items: BoardItem[];
+}

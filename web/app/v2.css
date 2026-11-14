@@ -696,3 +696,145 @@
     animation: none;
   }
 }
+
+/* ---------- Taste board ---------- */
+.board-title {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.board-ico {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--p, var(--surface));
+  color: var(--d, var(--ink-2));
+}
+.board-title .pill {
+  background: var(--p, var(--surface));
+  color: var(--d, var(--ink-2));
+}
+.add.icon-only {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+.board {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.pin {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  animation: pin-in 0.5s var(--ease) both;
+}
+.board-col:nth-child(2) .pin {
+  animation-delay: 0.06s;
+}
+.pin-media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--p, var(--surface));
+  color: var(--d, var(--ink-3));
+  transition: transform 0.3s var(--ease);
+}
+.pin-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pin:active .pin-media {
+  transform: scale(0.97);
+}
+.pin-new {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.pin-note {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--butter);
+  color: var(--butter-ink);
+}
+.pin-note .i {
+  width: 13px;
+  height: 13px;
+}
+.pin-title {
+  margin-top: 9px;
+  padding-inline: 2px;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pin-meta {
+  margin-top: 3px;
+  padding-inline: 2px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skel.pin-skel {
+  width: 100%;
+  height: auto;
+  border-radius: 20px;
+}
+.skel.pin-skel + .skel.pin-skel {
+  width: 100%;
+  margin-top: 0;
+}
+@keyframes pin-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin {
+    animation: none;
+  }
+}
