@@ -84,7 +84,7 @@ function Account({ accountKey }: { accountKey: string }) {
 
   const openApp = (
     <p className="mt-6">
-      <Link href="/plans" className={cn(linkInk, "inline-flex min-h-11 items-center text-[16px]")}>
+      <Link href="/home" className={cn(linkInk, "inline-flex min-h-11 items-center text-[16px]")}>
         Open {appName}
       </Link>
     </p>
@@ -355,7 +355,7 @@ export default function SetupPage() {
       // The icon's link never changes, so a key already stored here (a newer one, after
       // "New key" in Settings) wins over the one in the link.
       if (valid && getKey() === null) setKey(carried);
-      if (getKey() !== null) router.replace("/plans");
+      if (getKey() !== null) router.replace("/home");
       return;
     }
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -385,7 +385,7 @@ export default function SetupPage() {
   return (
     <div className="mx-auto min-h-dvh w-full max-w-[440px] px-4 pb-10">
       <header className="flex h-14 items-center">
-        <Link href={key && !isDemo ? "/plans" : "/"} className="wide inline-flex min-h-11 items-center rounded-[4px] text-[20px] leading-none text-ink">
+        <Link href={key && !isDemo ? "/home" : "/"} className="wide inline-flex min-h-11 items-center rounded-[4px] text-[20px] leading-none text-ink">
           {appName}
         </Link>
       </header>

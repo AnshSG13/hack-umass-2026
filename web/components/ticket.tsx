@@ -32,7 +32,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { followupQuestion, ticketState, ticketTitle, TYPE_LABEL, type TicketState } from "@/lib/format";
+import { KindChip } from "@/components/bits";
+import { followupQuestion, ticketState, ticketTitle, type TicketState } from "@/lib/format";
 import { useElapsed, useHealth } from "@/lib/hooks";
 import { btnIcon, btnOutline, btnPrimary, btnText, linkInk } from "@/lib/styles";
 import { useTicketActions } from "@/lib/ticket-actions";
@@ -82,14 +83,7 @@ export function Thumb({
 }
 
 export function TypeLabel({ type }: { type: SaveType | null }) {
-  if (!type) return null;
-  const Icon = KIND_ICON[type];
-  return (
-    <span className="inline-flex items-center gap-1 text-[13px] text-muted">
-      <Icon aria-hidden="true" className="size-[14px]" />
-      {TYPE_LABEL[type]}
-    </span>
-  );
+  return <KindChip type={type} />;
 }
 
 export function SampleTag() {

@@ -1,22 +1,22 @@
 "use client";
 
-// App shell (DESIGN.md section 4): 56 px header, 64 px bottom tab bar, a 440 px app column,
-// and at 1100 px or wider the 560 px "How it was planned" side panel.
+// App shell, after the mockup: one phone-wide column, the floating bottom bar (Home, the
+// orb, Plans), the "Add a reel" sheet and the toast. It also holds what has to survive
+// moving between screens: the Ask conversation, a question on its way to Ask, and the
+// saves just added (so Home can show them first, still processing).
 
-import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarCheck, Library, MessageCircle, Plus, Settings, Sparkles, type LucideIcon } from "lucide-react";
+import { AddSheet } from "@/components/add-sheet";
+import { Icon } from "@/components/icons";
+import { Orb } from "@/components/orb";
 import { ToastViewport, useToast } from "@/components/toast";
-import { TraceBody, TraceContext, type TraceApi } from "@/components/trace";
-import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { api, ApiError, clearKey, setKey } from "@/lib/api";
-import { browserTimezone, useConfig, useIsDesk, useKey, useMe } from "@/lib/hooks";
-import { btnText } from "@/lib/styles";
-import type { AskCard, StepLine, Ticket } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { browserTimezone, useConfig, useKey, useMe, useRefresh } from "@/lib/hooks";
+import type { AskCard, SaveResponse, StepLine, Ticket } from "@/lib/types";
 
-// ---- Ask keeps its conversation while you move between tabs ----
+// ---- Ask keeps its conversation while you move between screens ----
 
 export interface AskTurn {
   id: number;
@@ -29,34 +29,63 @@ export interface AskTurn {
   done: boolean;
 }
 
+/** A question handed to Ask from somewhere else. Held in memory only, so a reload never re-sends it. */
+export interface AskHandoff {
+  id: number;
+  text: string;
+  /** true: send it now. false: put it in the input and focus it. */
+  send: boolean;
+}
+
 interface AskStore {
   turns: AskTurn[];
   setTurns: React.Dispatch<React.SetStateAction<AskTurn[]>>;
+  handoff: AskHandoff | null;
+  /** Hand a question to Ask and go there. */
+  ask: (text: string, send: boolean) => void;
+  clearHandoff: () => void;
 }
 
-const AskContext = createContext<AskStore>({ turns: [], setTurns: () => {} });
+const AskContext = createContext<AskStore>({
+  turns: [],
+  setTurns: () => {},
+  handoff: null,
+  ask: () => {},
+  clearHandoff: () => {},
+});
 
 export function useAskStore(): AskStore {
   return useContext(AskContext);
 }
 
-// ---- tabs ----
+// ---- the rest of what screens share ----
 
-interface Tab {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  match: (path: string) => boolean;
+export interface FreshSave {
+  save_id: string;
+  ticket: Ticket | null;
 }
 
-const TABS: Tab[] = [
-  { href: "/plans", label: "Plans", icon: CalendarCheck, match: (p) => p.startsWith("/plans") },
-  { href: "/library", label: "Library", icon: Library, match: (p) => p.startsWith("/library") || p.startsWith("/s/") },
-  { href: "/ask", label: "Ask", icon: MessageCircle, match: (p) => p.startsWith("/ask") },
-];
-const SAMPLES_TAB: Tab = { href: "/demo", label: "Samples", icon: Sparkles, match: (p) => p.startsWith("/demo") };
-// A real account saves from inside the app: copy the link in Instagram, paste it here.
-const SAVE_TAB: Tab = { href: "/save", label: "Save", icon: Plus, match: (p) => p.startsWith("/save") };
+interface AppApi {
+  /** Open the "Add a reel" sheet. */
+  openAdd: () => void;
+  /** Saves added in this session, newest first. */
+  fresh: FreshSave[];
+  /** Back one screen, or Home when this is the first screen of the visit. */
+  goBack: () => void;
+  /** A save was deleted: drop it from the just-added list. */
+  forget: (saveId: string) => void;
+}
+
+const AppContext = createContext<AppApi>({ openAdd: () => {}, fresh: [], goBack: () => {}, forget: () => {} });
+
+export function useApp(): AppApi {
+  return useContext(AppContext);
+}
+
+/** Screens that keep their earlier layout and get a plain back row on top. */
+function isPlain(path: string): boolean {
+  return path.startsWith("/demo") || path.startsWith("/save") || path.startsWith("/settings");
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const key = useKey();
@@ -64,15 +93,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const { appName } = useConfig();
   const { data: me, error: meError } = useMe(Boolean(key));
-  const isDesk = useIsDesk();
   const toast = useToast();
+  const refresh = useRefresh();
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [turns, setTurns] = useState<AskTurn[]>([]);
+  const [handoff, setHandoff] = useState<AskHandoff | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [fresh, setFresh] = useState<FreshSave[]>([]);
   const [restarting, setRestarting] = useState(false);
+  const handoffId = useRef(0);
 
-  // No key on an app route: back to the landing page (SPEC 13.2).
+  // No key on an app route: back to the landing page.
   useEffect(() => {
     if (key === null) router.replace("/");
   }, [key, router]);
@@ -82,26 +113,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (meError instanceof ApiError && meError.status === 401) clearKey();
   }, [meError]);
 
-  const select = useCallback((id: string | null) => setSelectedId(id), []);
-  const show = useCallback(
-    (id: string) => {
-      setSelectedId(id);
-      if (!isDesk) setSheetOpen(true);
+  // How many screens deep this visit is, so Back knows whether there is anything behind it.
+  const depth = useRef(0);
+  const firstPath = useRef(pathname);
+  useEffect(() => {
+    if (pathname !== firstPath.current) depth.current += 1;
+  }, [pathname]);
+
+  const goBack = useCallback(() => {
+    if (depth.current > 0 && window.history.length > 1) router.back();
+    else router.replace("/home");
+  }, [router]);
+
+  const ask = useCallback(
+    (text: string, send: boolean) => {
+      handoffId.current += 1;
+      setHandoff({ id: handoffId.current, text, send });
+      if (!pathname.startsWith("/ask")) router.push("/ask");
     },
-    [isDesk],
+    [pathname, router],
   );
-  const trace = useMemo<TraceApi>(
-    () => ({ available: true, selectedId, select, show }),
-    [selectedId, select, show],
+  const clearHandoff = useCallback(() => setHandoff(null), []);
+
+  const openAdd = useCallback(() => setAddOpen(true), []);
+
+  const onSaved = useCallback(
+    (r: SaveResponse) => {
+      setAddOpen(false);
+      setFresh((list) => [{ save_id: r.save_id, ticket: r.ticket }, ...list.filter((f) => f.save_id !== r.save_id)]);
+      refresh();
+      if (!pathname.startsWith("/home")) router.push("/home");
+    },
+    [pathname, refresh, router],
   );
-  const ask = useMemo(() => ({ turns, setTurns }), [turns]);
+
+  const askStore = useMemo(
+    () => ({ turns, setTurns, handoff, ask, clearHandoff }),
+    [turns, handoff, ask, clearHandoff],
+  );
+  const forget = useCallback((saveId: string) => setFresh((list) => list.filter((f) => f.save_id !== saveId)), []);
+  const app = useMemo(() => ({ openAdd, fresh, goBack, forget }), [openAdd, fresh, goBack, forget]);
 
   async function startOver() {
     setRestarting(true);
     try {
       const r = await api<{ api_key: string }>("/api/demo/session", { body: { timezone: browserTimezone() } });
       setTurns([]);
-      setSelectedId(null);
+      setFresh([]);
       try {
         window.sessionStorage.removeItem("rl_demo_added");
       } catch {
@@ -117,106 +175,54 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!key) return <div className="min-h-dvh bg-paper" />;
 
-  const isDemo = Boolean(me?.is_demo);
-  // Until /api/me answers, show the three tabs both kinds of account have.
-  const tabs = me === undefined ? TABS : isDemo ? [SAMPLES_TAB, ...TABS] : [SAVE_TAB, ...TABS];
+  const plain = isPlain(pathname);
+  const onHome = pathname.startsWith("/home");
+  const onPlans = pathname.startsWith("/plans");
 
   return (
-    <TraceContext.Provider value={trace}>
-      <AskContext.Provider value={ask}>
-        <div
-          data-shell=""
-          className="mx-auto w-full max-w-[440px] desk:grid desk:max-w-[1024px] desk:grid-cols-[440px_560px] desk:gap-6"
-        >
-          <div className="flex min-h-dvh min-w-0 flex-col">
-            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 bg-paper px-4">
-              <div className="flex min-w-0 items-center gap-2">
-                <Link href="/plans" className="wide inline-flex min-h-11 items-center rounded-[4px] text-[20px] leading-none text-ink">
-                  {appName}
-                </Link>
-                {isDemo && (
-                  <span className="inline-flex h-[22px] items-center rounded-full border border-line-strong px-2 text-[13px] leading-none text-muted">
-                    Demo
-                  </span>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center">
-                {isDemo && pathname.startsWith("/demo") && (
-                  <button type="button" className={btnText} disabled={restarting} onClick={() => void startOver()}>
-                    Start over
-                  </button>
-                )}
-                <Link
-                  href="/settings"
-                  aria-label="Settings"
-                  aria-current={pathname.startsWith("/settings") ? "page" : undefined}
-                  className="-mr-2 inline-flex size-11 items-center justify-center rounded-[12px] text-ink"
-                >
-                  <Settings aria-hidden="true" className="size-[22px]" />
-                </Link>
-              </div>
-            </header>
-
-            <main className="flex-1 px-4 pt-2 pb-[calc(64px+32px+env(safe-area-inset-bottom))]">
-              {/* A new key is a different account: pages start over with it. */}
-              <Fragment key={key}>{children}</Fragment>
-            </main>
-          </div>
-
-          <aside className="sticky top-0 hidden h-dvh overflow-y-auto py-4 desk:block" aria-label="How it was planned">
-            <div className="min-h-full rounded-[16px] border border-line bg-ticket p-6">
-              <h2 className="text-[20px] leading-[1.3] font-semibold text-ink">How it was planned</h2>
-              <div className="mt-4">
-                {selectedId ? (
-                  <TraceBody key={selectedId} saveId={selectedId} />
-                ) : (
-                  <p className="text-[15px] text-muted">
-                    Pick a ticket to see each step the agent took to plan it.
-                  </p>
-                )}
-              </div>
+    <AppContext.Provider value={app}>
+      <AskContext.Provider value={askStore}>
+        <div data-shell="" className="app">
+          {plain && (
+            <div className="plain-head gutter">
+              <button type="button" className="back-pill" onClick={goBack}>
+                <Icon name="back" />
+                Back
+              </button>
+              {me?.is_demo && pathname.startsWith("/demo") && (
+                <button type="button" className="text-btn" disabled={restarting} onClick={() => void startOver()}>
+                  Start over
+                </button>
+              )}
             </div>
-          </aside>
+          )}
+          <main className={plain ? "screen gutter" : "screen"}>
+            {/* A new key is a different account: pages start over with it. */}
+            <Fragment key={key}>{children}</Fragment>
+          </main>
         </div>
 
-        <nav
-          aria-label="Main"
-          className="sheet-frame fixed bottom-0 z-40 border-t border-line bg-paper pb-[env(safe-area-inset-bottom)]"
-        >
-          <ul className="flex h-16">
-            {tabs.map((tab) => {
-              const active = tab.match(pathname);
-              const Icon = tab.icon;
-              return (
-                <li key={tab.href} className="flex-1">
-                  <Link
-                    href={tab.href}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "relative flex h-16 flex-col items-center justify-center gap-1 text-[13px] leading-none -outline-offset-2",
-                      active ? "font-semibold text-ink" : "text-muted",
-                    )}
-                  >
-                    {active && <span aria-hidden="true" className="absolute top-[-1px] right-4 left-4 h-0.5 bg-ink" />}
-                    <Icon aria-hidden="true" className="size-[22px]" strokeWidth={active ? 2.25 : 2} />
-                    {tab.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+        <nav className="bar" aria-label="Main">
+          <Link href="/home" className="tab" aria-current={onHome ? "page" : undefined}>
+            <Icon name="home" />
+            Home
+          </Link>
+          <Orb
+            appName={appName}
+            onOpen={() => ask("", false)}
+            onHeard={(text) => ask(text, true)}
+            onProblem={(message) => toast.show(message)}
+          />
+          <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
+            <Icon name="plans" />
+            Plans
+          </Link>
         </nav>
 
         <ToastViewport aboveTabBar />
 
-        <Sheet open={sheetOpen && !isDesk} onOpenChange={setSheetOpen}>
-          <SheetContent aria-describedby={undefined}>
-            <SheetTitle>How it was planned</SheetTitle>
-            <div className="mt-3">{selectedId && <TraceBody saveId={selectedId} />}</div>
-            <SheetClose className={cn(btnText, "mt-3 w-full")}>Close</SheetClose>
-          </SheetContent>
-        </Sheet>
+        <AddSheet open={addOpen} onOpenChange={setAddOpen} isDemo={Boolean(me?.is_demo)} onSaved={onSaved} />
       </AskContext.Provider>
-    </TraceContext.Provider>
+    </AppContext.Provider>
   );
 }

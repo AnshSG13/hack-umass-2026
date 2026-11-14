@@ -1,10 +1,12 @@
 "use client";
 
-// shadcn/ui sheet, restyled to the DESIGN.md tokens: bottom sheet only, flat, no motion
-// (DESIGN.md section 8: only three things animate, and a sheet isn't one of them).
+// Bottom sheet: the radix dialog (focus trap, Escape, scrim tap) in the mockup's sheet
+// styling: rounded top, grab handle, slides up. The motion is in mock.css and is cut to
+// nothing under prefers-reduced-motion.
 
 import * as React from "react";
 import { Dialog as SheetPrimitive } from "radix-ui";
+import { Icon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 function Sheet(props: React.ComponentProps<typeof SheetPrimitive.Root>) {
@@ -18,19 +20,32 @@ function SheetClose(props: React.ComponentProps<typeof SheetPrimitive.Close>) {
 function SheetContent({
   className,
   children,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content>) {
+  // The sheets here are opened from code, not from a radix trigger, so radix has nothing
+  // to hand focus back to. Remember what had focus and return it on close.
+  const opener = React.useRef<HTMLElement | null>(null);
   return (
     <SheetPrimitive.Portal>
-      <SheetPrimitive.Overlay data-slot="sheet-overlay" className="fixed inset-0 z-50 bg-ink/40" />
+      <SheetPrimitive.Overlay data-slot="sheet-overlay" className="scrim" />
       <SheetPrimitive.Content
         data-slot="sheet-content"
-        className={cn(
-          "sheet-frame fixed bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-y-auto rounded-t-[16px] border border-b-0 border-line bg-ticket px-4 pt-5 pb-[calc(16px+env(safe-area-inset-bottom))] outline-none",
-          className,
-        )}
+        className={cn("sheet gutter", className)}
+        onOpenAutoFocus={(e) => {
+          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          onOpenAutoFocus?.(e);
+        }}
+        onCloseAutoFocus={(e) => {
+          onCloseAutoFocus?.(e);
+          if (e.defaultPrevented) return;
+          e.preventDefault();
+          if (opener.current?.isConnected) opener.current.focus({ preventScroll: true });
+        }}
         {...props}
       >
+        <div className="grab" aria-hidden="true" />
         {children}
       </SheetPrimitive.Content>
     </SheetPrimitive.Portal>
@@ -38,23 +53,25 @@ function SheetContent({
 }
 
 function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Title>) {
-  return (
-    <SheetPrimitive.Title
-      data-slot="sheet-title"
-      className={cn("text-[20px] leading-[1.3] font-semibold text-ink", className)}
-      {...props}
-    />
-  );
+  return <SheetPrimitive.Title data-slot="sheet-title" className={cn("sheet-title", className)} {...props} />;
 }
 
 function SheetDescription({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Description>) {
   return (
-    <SheetPrimitive.Description
-      data-slot="sheet-description"
-      className={cn("mt-2 text-[16px] text-ink", className)}
-      {...props}
-    />
+    <SheetPrimitive.Description data-slot="sheet-description" className={cn("sheet-text", className)} {...props} />
   );
 }
 
-export { Sheet, SheetClose, SheetContent, SheetTitle, SheetDescription };
+/** The mockup's sheet head: the title on the left, a round close button on the right. */
+function SheetHead({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="sheet-head">
+      <SheetTitle>{children}</SheetTitle>
+      <SheetPrimitive.Close className="close" aria-label="Close">
+        <Icon name="x" />
+      </SheetPrimitive.Close>
+    </div>
+  );
+}
+
+export { Sheet, SheetClose, SheetContent, SheetTitle, SheetDescription, SheetHead };

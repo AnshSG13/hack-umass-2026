@@ -1,60 +1,53 @@
 "use client";
 
-// Library row (DESIGN.md 7.5): thumbnail 56x75, title, "{Type} · Saved Oct 3", plan status.
+// A reel as a row: thumbnail, title, kind chip, and where its plan stands. Used on the
+// saves list (with the search snippet) and for the days on Plans.
 
 import Link from "next/link";
-import {
-  Bookmark,
-  CalendarCheck,
-  CircleCheck,
-  Clock,
-  SkipForward,
-  Ticket as TicketIcon,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
-import { Thumb } from "@/components/ticket";
-import { ticketState, ticketTitle, TYPE_LABEL } from "@/lib/format";
+import { KindChip, ReelThumb } from "@/components/bits";
+import { Icon, type IconName } from "@/components/icons";
+import { followupQuestion, ticketState, ticketTitle } from "@/lib/format";
 import type { Ticket } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function rowStatus(t: Ticket): { icon: LucideIcon; text: string; tone: string } {
+function rowState(t: Ticket): { icon: IconName; text: string; good?: boolean } {
   const state = ticketState(t);
-  if (state === "failed") return { icon: TriangleAlert, text: "Couldn't read this reel yet", tone: "text-ink" };
-  if (state === "printing") return { icon: Clock, text: "Reading", tone: "text-muted" };
-  if (state === "proposed" || state === "proposed_quiet")
-    return { icon: TicketIcon, text: "Waiting on you", tone: "text-ink" };
-  if (state === "accepted" || state === "followup")
-    return { icon: CalendarCheck, text: t.plan?.big_time ?? "Planned", tone: "text-ink" };
-  if (state === "done") return { icon: CircleCheck, text: "Done", tone: "text-done-ink" };
-  if (state === "skipped") return { icon: SkipForward, text: "Skipped", tone: "text-muted" };
-  if (t.processing === "enriching" || t.processing === "planned")
-    return { icon: Clock, text: "Watching the video", tone: "text-muted" };
-  return { icon: Bookmark, text: "No plan", tone: "text-muted" };
+  if (state === "failed") return { icon: "alert", text: "Couldn't read this reel yet" };
+  if (state === "printing") return { icon: "clock", text: "Reading" };
+  if (state === "proposed" || state === "proposed_quiet") return { icon: "spark", text: "Waiting on you" };
+  if (state === "followup") return { icon: "plans", text: followupQuestion(t.plan?.kind) };
+  if (state === "accepted") return { icon: "plans", text: t.plan?.big_time ?? "Planned", good: true };
+  if (state === "done") return { icon: "check", text: `Done${t.plan?.done_day ? ` ${t.plan.done_day}` : ""}`, good: true };
+  if (state === "skipped") return { icon: "skip", text: "Skipped" };
+  if (t.processing === "enriching" || t.processing === "planned") return { icon: "clock", text: "Watching the video" };
+  return { icon: "bookmark", text: "No plan" };
 }
 
-export function SaveRow({ ticket }: { ticket: Ticket }) {
-  const status = rowStatus(ticket);
-  const Icon = status.icon;
-  const metaLine = [ticket.type ? TYPE_LABEL[ticket.type] : null, `Saved ${ticket.saved_on}`]
-    .filter(Boolean)
-    .join(" · ");
+export function SaveRow({
+  ticket,
+  when,
+}: {
+  ticket: Ticket;
+  /** "2 days ago" or "Saved Oct 3"; left out on Plans, where the day is the heading. */
+  when?: string;
+}) {
+  const state = rowState(ticket);
   return (
-    <Link href={`/s/${ticket.save_id}`} className="flex gap-3 rounded-[8px] py-3">
-      <Thumb ticket={ticket} className="h-[75px] w-14" />
-      <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 text-[16px] leading-[1.3] font-semibold break-words text-ink">
-          {ticketTitle(ticket)}
+    <Link href={`/s/${ticket.save_id}`} className="row">
+      <ReelThumb thumbUrl={ticket.thumb_url} type={ticket.type} />
+      <span className="row-main">
+        <span className="row-title">{ticketTitle(ticket)}</span>
+        <span className="row-meta">
+          <KindChip type={ticket.type} />
+          <span className={cn("state", state.good && "good")}>
+            <Icon name={state.icon} />
+            {state.text}
+          </span>
+          {when && <span>{when}</span>}
         </span>
-        <span className="mt-0.5 block text-[13px] text-muted">{metaLine}</span>
-        <span className={cn("mt-0.5 flex items-center gap-1.5 text-[13px]", status.tone)}>
-          <Icon aria-hidden="true" className="size-[14px] shrink-0" />
-          <span className="tabular">{status.text}</span>
-        </span>
-        {ticket.snippet && (
-          <span className="mt-1 line-clamp-2 block text-[13px] text-muted">{ticket.snippet}</span>
-        )}
+        {ticket.snippet && <span className="row-snip">{ticket.snippet}</span>}
       </span>
+      <Icon name="right" />
     </Link>
   );
 }

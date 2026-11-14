@@ -1,8 +1,8 @@
 "use client";
 
-// Landing (DESIGN.md 7.1). With a key this page only redirects to /plans.
+// Landing. With a key this page only redirects to Home.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -23,10 +23,8 @@ export function Landing({ hasClip }: { hasClip: boolean }) {
   });
   const [starting, setStarting] = useState(false);
   const [failed, setFailed] = useState(false);
-  const destination = useRef("/plans");
-
   useEffect(() => {
-    if (key) router.replace(destination.current);
+    if (key) router.replace("/home");
   }, [key, router]);
 
   async function startDemo() {
@@ -34,7 +32,6 @@ export function Landing({ hasClip }: { hasClip: boolean }) {
     setFailed(false);
     try {
       const r = await api<{ api_key: string }>("/api/demo/session", { body: { timezone: browserTimezone() } });
-      destination.current = "/demo";
       setKey(r.api_key);
     } catch {
       setFailed(true);

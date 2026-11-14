@@ -1,7 +1,7 @@
 "use client";
 
-// Custom toast (DESIGN.md section 5): bottom, above the tab bar, opacity 120 ms, 6 s,
-// with an optional Undo button.
+// The mockup's toast: an ink pill above the bottom bar, shown for 6 s, with an optional
+// Undo button.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ const ToastStateContext = createContext<{ item: ToastItem | null; open: boolean;
 });
 
 const VISIBLE_MS = 6000;
-const FADE_MS = 120;
+const FADE_MS = 250;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [item, setItem] = useState<ToastItem | null>(null);
@@ -75,26 +75,15 @@ export function useToast(): ToastApi {
 export function ToastViewport({ aboveTabBar = false }: { aboveTabBar?: boolean }) {
   const { item, open, dismiss } = useContext(ToastStateContext);
   return (
-    <div
-      className={cn(
-        "toast-frame pointer-events-none fixed z-[60] px-4",
-        aboveTabBar
-          ? "bottom-[calc(76px+env(safe-area-inset-bottom))]"
-          : "bottom-[calc(16px+env(safe-area-inset-bottom))]",
-      )}
-    >
+    <div className={cn("toast-wrap", !aboveTabBar && "low")}>
       <div role="status" aria-live="polite">
         {item && (
-          <div
-            key={item.id}
-            data-open={open}
-            className="toast pointer-events-auto flex min-h-12 items-center justify-between gap-3 rounded-[12px] bg-ink py-1 pr-1 pl-4 text-[15px] text-ticket"
-          >
-            <span className="py-2">{item.message}</span>
+          <div key={item.id} data-open={open} className={cn("toast", item.undo && "has-undo")}>
+            <span>{item.message}</span>
             {item.undo && (
               <button
                 type="button"
-                className="min-h-11 shrink-0 rounded-[8px] px-3 font-semibold text-highlighter underline underline-offset-4 focus-visible:outline-highlighter"
+                className="toast-undo"
                 onClick={() => {
                   const undo = item.undo;
                   dismiss();

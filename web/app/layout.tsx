@@ -1,14 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo } from "next/font/google";
+import { Figtree, Hedvig_Letters_Serif } from "next/font/google";
+import { Sprite } from "@/components/icons";
 import { Providers } from "@/components/providers";
 import { appNameServer } from "@/lib/server-config";
 import "./globals.css";
+import "./mock.css";
 
-// Archivo as a variable font with the width axis, so "wdth 125" works (DESIGN.md section 3).
-const archivo = Archivo({
+// The mockup's two faces: Hedvig Letters Serif for headings, Figtree for everything else.
+const hedvig = Hedvig_Letters_Serif({
   subsets: ["latin"],
-  axes: ["wdth"],
-  variable: "--font-archivo",
+  axes: ["opsz"],
+  variable: "--font-hedvig",
+  display: "swap",
+});
+const figtree = Figtree({
+  subsets: ["latin"],
+  variable: "--font-figtree",
   display: "swap",
 });
 
@@ -35,7 +42,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#F3F5F7",
+  themeColor: "#FFFFFF",
   colorScheme: "light",
   width: "device-width",
   initialScale: 1,
@@ -44,8 +51,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} h-full antialiased`}>
+    <html lang="en" className={`${hedvig.variable} ${figtree.variable} h-full`}>
       <body className="min-h-full">
+        <Sprite />
         <Providers>{children}</Providers>
       </body>
     </html>

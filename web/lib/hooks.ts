@@ -54,19 +54,26 @@ export function useSaveDetail(saveId: string | null | undefined) {
   });
 }
 
-/** Revalidate every list after a change, without clearing what's on screen. */
-export function useRefresh(): () => void {
+/**
+ * Revalidate every list after a change, without clearing what's on screen. `except` is a
+ * key to leave alone: the save that was just deleted, which would only answer 404.
+ */
+export function useRefresh(): (except?: unknown) => void {
   const { mutate } = useSWRConfig();
-  return useCallback(() => {
-    void mutate(
-      (key) =>
-        typeof key === "string" &&
-        key.startsWith("/api/") &&
-        key !== "/api/config" &&
-        key !== "/api/health" &&
-        key !== "/api/demo/hero",
-    );
-  }, [mutate]);
+  return useCallback(
+    (except?: unknown) => {
+      void mutate(
+        (key) =>
+          typeof key === "string" &&
+          key.startsWith("/api/") &&
+          key !== except &&
+          key !== "/api/config" &&
+          key !== "/api/health" &&
+          key !== "/api/demo/hero",
+      );
+    },
+    [mutate],
+  );
 }
 
 // ---- media queries and device ----
@@ -85,11 +92,6 @@ export function useMediaQuery(query: string): boolean {
     () => window.matchMedia(query).matches,
     () => false,
   );
-}
-
-/** True at 1100 px or wider, where the "How it was planned" side panel is on screen. */
-export function useIsDesk(): boolean {
-  return useMediaQuery("(min-width: 1100px)");
 }
 
 export type Device = "ios" | "android" | "desktop";

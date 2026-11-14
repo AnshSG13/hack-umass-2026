@@ -1,18 +1,20 @@
 @import "tailwindcss";
 
-/* Tokens: DESIGN.md section 2. Light theme only. Flat: no gradients, no card shadows. */
+/* Tokens: the mockup's palette (docs/archive/mockups/index.html), under the names the
+   Tailwind classes on the earlier screens already use. Light theme only. The mockup's own
+   class names are in mock.css. */
 :root {
   color-scheme: light;
-  --ink: #1b2430;
-  --paper: #f3f5f7;
-  --ticket: #ffffff;
-  --highlighter: #ffd23f;
-  --done: #2e8b57;
-  --done-ink: #1f7a4d;
-  --muted: #5a6472;
-  --line: #e1e5ea;
-  --line-strong: #7d8794;
-  --danger-ink: #a3352b;
+  --ink: #1e1f24;
+  --paper: #ffffff; /* the page */
+  --ticket: #f8f6f2; /* cards and fields: the mockup's surface */
+  --highlighter: #fff3c4; /* butter */
+  --done: #1a6b43;
+  --done-ink: #1a6b43;
+  --muted: #6e717c;
+  --line: #ece9e3;
+  --line-strong: #cfcbc2;
+  --danger-ink: #a2305a;
 }
 
 @theme inline {
@@ -26,10 +28,10 @@
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-danger-ink: var(--danger-ink);
-  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-figtree), "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --radius-ticket: 16px;
   --radius-control: 12px;
-  /* DESIGN.md section 4: the side panel appears at 1100 px. */
+  /* The landing page's two-column layout starts here. */
   --breakpoint-desk: 1100px;
 }
 
@@ -40,27 +42,29 @@ html {
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
-  font-size: 16px;
+  font-family: var(--font-figtree), "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
   line-height: 1.5;
   font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
 }
 
-/* Wide Archivo (wdth 125): stub time, wordmark, landing headline. */
+/* Display type: the wordmark, the landing headline, a plan's time. */
 .wide {
-  font-stretch: 125%;
-  font-variation-settings: "wdth" 125;
-  font-weight: 600;
+  font-family: var(--font-hedvig), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.012em;
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* Visible focus on every interactive element, also on highlighter. */
+/* Visible focus on every interactive element. */
 :where(a, button, input, textarea, select, summary, [role="button"], [role="switch"], [role="radio"], [tabindex]):focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid #6a58e6;
   outline-offset: 2px;
 }
 
@@ -80,36 +84,7 @@ button:disabled {
   cursor: default;
 }
 
-/* Bottom sheets and the toast sit over the 440 px app column. With the desktop shell
-   (app column 440 + gap 24 + side panel 560 = 1024, centered) that column starts at 50% - 512px. */
-.sheet-frame,
-.toast-frame {
-  left: 0;
-  right: 0;
-  margin-inline: auto;
-  width: 100%;
-  max-width: 440px;
-}
-@media (min-width: 1100px) {
-  body:has([data-shell]) .sheet-frame,
-  body:has([data-shell]) .toast-frame {
-    left: calc(50% - 512px);
-    right: auto;
-    margin-inline: 0;
-    width: 440px;
-  }
-}
-
-/* Toast: opacity only (DESIGN.md section 5). */
-.toast {
-  opacity: 0;
-  transition: opacity 120ms linear;
-}
-.toast[data-open="true"] {
-  opacity: 1;
-}
-
-/* Raw tool-call JSON: the only monospace in the app (DESIGN.md section 3). */
+/* Raw tool-call JSON: the only monospace in the app. */
 .tool-json {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
@@ -138,7 +113,7 @@ summary::-webkit-details-marker {
   display: none;
 }
 
-/* The current step's dot is the only looping motion (DESIGN.md section 8). */
+/* The current step's dot pulses while a reel is being read. */
 @keyframes step-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

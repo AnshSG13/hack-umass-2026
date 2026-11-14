@@ -1,41 +1,58 @@
 "use client";
 
-// Library (DESIGN.md 7.5): search, type chips with counts, rows, and the paste sheet.
+// The saves list: search (what was said or shown), filter by kind, rows that open the Reel
+// page. Home sends people here with ?focus=1 (the search box) or ?type=recipe (a taste).
 
-import { useEffect, useId, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { Plus, Search } from "lucide-react";
-import { PasteForm, savedBeforeNote } from "@/components/paste-form";
+import { Icon } from "@/components/icons";
 import { SaveRow } from "@/components/save-row";
-import { useToast } from "@/components/toast";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
-import { plural, TYPE_ORDER, TYPE_PLURAL } from "@/lib/format";
-import { useMe, useRefresh } from "@/lib/hooks";
-import { btnOutline, btnPrimary, btnText, inputBase, pageTitle } from "@/lib/styles";
+import { plural } from "@/lib/format";
+import { useMe } from "@/lib/hooks";
+import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
 import type { SavesPage, SaveType, SearchResult } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const PAGE = 30;
 const MAX_LIMIT = 100; // the API's cap on ?limit
 
-export default function LibraryPage() {
+function asType(value: string | null): SaveType | null {
+  return value && (KIND_ORDER as string[]).includes(value) ? (value as SaveType) : null;
+}
+
+function BackHome() {
+  return (
+    <Link href="/home" className="back-pill">
+      <Icon name="back" />
+      Home
+    </Link>
+  );
+}
+
+function SavesList() {
   const router = useRouter();
-  const toast = useToast();
-  const refresh = useRefresh();
+  const params = useSearchParams();
+  const { openAdd } = useApp();
   const { data: me } = useMe();
+  const type = asType(params.get("type"));
+  const wantsFocus = params.get("focus") === "1";
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [type, setType] = useState<SaveType | null>(null);
   const [limit, setLimit] = useState(PAGE);
-  const [pasteOpen, setPasteOpen] = useState(false);
   const searchId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebounced(query.trim()), 300);
     return () => window.clearTimeout(id);
   }, [query]);
+
+  useEffect(() => {
+    if (wantsFocus) inputRef.current?.focus();
+  }, [wantsFocus]);
 
   const searching = debounced.length > 0;
   const typeParam = type ? `&type=${type}` : "";
@@ -51,156 +68,146 @@ export default function LibraryPage() {
   const active = searching ? search : list;
   const items = active.data?.items ?? [];
   const total = me?.counts.saves;
-  const libraryEmpty = !searching && !type && list.data !== undefined && list.data.items.length === 0;
+  const nothingSaved = !searching && !type && list.data !== undefined && list.data.items.length === 0;
   const canShowMore = !searching && Boolean(list.data?.next_before) && limit < MAX_LIMIT;
 
-  const pasteSheet = (
-    <Sheet open={pasteOpen} onOpenChange={setPasteOpen}>
-      <SheetContent aria-describedby={undefined}>
-        <SheetTitle>Paste a reel link</SheetTitle>
-        <div className="mt-4">
-          <PasteForm
-            label="Instagram reel link"
-            button="Save it"
-            primary
-            onSaved={(r) => {
-              setPasteOpen(false);
-              const note = savedBeforeNote(r);
-              if (note) toast.show(note);
-              refresh();
-              router.push(`/s/${r.save_id}`);
-            }}
-          />
-        </div>
-      </SheetContent>
-    </Sheet>
+  function pick(next: SaveType | null) {
+    setLimit(PAGE);
+    router.replace(next ? `/library?type=${next}` : "/library", { scroll: false });
+  }
+
+  const head = (
+    <header className="page-head with-back">
+      <div className="block-head" style={{ minHeight: 44 }}>
+        <BackHome />
+        <button type="button" className="add" onClick={openAdd}>
+          <Icon name="plus" />
+          Add
+        </button>
+      </div>
+      <h1 className="page-title" style={{ marginTop: 10 }}>
+        Your saves
+      </h1>
+      {total !== undefined && <p className="page-sub">{plural(total, "save", "saves")}</p>}
+    </header>
   );
 
-  if (libraryEmpty) {
+  if (nothingSaved) {
     return (
-      <div>
-        <h1 className={pageTitle}>Library</h1>
-        <p className="text-[14px] text-muted">0 saves</p>
-        <div className="mt-6">
-          <p className="text-[16px] text-ink">Every reel you share lands here, plan or not.</p>
-          <button type="button" className={cn(btnPrimary, "mt-5")} onClick={() => setPasteOpen(true)}>
-            Paste a reel link
+      <div className="gutter">
+        {head}
+        <div className="empty">
+          <h2 className="empty-title">Nothing saved yet</h2>
+          <p className="empty-text">Every reel you add lands here, plan or not.</p>
+          <button type="button" className="btn btn-primary" onClick={openAdd}>
+            <Icon name="plus" />
+            Add a reel
           </button>
         </div>
-        {pasteSheet}
       </div>
     );
   }
 
+  // "All", then every kind this account has saved (and the one picked, even at zero).
+  const kinds = KIND_ORDER.filter((t) => t === type || me === undefined || (me.counts.by_type[t] ?? 0) > 0);
+
   return (
-    <div>
-      <div className="flex items-start justify-between gap-3">
-        <header>
-          <h1 className={pageTitle}>Library</h1>
-          {total !== undefined && <p className="text-[14px] text-muted">{plural(total, "save", "saves")}</p>}
-        </header>
-        <button type="button" className={cn(btnText, "-mr-3 shrink-0")} onClick={() => setPasteOpen(true)}>
-          <Plus aria-hidden="true" className="size-4" />
-          Paste a reel link
-        </button>
-      </div>
-
-      <div className="relative mt-4">
-        <label htmlFor={searchId} className="sr-only">
-          Search what was said or shown
+    <>
+      <div className="gutter">
+        {head}
+        <label className="search search-field" htmlFor={searchId} style={{ marginTop: 18 }}>
+          <Icon name="search" />
+          <span className="vh">Search what was said or shown</span>
+          <input
+            id={searchId}
+            ref={inputRef}
+            type="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            placeholder="Search what was said or shown"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </label>
-        <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-[18px] -translate-y-1/2 text-muted" />
-        <input
-          id={searchId}
-          type="search"
-          enterKeyHint="search"
-          autoComplete="off"
-          placeholder="Search what was said or shown"
-          className={cn(inputBase, "w-full pl-10")}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
       </div>
 
-      <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 py-1" role="group" aria-label="Filter by type">
-        {[null, ...TYPE_ORDER].map((t) => {
-          const selected = type === t;
-          const count = t === null ? me?.counts.saves : me?.counts.by_type[t];
+      <div className="filters" role="group" aria-label="Filter by kind">
+        <button type="button" className="fchip" aria-pressed={type === null} onClick={() => pick(null)}>
+          All
+          {total !== undefined && <b>{total}</b>}
+        </button>
+        {kinds.map((t) => {
+          const k = KINDS[t];
+          const count = me?.counts.by_type[t];
           return (
             <button
-              key={t ?? "all"}
+              key={t}
               type="button"
-              aria-pressed={selected}
-              className={cn(
-                "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-4 text-[15px]",
-                selected ? "border-ink bg-ink font-medium text-ticket" : "border-line-strong bg-ticket text-ink",
-              )}
-              onClick={() => {
-                setType(t);
-                setLimit(PAGE);
-              }}
+              className="fchip"
+              style={tint(k.color)}
+              aria-pressed={type === t}
+              onClick={() => pick(t)}
             >
-              {t === null ? "All" : TYPE_PLURAL[t]}
-              {count !== undefined && (
-                <span className={cn("tabular text-[13px]", selected ? "text-paper" : "text-muted")}>{count}</span>
-              )}
+              <Icon name={k.icon} />
+              {k.label}
+              {count !== undefined && <b>{count}</b>}
             </button>
           );
         })}
       </div>
 
-      <div className="mt-2" aria-live="polite">
+      <div className="gutter" aria-live="polite">
         {active.error && !active.data ? (
-          <div role="alert" className="py-4">
-            <p className="text-[16px] text-ink">
-              {searching ? "Search didn't load. Check your connection." : "Your library didn't load. Check your connection."}
-            </p>
-            <button type="button" className={cn(btnOutline, "mt-3")} onClick={() => void active.mutate()}>
+          <div role="alert" className="msg">
+            <p>{searching ? "Search didn't load. Check your connection." : "Your saves didn't load. Check your connection."}</p>
+            <button type="button" className="btn" onClick={() => void active.mutate()}>
               Try again
             </button>
           </div>
         ) : !active.data ? (
-          <ul aria-hidden="true" className="divide-y divide-line">
+          <div className="stack-col" aria-hidden="true">
             {[0, 1, 2].map((i) => (
-              <li key={i} className="flex gap-3 py-3">
-                <span className="block h-[75px] w-14 rounded-[8px] bg-line" />
-                <span className="flex-1">
-                  <span className="mt-1 block h-4 w-3/4 rounded-full bg-line" />
-                  <span className="mt-3 block h-3 w-1/3 rounded-full bg-line" />
-                </span>
-              </li>
+              <span key={i} className="skel" style={{ height: 68, width: "100%", borderRadius: 14, marginTop: 0 }} />
             ))}
-          </ul>
+          </div>
         ) : items.length === 0 ? (
-          <p className="py-4 text-[16px] text-ink">
+          <p className="msg">
             {searching
               ? `Nothing matches “${debounced}”. Try a word they said in the video.`
-              : type && type !== "other"
-                ? `No ${TYPE_PLURAL[type].toLowerCase()} here yet. Share one from Instagram and it lands here.`
-                : "Nothing here yet. Share a reel from Instagram and it lands here."}
+              : type
+                ? `Nothing filed under ${KINDS[type].label} yet.`
+                : "Nothing here yet."}
           </p>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="rows">
             {items.map((t) => (
               <li key={t.save_id}>
-                <SaveRow ticket={t} />
+                <SaveRow ticket={t} when={`Saved ${t.saved_on}`} />
               </li>
             ))}
           </ul>
         )}
+
+        {canShowMore && (
+          <button
+            type="button"
+            className="btn btn-block"
+            style={{ marginTop: 12 }}
+            onClick={() => setLimit((n) => Math.min(MAX_LIMIT, n + PAGE))}
+          >
+            Show more
+          </button>
+        )}
       </div>
+    </>
+  );
+}
 
-      {canShowMore && (
-        <button
-          type="button"
-          className={cn(btnOutline, "mt-3 w-full")}
-          onClick={() => setLimit((n) => Math.min(MAX_LIMIT, n + PAGE))}
-        >
-          Show more
-        </button>
-      )}
-
-      {pasteSheet}
-    </div>
+export default function LibraryPage() {
+  // useSearchParams needs a Suspense boundary so the rest of the shell can prerender.
+  return (
+    <Suspense fallback={null}>
+      <SavesList />
+    </Suspense>
   );
 }

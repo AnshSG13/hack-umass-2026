@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { Switch } from "@/components/ui/switch";
 import { api, ApiError, clearKey, getKey, setKey } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
-import { TYPE_PLURAL } from "@/lib/format";
+import { KINDS } from "@/lib/kinds";
 import { browserTimezone, useMe } from "@/lib/hooks";
 import { btnDanger, btnOutline, btnPrimary, btnText, btnTextDanger, inputBase, pageTitle, sectionTitle } from "@/lib/styles";
 import type { Me, Prefs } from "@/lib/types";
@@ -115,9 +115,26 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
   const [confirm, setConfirm] = useState<"new-key" | "sign-out" | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(me.name ?? "");
+  const [savingName, setSavingName] = useState(false);
   const timer = useRef<number | null>(null);
   const tzId = useId();
+  const nameId = useId();
   const zones = useMemo(() => timezones(me.timezone), [me.timezone]);
+
+  async function saveName() {
+    setSavingName(true);
+    try {
+      const next = await api<Me>("/api/me", { method: "PATCH", body: { name: name.trim() } });
+      onSaved(next);
+      setName(next.name ?? name.trim());
+      toast.show("Saved");
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : "That didn't save. Check your connection.");
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   useEffect(
     () => () => {
@@ -169,7 +186,33 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
         </p>
       )}
 
-      <section className="mt-6" aria-labelledby="week-heading">
+      <section className="mt-6" aria-labelledby="name-heading">
+        <h2 id="name-heading" className={sectionTitle}>
+          <label htmlFor={nameId}>Your name</label>
+        </h2>
+        <form
+          className="name-field"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveName();
+          }}
+        >
+          <input
+            id={nameId}
+            type="text"
+            autoComplete="given-name"
+            maxLength={40}
+            placeholder="What Home should call you"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button type="submit" className="btn" disabled={savingName || name.trim() === (me.name ?? "")}>
+            Save
+          </button>
+        </form>
+      </section>
+
+      <section className="mt-8" aria-labelledby="week-heading">
         <h2 id="week-heading" className={sectionTitle}>
           Your week
         </h2>
@@ -251,7 +294,7 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
               return (
                 <li key={t} className="flex items-center justify-between gap-3">
                   <label htmlFor={id} className="flex min-h-12 flex-1 items-center text-[16px] text-ink">
-                    {TYPE_PLURAL[t]}
+                    {KINDS[t].label}
                   </label>
                   <Switch
                     id={id}

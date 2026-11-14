@@ -12,8 +12,8 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     short_name: name,
     description: "Every save becomes a plan.",
     display: "standalone",
-    background_color: "#F3F5F7",
-    theme_color: "#F3F5F7",
+    background_color: "#FFFFFF",
+    theme_color: "#FFFFFF",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

@@ -138,8 +138,28 @@ export interface SaveDetail {
     visual_summary: string;
     language: string | null;
     duration_sec: number | null;
+    note: string; // the person's own note, "" when none
   };
   runs: AgentRun[];
+}
+
+// ---- PATCH /api/saves/{id} (answers with the same shape as GET) ----
+export interface SavePatch {
+  type?: SaveType;
+  note?: string;
+}
+
+// ---- GET /api/tastes ----
+export interface Taste {
+  type: SaveType;
+  label: string; // "Food", "Fitness"
+  count: number;
+  thumbs: string[]; // up to 3 "/api/t/<id>"
+  tags: { tag: string; count: number }[]; // up to 3
+}
+export interface TastesResponse {
+  total: number;
+  tastes: Taste[]; // only types with at least one save, largest first
 }
 
 // ---- GET /api/saves, /api/search, /api/plans ----
@@ -168,6 +188,7 @@ export interface Prefs {
 
 export interface Me {
   user_id: string;
+  name: string; // "" when unset
   is_demo: boolean;
   is_judge: boolean;
   timezone: string;

@@ -163,3 +163,17 @@ Checked at 375 px with an iPhone user agent in the built-in browser: `/setup` cr
 - **Not fixed here:** the Somssi restaurant reel is still typed `other`. That needs the video pass rerun with Gemini (`python -m scripts.build_samples --only DfmpjJVNa85 --no-reuse`).
 
 Checks: 70 unit tests pass (21 new). A live script against the API passed 13 of 13: search right after session start, the Carrie ticket ("Add Today 7 pm", reason "It's on Nov 13 to Nov 14. The reel gives no time, so 7 pm is a guess."), and the double booking refused with new times offered. `python -m scripts.eval_recall`: hit@1 20/20, hit@3 20/20.
+
+## 2026-11-14: the mockup becomes the front end
+
+The user's instruction: "use the mockup as the front end specifically and wire up the buttons". The mockup is `docs/archive/mockups/index.html` (Home and the Reel page). This overrides two earlier rules for the web app: CLAUDE.md's "never build from docs/archive" and DESIGN.md's ticket look. Decisions:
+
+- **Ported into the Next app, not served as a static page.** The mockup's stylesheet (`web/app/mock.css`), icon sprite and two fonts (Hedvig Letters Serif, Figtree) are copied; the markup is React components on the existing data layer. None of the mockup's sample content is used.
+- **Screens:** Home (`/home`, the landing screen after sign-in) with the greeting, search, the "Recently saved" rail, idea chips and "Your tastes"; the Reel page (`/s/[id]`); the bottom bar with the orb; the "Add a reel" and "File under" sheets. Plans, Ask and the saves list are redrawn in the same look. Landing, setup, demo, save, settings and the public plan page keep their layout and take the new colours and fonts.
+- **Every mockup button does something real.** Add saves through `/api/save` and shows the processing tile; tiles open the Reel page; idea chips and the orb go to Ask (hold the orb to dictate where the browser supports it); taste tiles and search open the saves list; the category chip changes the type; the note saves; servings rescale and ticks persist; "Make a grocery list" builds the list by aisle with Copy and Share; "Open original" opens Instagram; the more menu has Plan again and Delete.
+- **The plan card is new.** The mockup has no plan. The product's core (suggested time, confirm, change time, not now, calendar links, done, undo) is drawn as a card on the Reel page and on Plans, in the mockup's style.
+- **Tastes are the seven types.** The mockup's custom categories and sub-categories ("Food > Thai") don't exist in the data, so "Your tastes" shows the types with counts, thumbnails and top tags (`GET /api/tastes`), and the "New taste" tile is left out.
+- **New API for the buttons:** `GET /api/tastes`, `PATCH /api/saves/{id}` (type, note), `name` on `/api/me`.
+- **No new dependencies.**
+
+Checked by a subagent in headless Chromium at 390x844 and 1440x900 and again by hand in the built-in browser at 375 px on a fresh demo account: Home showed 8 real saves and 6 tastes; Add with a sample link showed "Planning it" and became a card; the Reel page's plan confirmed ("Added to Wednesday") and showed both calendar links; Plans listed it under Wednesday; Ask answered "what can I make with canned chickpeas and coconut milk" with the right reel. `npx tsc --noEmit` and `npm run lint` pass. Not checked: dictation with a real microphone, Share on the grocery list (needs a phone), and any of it on a real iPhone.

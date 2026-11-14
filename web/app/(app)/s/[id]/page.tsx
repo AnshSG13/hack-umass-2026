@@ -1,100 +1,345 @@
 "use client";
 
-// Save detail (DESIGN.md 7.5): the full ticket, what the agent pulled out of the reel,
-// the transcript, and how it was planned.
+// The Reel page, after the mockup: hero, category chip, title, summary, facts, the plan
+// card, actions, your note, what was pulled from the reel, how it was read and planned.
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useId, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ChevronDown, Clock, MoreHorizontal } from "lucide-react";
 import { AgentTrace } from "@/components/agent-activity";
-import { SaveSections } from "@/components/save-sections";
-import { Ticket, TicketPlaceholder } from "@/components/ticket";
+import { useNow } from "@/components/bits";
+import { Icon, type IconName } from "@/components/icons";
+import { PlanCard } from "@/components/plan-card";
+import { ReelSections } from "@/components/reel-sections";
+import { useApp, useAskStore } from "@/components/shell";
 import { useToast } from "@/components/toast";
-import { SEEDED_SAMPLE_NOTE, useTrace } from "@/components/trace";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { SEEDED_SAMPLE_NOTE } from "@/components/trace";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHead, SheetTitle } from "@/components/ui/sheet";
 import { api, ApiError } from "@/lib/api";
-import { clock } from "@/lib/format";
-import { useRefresh, useSaveDetail } from "@/lib/hooks";
-import { btnDanger, btnIcon, btnOutline, btnText, sectionTitle } from "@/lib/styles";
-import type { Ticket as TicketData } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { copyText } from "@/lib/clipboard";
+import {
+  clock,
+  eventDate,
+  inFlight,
+  ingredientLine,
+  plural,
+  relativeTime,
+  scaleIngredient,
+  ticketTitle,
+} from "@/lib/format";
+import { useConfig, useRefresh, useSaveDetail } from "@/lib/hooks";
+import { KIND_ORDER, kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
+import type { Fields, Ingredient, SaveDetail, SavePatch, SaveType, Ticket } from "@/lib/types";
 
-function BackLink() {
+const NOTE_MAX = 500; // the API's limit on a note
+
+function errorText(e: unknown, fallback: string): string {
+  return e instanceof ApiError && e.status !== 404 && e.status !== 405 ? e.message : fallback;
+}
+
+// ---- facts row: only values the reel gave ----
+
+function facts(type: SaveType | null, fields: Fields, servings: number | null): { icon: IconName; text: string }[] {
+  const out: { icon: IconName; text: string }[] = [];
+  if (type === "recipe" && fields.recipe) {
+    const r = fields.recipe;
+    if (r.total_time_min) out.push({ icon: "clock", text: `${r.total_time_min} min` });
+    const serves = servings ?? r.servings;
+    if (serves) out.push({ icon: "users", text: `Serves ${serves}` });
+  } else if (type === "workout" && fields.workout) {
+    const w = fields.workout;
+    if (w.duration_min) out.push({ icon: "clock", text: `${w.duration_min} min` });
+    if (w.goal) out.push({ icon: "fit", text: w.goal });
+  } else if (type === "event" && fields.event) {
+    const e = fields.event;
+    const date = e.date_text || eventDate(e.start_local);
+    if (date) out.push({ icon: "cal", text: date });
+    if (e.venue) out.push({ icon: "pin", text: e.venue });
+  } else if (type === "place" && fields.place) {
+    const cities = Array.from(new Set((fields.place.places ?? []).map((p) => p.city).filter(Boolean))) as string[];
+    if (cities.length > 0) out.push({ icon: "pin", text: cities.slice(0, 3).join(", ") });
+  } else if (type === "product" && fields.product) {
+    const items = fields.product.items ?? [];
+    if (items.length === 1 && items[0].price_hint) out.push({ icon: "tag", text: items[0].price_hint });
+  }
+  return out;
+}
+
+// ---- grocery list ----
+
+function groceryGroups(list: Ingredient[]): { aisle: string; items: Ingredient[] }[] {
+  const groups = new Map<string, Ingredient[]>();
+  for (const ing of list) {
+    const aisle = ing.aisle?.trim() || "Other";
+    groups.set(aisle, [...(groups.get(aisle) ?? []), ing]);
+  }
+  return Array.from(groups, ([aisle, items]) => ({ aisle, items }));
+}
+
+function sentence(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+function GrocerySheet({
+  open,
+  onOpenChange,
+  title,
+  ingredients,
+  servings,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  ingredients: Ingredient[];
+  servings: number | null;
+}) {
+  const toast = useToast();
+  const groups = groceryGroups(ingredients);
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const text = [
+    servings ? `Groceries for ${title} (${plural(servings, "serving", "servings")})` : `Groceries for ${title}`,
+    ...groups.flatMap((g) => ["", `${sentence(g.aisle)}:`, ...g.items.map((i) => `- ${ingredientLine(i)}`)]),
+  ].join("\n");
+
   return (
-    <Link href="/library" className={cn(btnText, "-ml-3")}>
-      <ArrowLeft aria-hidden="true" className="size-4" />
-      Library
-    </Link>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent>
+        <SheetHead>Grocery list</SheetHead>
+        <SheetDescription>
+          {servings ? `${title}, for ${plural(servings, "serving", "servings")}` : title}
+        </SheetDescription>
+        {groups.map((g) => (
+          <div key={g.aisle}>
+            <h3 className="aisle">{sentence(g.aisle)}</h3>
+            <ul className="glist">
+              {g.items.map((ing, i) => (
+                <li key={i}>{ingredientLine(ing)}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <div className="sheet-foot">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={async () => {
+              toast.show((await copyText(text)) ? "List copied." : "Copying didn't work here. Select the list instead.");
+            }}
+          >
+            <Icon name="copy" />
+            Copy list
+          </button>
+          {canShare && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                // Closing the share sheet rejects the promise; that isn't an error.
+                void navigator.share({ title: `Groceries for ${title}`, text }).catch(() => {});
+              }}
+            >
+              <Icon name="share" />
+              Share
+            </button>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default function SaveDetailPage() {
+// ---- your note ----
+
+function Note({ note, onSave }: { note: string; onSave: (note: string) => Promise<boolean> }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fieldId = useId();
+
+  if (draft === null) {
+    return (
+      <button type="button" className="note" onClick={() => setDraft(note)} aria-label={note ? "Edit your note" : "Add a note"}>
+        <span className="note-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          Your note
+          <Icon name={note ? "pen" : "plus"} className="note-ico" />
+        </span>
+        <span className={note ? "note-text" : "note-text is-empty"} style={{ display: "block" }}>
+          {note || "Add a note"}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="note"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        const ok = await onSave(draft.trim());
+        setBusy(false);
+        if (ok) setDraft(null);
+      }}
+    >
+      <label className="note-label" htmlFor={fieldId}>
+        Your note
+      </label>
+      <textarea
+        id={fieldId}
+        value={draft}
+        maxLength={NOTE_MAX}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setDraft(null);
+        }}
+      />
+      <div className="note-actions">
+        <button type="submit" className="btn btn-primary" style={{ gridColumn: "auto" }} disabled={busy}>
+          {busy ? "Saving" : "Save"}
+        </button>
+        <button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ---- the page ----
+
+export default function ReelPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
   const refresh = useRefresh();
-  const { select } = useTrace();
+  const now = useNow();
+  const { appName } = useConfig();
+  const { goBack, forget } = useApp();
+  const { ask } = useAskStore();
   const { data, error, isLoading, mutate } = useSaveDetail(id);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
 
-  // On desktop the side panel shows this save's trace.
-  useEffect(() => {
-    if (id) select(id);
-  }, [id, select]);
+  const [servings, setServings] = useState<number | null>(null);
+  const [sheet, setSheet] = useState<"cat" | "more" | "delete" | "grocery" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [catError, setCatError] = useState<string | null>(null);
+
+  const backButton = (
+    <button type="button" className="round back" aria-label="Back" onClick={goBack}>
+      <Icon name="back" />
+    </button>
+  );
 
   if (error && !data) {
     const missing = error instanceof ApiError && error.status === 404;
     return (
-      <div>
-        <BackLink />
-        <div className="mt-4" role="alert">
-          <p className="text-[16px] text-ink">
-            {missing ? "That save isn't in your library." : "This save didn't load. Check your connection."}
-          </p>
+      <>
+        <div className="hero" style={{ height: 120, background: "none" }}>
+          {backButton}
+        </div>
+        <div className="gutter msg" role="alert">
+          <p>{missing ? "That save isn't in your saves." : "This save didn't load. Check your connection."}</p>
           {!missing && (
-            <button type="button" className={cn(btnOutline, "mt-3")} onClick={() => void mutate()}>
+            <button type="button" className="btn" onClick={() => void mutate()}>
               Try again
             </button>
           )}
         </div>
-      </div>
+      </>
     );
   }
 
   if (isLoading || !data) {
     return (
-      <div>
-        <BackLink />
-        <div className="mt-2" role="status">
-          <span className="sr-only">Loading this save</span>
-          <TicketPlaceholder />
+      <>
+        <div className="hero">{backButton}</div>
+        <div className="panel gutter" role="status">
+          <span className="vh">Loading this save</span>
+          <span className="skel" style={{ width: 96, height: 36, borderRadius: 999 }} />
+          <span className="skel" style={{ marginTop: 22, height: 30, width: "80%" }} />
+          <span className="skel" style={{ marginTop: 16, height: 14, width: "100%" }} />
         </div>
-      </div>
+      </>
     );
   }
 
   const { ticket, details, runs } = data;
+  const fields = details.fields ?? {};
+  const type = ticket.type;
+  const kind = kindOf(type);
+  const title = ticketTitle(ticket);
+  const note = details.note ?? "";
+  const reading = inFlight(ticket.processing);
   const enriching = ticket.processing === "enriching" || ticket.processing === "planned";
-  const working =
-    enriching || ticket.processing === "queued" || ticket.processing === "reading" || ticket.processing === "planning";
-  const hasVideoText = details.transcript.length > 0 || details.on_screen_text.length > 0;
+  const working = enriching || reading;
+  const recipe = type === "recipe" ? fields.recipe : undefined;
+  const base = recipe?.servings && recipe.servings > 0 ? recipe.servings : null;
+  const shownServings = base !== null ? (servings ?? base) : null;
+  const groceries = (recipe?.ingredients ?? []).map((ing) =>
+    base !== null && shownServings !== null ? scaleIngredient(ing, shownServings, base) : ing,
+  );
+  const factList = facts(type, fields, shownServings);
+  const onInstagram = /instagram\.com/i.test(ticket.url);
+  const byline = [
+    ticket.creator ? (onInstagram ? `${ticket.creator} on Instagram` : ticket.creator) : onInstagram ? "Instagram" : null,
+    details.duration_sec ? clock(details.duration_sec) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const transcript = details.transcript ?? [];
+  const onScreen = details.on_screen_text ?? [];
+  const unverified = details.unverified ?? [];
+  const watched = ticket.processing === "ready" && !details.enrich_error;
+
+  // What the plan card changed, without waiting for the next poll.
+  function applyTicket(next: Ticket) {
+    void mutate((cur) => (cur ? { ...cur, ticket: { ...next, steps: next.steps ?? cur.ticket.steps } } : cur), {
+      revalidate: false,
+    });
+  }
+
+  async function patch(body: SavePatch, fallback: string): Promise<string | null> {
+    try {
+      const next = await api<SaveDetail>(`/api/saves/${id}`, { method: "PATCH", body });
+      await mutate(next, { revalidate: false });
+      refresh();
+      return null;
+    } catch (e) {
+      return errorText(e, fallback);
+    }
+  }
+
+  async function fileUnder(next: SaveType) {
+    if (next === type) {
+      setSheet(null);
+      return;
+    }
+    setBusy(true);
+    setCatError(null);
+    const problem = await patch({ type: next }, "Moving it didn't work. Try again.");
+    setBusy(false);
+    if (problem) {
+      setCatError(problem);
+      return;
+    }
+    setServings(null);
+    setSheet(null);
+    toast.show(`Moved to ${KINDS[next].label}`);
+  }
+
+  async function saveNote(text: string): Promise<boolean> {
+    const problem = await patch({ note: text }, "Your note didn't save. Try again.");
+    toast.show(problem ?? (text ? "Note saved." : "Note removed."));
+    return problem === null;
+  }
 
   async function planAgain() {
     setBusy(true);
     try {
-      const r = await api<{ ticket: TicketData }>(`/api/saves/${id}/replan`, { method: "POST" });
-      await mutate((cur) => (cur ? { ...cur, ticket: { ...r.ticket, steps: cur.ticket.steps } } : cur), {
-        revalidate: true,
-      });
+      const r = await api<{ ticket: Ticket; message?: string }>(`/api/saves/${id}/replan`, { method: "POST" });
+      applyTicket(r.ticket);
+      void mutate();
       refresh();
+      setSheet(null);
+      toast.show(r.message || "Planned again.");
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : "Planning again didn't work. Try again.");
     } finally {
@@ -106,10 +351,12 @@ export default function SaveDetailPage() {
     setBusy(true);
     try {
       await api<{ ok: boolean }>(`/api/saves/${id}`, { method: "DELETE" });
-      setDeleteOpen(false);
-      select(null);
-      refresh();
-      router.replace("/library");
+      setSheet(null);
+      forget(id);
+      // Everything but this page's own save, which is gone.
+      refresh(`/api/saves/${id}`);
+      toast.show("Deleted.");
+      router.replace("/home");
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : "Delete didn't work. Try again.");
       setBusy(false);
@@ -117,107 +364,271 @@ export default function SaveDetailPage() {
   }
 
   return (
-    <div>
-      <BackLink />
-
-      <div className="mt-2">
-        <Ticket ticket={ticket} />
+    <>
+      <div className="hero">
+        {ticket.thumb_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ticket.thumb_url} alt={ticket.title ? `Thumbnail of ${ticket.title}` : "Reel thumbnail"} />
+        ) : (
+          <span className="hero-ph" style={kindTint(type)} aria-hidden="true">
+            <Icon name={kind?.icon ?? "bookmark"} />
+          </span>
+        )}
+        {backButton}
+        <button type="button" className="round more" aria-label="More options" aria-haspopup="dialog" onClick={() => setSheet("more")}>
+          <Icon name="more" />
+        </button>
       </div>
 
-      {enriching && (
-        <p className="mt-4 flex items-center gap-2 text-[14px] text-muted">
-          <Clock aria-hidden="true" className="size-4 shrink-0" />
-          Watching the video for details.
-        </p>
-      )}
+      <article className="panel gutter">
+        <div className="crumbs">
+          {kind ? (
+            <button
+              type="button"
+              className="chip-cat"
+              style={tint(kind.color)}
+              aria-haspopup="dialog"
+              aria-label={`Filed under ${kind.label}. Change`}
+              disabled={reading}
+              onClick={() => {
+                setCatError(null);
+                setSheet("cat");
+              }}
+            >
+              <Icon name={kind.icon} />
+              <span>{kind.label}</span>
+              <Icon name="down" />
+            </button>
+          ) : (
+            <span className="chip-cat">
+              <Icon name="spark" />
+              <span>{reading ? "Reading" : "Not filed"}</span>
+            </span>
+          )}
+          <span className="when">Saved {relativeTime(ticket.created_at, now)}</span>
+        </div>
 
-      {details.summary && <p className="mt-5 text-[16px] text-ink">{details.summary}</p>}
+        <h1 className="reel-title">{title}</h1>
+        {byline && <p className="byline">{byline}</p>}
+        {details.summary && <p className="summary">{details.summary}</p>}
 
-      <SaveSections fields={details.fields ?? {}} unverified={details.unverified ?? []} />
+        {factList.length > 0 && (
+          <ul className="facts">
+            {factList.map((f) => (
+              <li key={f.icon + f.text}>
+                <Icon name={f.icon} />
+                <span>{f.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {details.enrich_error && (
-        <p className="mt-6 text-[14px] text-muted">
-          Couldn&apos;t watch the video: {details.enrich_error.replace(/\.$/, "")}. The plan uses the caption.
-        </p>
-      )}
+        <PlanCard ticket={ticket} onChange={applyTicket} />
 
-      {hasVideoText && (
-        <details className="group mt-6 border-y border-line">
-          <summary className={cn(sectionTitle, "flex min-h-12 items-center justify-between gap-3")}>
-            What&apos;s in the video
-            <ChevronDown aria-hidden="true" className="size-5 shrink-0 group-open:rotate-180" />
-          </summary>
-          <div className="pb-4">
-            {details.transcript.length > 0 && (
-              <ol className="flex flex-col gap-1.5 text-[15px] text-ink">
-                {details.transcript.map((line, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="tabular w-9 shrink-0 text-[13px] leading-[22px] text-muted">
-                      {clock(line.start_sec)}
-                    </span>
+        {enriching && (
+          <p className="plan-meta" style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="clock" />
+            Watching the video for details.
+          </p>
+        )}
+
+        <div className="actions">
+          {groceries.length > 0 && (
+            <button type="button" className="btn btn-primary" onClick={() => setSheet("grocery")}>
+              <Icon name="basket" />
+              Make a grocery list
+            </button>
+          )}
+          <button type="button" className="btn" onClick={() => ask(`About "${title}": `, false)}>
+            <Icon name="ask" />
+            Ask about this
+          </button>
+          <a className="btn" href={ticket.url} target="_blank" rel="noopener noreferrer">
+            <Icon name="out" />
+            Open original
+          </a>
+        </div>
+
+        <Note note={note} onSave={saveNote} />
+
+        <ReelSections
+          saveId={ticket.save_id}
+          fields={fields}
+          unverified={unverified}
+          servings={shownServings}
+          onServings={setServings}
+        />
+
+        <section className="sec" aria-labelledby="read-h">
+          <h2 className="sec-title" id="read-h">
+            How {appName} read this
+          </h2>
+          <ul className="read">
+            {details.caption?.trim() && (
+              <li>
+                <span className="src">Caption</span>
+                <span className="how">Used</span>
+              </li>
+            )}
+            {onScreen.length > 0 && (
+              <li>
+                <span className="src">On-screen text</span>
+                <span className="how">{plural(onScreen.length, "line", "lines")}</span>
+              </li>
+            )}
+            {(transcript.length > 0 || watched || enriching) && (
+              <li>
+                <span className="src">Voiceover</span>
+                <span className="how">
+                  {transcript.length > 0
+                    ? plural(transcript.length, "line", "lines")
+                    : enriching
+                      ? "Still watching the video"
+                      : "No speech"}
+                </span>
+              </li>
+            )}
+            {details.enrich_error && (
+              <li>
+                <span className="src">Video</span>
+                <span className="how">Couldn&apos;t watch it: {details.enrich_error.replace(/\.$/, "")}. The plan uses the caption.</span>
+              </li>
+            )}
+          </ul>
+          {unverified.length > 0 && (
+            <ul className="unsure">
+              {unverified.map((u) => (
+                <li key={u}>
+                  <Icon name="alert" />
+                  <span>Couldn&apos;t confirm: {u}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {transcript.length > 0 && (
+            <details className="said">
+              <summary>
+                What&apos;s said in the video
+                <Icon name="down" />
+              </summary>
+              <ul className="lines">
+                {transcript.map((line, i) => (
+                  <li key={i}>
+                    <time>{clock(line.start_sec)}</time>
                     <span>{line.text}</span>
                   </li>
                 ))}
-              </ol>
-            )}
-            {details.on_screen_text.length > 0 && (
-              <>
-                <h3 className="mt-4 text-[13px] text-muted">On screen</h3>
-                <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-[15px] text-ink marker:text-line-strong">
-                  {details.on_screen_text.map((x, i) => (
-                    <li key={i}>{x}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </details>
-      )}
+              </ul>
+            </details>
+          )}
+          {onScreen.length > 0 && (
+            <details className="said">
+              <summary>
+                What&apos;s written on screen
+                <Icon name="down" />
+              </summary>
+              <ul className="lines plain">
+                {onScreen.map((x, i) => (
+                  <li key={i}>{x}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+          <details className="said">
+            <summary>
+              How it was planned
+              <Icon name="down" />
+            </summary>
+            <div className="said-body">
+              <AgentTrace runs={runs} live={working} emptyText={ticket.is_sample ? SEEDED_SAMPLE_NOTE : undefined} />
+            </div>
+          </details>
+        </section>
+      </article>
 
-      {/* Below 1100 px the trace lives in the page; at 1100 px it's in the side panel. */}
-      <section className="mt-6 desk:hidden" aria-labelledby="trace-heading">
-        <h2 id="trace-heading" className={sectionTitle}>
-          How it was planned
-        </h2>
-        <div className="mt-2">
-          <AgentTrace runs={runs} live={working} emptyText={ticket.is_sample ? SEEDED_SAMPLE_NOTE : undefined} />
-        </div>
-      </section>
-
-      <div className="mt-8 flex items-center gap-2">
-        <a className={cn(btnOutline, "flex-1")} href={ticket.url} target="_blank" rel="noopener noreferrer">
-          Open on Instagram
-        </a>
-        <DropdownMenu>
-          <DropdownMenuTrigger className={cn(btnIcon, "border border-line-strong bg-ticket")} aria-label="More for this save" disabled={busy}>
-            <MoreHorizontal aria-hidden="true" className="size-5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top">
-            {ticket.plan && <DropdownMenuItem onSelect={() => void planAgain()}>Plan again</DropdownMenuItem>}
-            <DropdownMenuItem variant="danger" onSelect={() => setDeleteOpen(true)}>
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <Sheet open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <SheetContent>
-          <SheetTitle>Delete this save?</SheetTitle>
-          <SheetDescription>Its plan goes too.</SheetDescription>
-          <button
-            type="button"
-            className={cn(btnDanger, "mt-5 w-full")}
-            disabled={busy}
-            onClick={() => void remove()}
-          >
-            Delete
-          </button>
-          <button type="button" className={cn(btnText, "mt-1 w-full")} onClick={() => setDeleteOpen(false)}>
-            Keep it
-          </button>
+      {/* File under */}
+      <Sheet open={sheet === "cat"} onOpenChange={(open) => setSheet(open ? "cat" : null)}>
+        <SheetContent aria-describedby={undefined}>
+          <SheetHead>File under</SheetHead>
+          <ul className="opts">
+            {KIND_ORDER.map((t) => {
+              const k = KINDS[t];
+              return (
+                <li key={t}>
+                  <button
+                    type="button"
+                    className="opt"
+                    aria-pressed={t === type}
+                    disabled={busy}
+                    onClick={() => void fileUnder(t)}
+                  >
+                    <span className="opt-ico" style={tint(k.color)}>
+                      <Icon name={k.icon} />
+                    </span>
+                    <span className="opt-name">{k.label}</span>
+                    <Icon name="check" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {catError && (
+            <p role="alert" className="field-error">
+              {catError}
+            </p>
+          )}
         </SheetContent>
       </Sheet>
-    </div>
+
+      {/* More */}
+      <Sheet open={sheet === "more"} onOpenChange={(open) => setSheet(open ? "more" : null)}>
+        <SheetContent aria-describedby={undefined}>
+          <SheetHead>This save</SheetHead>
+          <ul className="opts">
+            {ticket.plan && (
+              <li>
+                <button type="button" className="opt" disabled={busy} onClick={() => void planAgain()}>
+                  <span className="opt-ico" style={tint("lavender")}>
+                    <Icon name="redo" />
+                  </span>
+                  <span className="opt-name">Plan again</span>
+                </button>
+              </li>
+            )}
+            <li>
+              <button type="button" className="opt" disabled={busy} onClick={() => setSheet("delete")}>
+                <span className="opt-ico" style={tint("rose")}>
+                  <Icon name="trash" />
+                </span>
+                <span className="opt-name">Delete this save</span>
+              </button>
+            </li>
+          </ul>
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete, confirmed */}
+      <Sheet open={sheet === "delete"} onOpenChange={(open) => setSheet(open ? "delete" : null)}>
+        <SheetContent>
+          <SheetTitle>Delete this save?</SheetTitle>
+          <SheetDescription>Its plan goes too. This can&apos;t be undone.</SheetDescription>
+          <div className="sheet-foot">
+            <button type="button" className="btn btn-danger" disabled={busy} onClick={() => void remove()}>
+              Delete
+            </button>
+            <SheetClose className="btn">Keep it</SheetClose>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <GrocerySheet
+        open={sheet === "grocery"}
+        onOpenChange={(open) => setSheet(open ? "grocery" : null)}
+        title={title}
+        ingredients={groceries}
+        servings={shownServings}
+      />
+    </>
   );
 }
