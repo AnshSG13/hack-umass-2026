@@ -134,7 +134,8 @@ def find_by_key(key: str | None) -> dict | None:
 def rotate_key(user: dict) -> str:
     key = new_key()
     db.users().update_one({"_id": user["_id"]},
-                          {"$set": {"api_key_hash": hash_key(key), "key_preview": key[-4:]}})
+                          {"$set": {"api_key_hash": hash_key(key), "key_preview": key[-4:],
+                                    "key_shown_at": now_utc()}})
     return key
 
 

@@ -241,6 +241,8 @@ export interface Me {
   timezone: string;
   prefs: Prefs;
   key_preview: string;
+  /** false: an email account that has never been shown its Shortcut key. */
+  shortcut_key?: boolean;
   expires_at: string | null;
   counts: { saves: number; by_type: Record<SaveType, number>; plans: Partial<Record<PlanStatus, number>> };
 }

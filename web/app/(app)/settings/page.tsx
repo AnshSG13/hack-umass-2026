@@ -5,13 +5,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { useToast } from "@/components/toast";
+import { ShortcutKey } from "@/components/shortcut-key";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { api, ApiError, getKey, isApiKey, setKey, signOut } from "@/lib/api";
-import { copyText } from "@/lib/clipboard";
+import { api, ApiError, setKey, signOut } from "@/lib/api";
 import { KINDS } from "@/lib/kinds";
 import { browserTimezone, useMe } from "@/lib/hooks";
-import { btnDanger, btnOutline, btnPrimary, btnText, btnTextDanger, inputBase, pageTitle, sectionTitle } from "@/lib/styles";
+import { btnDanger, btnOutline, btnText, btnTextDanger, inputBase, pageTitle, sectionTitle } from "@/lib/styles";
 import type { Me, Prefs } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -112,15 +112,9 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
   const toast = useToast();
   const [draft, setDraft] = useState<Prefs>(me.prefs);
   const [timezone, setTimezone] = useState(me.timezone);
-  const [confirm, setConfirm] = useState<"new-key" | "sign-out" | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<"sign-out" | null>(null);
   const [name, setName] = useState(me.name ?? "");
   const [savingName, setSavingName] = useState(false);
-  // A key made here while signed in with an email: shown once, for the Shortcut.
-  const [shownKey, setShownKey] = useState<string | null>(null);
-  const [shownCopied, setShownCopied] = useState(false);
-  const signedInWithKey = isApiKey(getKey());
   const timer = useRef<number | null>(null);
   const tzId = useId();
   const nameId = useId();
@@ -164,21 +158,6 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
     timer.current = window.setTimeout(() => void patch({ prefs: next }), 400);
   }
 
-  async function makeNewKey() {
-    setBusy(true);
-    try {
-      const r = await api<{ api_key: string }>("/api/me/key", { method: "POST" });
-      if (signedInWithKey) setKey(r.api_key);
-      else setShownKey(r.api_key);
-      setConfirm(null);
-      toast.show("New key made. Copy it into your Shortcut.");
-    } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : "The new key wasn't made. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const cap = draft.daily_cap;
 
   return (
@@ -192,6 +171,9 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
       )}
 
       {!me.is_demo && <AccountSection me={me} onSignOut={() => setConfirm("sign-out")} />}
+
+      {/* The key the iPhone Shortcut needs, near the top so an email account can find it. */}
+      <ShortcutKey me={me} className="mt-6" />
 
       <section className="mt-6" aria-labelledby="name-heading">
         <h2 id="name-heading" className={sectionTitle}>
@@ -337,77 +319,13 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
         </select>
       </section>
 
-      <section className="mt-8" aria-labelledby="key-heading">
-        <h2 id="key-heading" className={sectionTitle}>
-          {me.email ? "Shortcut key" : "Your key"}
-        </h2>
-        {me.email && (
-          <p className="mt-2 text-[14px] text-muted">Only the ready-made Shortcut needs this. Signing in doesn&apos;t.</p>
-        )}
-        <p className="mt-2 text-[15px] text-ink">
-          Key ending <span className="font-semibold">{me.key_preview}</span>
-        </p>
-        {shownKey && (
-          <div className="mt-3 rounded-[16px] border border-line bg-ticket p-4">
-            <p className="text-[16px] font-medium break-all text-ink">{shownKey}</p>
-            <button
-              type="button"
-              className={cn(btnOutline, "mt-3 w-full")}
-              onClick={async () => {
-                if (await copyText(shownKey)) {
-                  setShownCopied(true);
-                  window.setTimeout(() => setShownCopied(false), 3000);
-                }
-              }}
-            >
-              <span aria-live="polite">{shownCopied ? "Copied" : "Copy key"}</span>
-            </button>
-            <p className="mt-3 text-[14px] text-muted">It&apos;s shown once. Paste it into your Shortcut now.</p>
-          </div>
-        )}
-        <div className="mt-3 flex flex-col gap-2">
-          {signedInWithKey && (
-          <button
-            type="button"
-            className={cn(btnOutline, "w-full")}
-            onClick={async () => {
-              const key = getKey();
-              if (key && (await copyText(key))) {
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 3000);
-              }
-            }}
-          >
-            <span aria-live="polite">{copied ? "Copied" : "Copy key"}</span>
+      {(!me.email || me.is_demo) && (
+        <section className="mt-8">
+          <button type="button" className={cn(btnTextDanger, "w-full")} onClick={() => setConfirm("sign-out")}>
+            Sign out on this device
           </button>
-          )}
-          <button type="button" className={cn(btnOutline, "w-full")} onClick={() => setConfirm("new-key")}>
-            Make a new key
-          </button>
-          {(!me.email || me.is_demo) && (
-            <button type="button" className={cn(btnTextDanger, "w-full")} onClick={() => setConfirm("sign-out")}>
-              Sign out on this device
-            </button>
-          )}
-        </div>
-      </section>
-
-      <Sheet open={confirm === "new-key"} onOpenChange={(open) => !open && setConfirm(null)}>
-        <SheetContent>
-          <SheetTitle>Make a new key</SheetTitle>
-          <SheetDescription>
-            {signedInWithKey
-              ? "Your Shortcut stops working until you paste the new key."
-              : "The old key stops working. Paste the new one into your Shortcut."}
-          </SheetDescription>
-          <button type="button" className={cn(btnPrimary, "mt-5")} disabled={busy} onClick={() => void makeNewKey()}>
-            Make a new key
-          </button>
-          <button type="button" className={cn(btnText, "mt-1 w-full")} onClick={() => setConfirm(null)}>
-            Keep this key
-          </button>
-        </SheetContent>
-      </Sheet>
+        </section>
+      )}
 
       <Sheet open={confirm === "sign-out"} onOpenChange={(open) => !open && setConfirm(null)}>
         <SheetContent>

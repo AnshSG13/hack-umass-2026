@@ -69,6 +69,9 @@ def _me(user: dict) -> dict:
     return {"user_id": user["_id"], "is_demo": bool(user.get("is_demo")), "is_judge": bool(user.get("is_judge")),
             "name": user.get("name") or "", "email": user.get("email"),
             "timezone": user["timezone"], "prefs": user["prefs"], "key_preview": user.get("key_preview"),
+            # An email account has a key from sign-up that was never shown. Once one is shown
+            # (for the Shortcut), making another replaces the one already pasted somewhere.
+            "shortcut_key": bool(user.get("key_shown_at")) or not user.get("email"),
             "expires_at": as_utc(user["expires_at"]).isoformat() if user.get("expires_at") else None,
             "counts": _counts(user)}
 
