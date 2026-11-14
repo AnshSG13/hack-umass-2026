@@ -137,8 +137,10 @@ class MePatch(BaseModel):
 
 
 class SavePatch(BaseModel):
-    """What a person can change on a save: where it's filed, and their own note."""
+    """What a person can change on a save: where it's filed, and their own note.
+    subcategory "" clears it."""
     type: Literal["recipe", "event", "place", "workout", "product", "tip", "other"] | None = None
+    subcategory: str | None = Field(default=None, max_length=40)
     note: str | None = Field(default=None, max_length=NOTE_MAX)
 
 
@@ -274,6 +276,9 @@ PROPOSE_PLAN_SCHEMA: dict = _obj(
             {"type": "string", "description": "YYYY-MM-DDTHH:mm"}, maxItems=3
         ),
         "similar_save_id": {"type": "string", "description": "save_id of a similar save, if any"},
+        "subcategory": {"type": "string", "description": (
+            "1 to 3 words grouping this save inside its type, e.g. Dessert, Thai, Strength, Skincare. "
+            "Reuse an existing one for the same type when it fits. Never the title.")},
     },
     ["type", "title", "summary", "caption_sufficient", "actionable", "question", "why", "confidence"],
 )
@@ -296,6 +301,9 @@ ENRICH_SCHEMA: dict = _obj(
             _obj({"name": _S, "kind": {"type": "string", "enum": ENTITY_KINDS}}, ["name", "kind"])
         ),
         "tags": _arr(_S, minItems=3, maxItems=8),
+        "subcategory": {"type": "string", "description": (
+            "1 to 3 words grouping this save inside its type, e.g. Dessert, Thai, Strength, Skincare. "
+            "Reuse an existing one for the same type when it fits. Never the title.")},
     },
     ["has_speech", "music_only", "language", "transcript", "on_screen_text", "visual_summary",
      "type", "title", "summary", "fields", "entities", "tags"],

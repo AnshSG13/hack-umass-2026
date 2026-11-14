@@ -13,7 +13,7 @@ log = logging.getLogger("realize.demo")
 
 ENRICH_KEYS = ["type", "title", "summary", "fields", "caption_sufficient", "transcript",
                "transcript_text", "on_screen_text", "visual_summary", "entities", "tags",
-               "unverified", "language"]
+               "unverified", "language", "subcategory"]
 DEMO_HOURS = 24
 LIVE_LIMIT = 3
 CHAT_LIMIT = 20
