@@ -3,9 +3,9 @@
 // The knowledge graph's canvas. Loaded only in the browser (see app/(app)/graph/page.tsx):
 // react-force-graph-2d draws on a <canvas> and needs window.
 //
-// Kinds are big circles, sub-categories medium ones, reels small dots, interests labelled
-// pills. Hierarchy lines are hairlines; "related" sub-categories are dashed in the kind's
-// colour; interest links are dotted. Selecting a node dims everything not next to it.
+// Kinds are big circles, sub-categories medium ones, reels small dots. A folder from the intro
+// with no reels yet has a dashed outline. Hierarchy lines are hairlines; "related"
+// sub-categories are dashed in the kind's colour. Selecting a node dims everything not next to it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D, { type ForceGraphMethods, type LinkObject, type NodeObject } from "react-force-graph-2d";
@@ -27,20 +27,18 @@ function endId(end: string | number | N | undefined): string {
 function radius(n: GraphNode): number {
   if (n.kind === "type") return 9 + Math.sqrt(n.count ?? 1) * 2.2;
   if (n.kind === "sub") return 4.5 + Math.sqrt(n.count ?? 1) * 1.6;
-  if (n.kind === "interest") return 5;
   return 2.6;
 }
 
 export interface GraphCanvasProps {
   graph: KnowledgeGraph;
   showSaves: boolean;
-  showInterests: boolean;
   selected: string | null;
   onSelect: (id: string | null) => void;
   height: number;
 }
 
-export default function GraphCanvas({ graph, showSaves, showInterests, selected, onSelect, height }: GraphCanvasProps) {
+export default function GraphCanvas({ graph, showSaves, selected, onSelect, height }: GraphCanvasProps) {
   const fg = useRef<ForceGraphMethods<N, L> | undefined>(undefined);
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(360);
@@ -58,12 +56,12 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
   // the toggles. Rebuilt only when the data or a toggle changes, so the layout holds still
   // while someone taps around.
   const data = useMemo(() => {
-    const keep = (n: GraphNode) => (n.kind !== "save" || showSaves) && (n.kind !== "interest" || showInterests);
+    const keep = (n: GraphNode) => n.kind !== "save" || showSaves;
     const nodes: N[] = graph.nodes.filter(keep).map((n) => ({ ...n }));
     const ids = new Set(nodes.map((n) => n.id));
     const links: L[] = graph.links.filter((l) => ids.has(l.source) && ids.has(l.target)).map((l) => ({ ...l }));
     return { nodes, links };
-  }, [graph, showSaves, showInterests]);
+  }, [graph, showSaves]);
 
   // New data: zoom to fit again once the layout settles.
   useEffect(() => {
@@ -92,8 +90,6 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
       muted: cssVar("--muted", "#6e717c"),
       line: cssVar("--line-strong", "#cfcbc2"),
       bg: cssVar("--bg", "#ffffff"),
-      butter: cssVar("--butter", "#fff3c4"),
-      butterInk: cssVar("--butter-ink", "#735700"),
     };
   }, []);
 
@@ -108,7 +104,20 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
     if (!f) return;
     f.d3Force("charge")?.strength(-140);
     const link = f.d3Force("link") as unknown as { distance?: (fn: (l: L) => number) => void } | undefined;
-    link?.distance?.((l: L) => (l.kind === "holds" ? 22 : l.kind === "has" ? 55 : l.kind === "likes" ? 95 : 85));
+    link?.distance?.((l: L) => (l.kind === "holds" ? 22 : l.kind === "has" ? 55 : 85));
+    // Kinds with no link between them would otherwise drift apart until zoom-to-fit shrinks
+    // everything; a gentle pull toward the centre keeps separate clusters close.
+    let pulled: N[] = [];
+    const gravity = Object.assign(
+      (alpha: number) => {
+        for (const n of pulled) {
+          n.vx = (n.vx ?? 0) - (n.x ?? 0) * 0.06 * alpha;
+          n.vy = (n.vy ?? 0) - (n.y ?? 0) * 0.06 * alpha;
+        }
+      },
+      { initialize: (ns: N[]) => void (pulled = ns) },
+    );
+    f.d3Force("gravity", gravity as never);
     f.d3ReheatSimulation();
   }, [data]);
 
@@ -122,26 +131,6 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
       ctx.globalAlpha = on ? 1 : 0.18;
       const r = radius(n);
 
-      if (n.kind === "interest") {
-        const size = Math.max(10 / scale, 3.2);
-        ctx.font = `600 ${size}px Figtree, system-ui, sans-serif`;
-        const w = ctx.measureText(n.label).width + size * 1.2;
-        const h = size * 1.7;
-        ctx.fillStyle = colors.butter;
-        ctx.strokeStyle = colors.butterInk;
-        ctx.lineWidth = 1 / scale;
-        ctx.beginPath();
-        ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = colors.butterInk;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(n.label, x, y);
-        ctx.globalAlpha = 1;
-        return;
-      }
-
       ctx.beginPath();
       ctx.arc(x, y, r, 0, 2 * Math.PI);
       ctx.fillStyle = n.kind === "save" ? (c?.ink ?? colors.muted) : (c?.fill ?? colors.line);
@@ -149,7 +138,9 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
       if (n.kind !== "save") {
         ctx.lineWidth = (String(n.id) === selected ? 2.4 : 1.2) / scale;
         ctx.strokeStyle = c?.ink ?? colors.ink;
+        if (n.kind === "sub" && !n.count) ctx.setLineDash([2 / scale, 2 / scale]); // no reels yet
         ctx.stroke();
+        ctx.setLineDash([]);
       }
 
       const showLabel = n.kind !== "save" || String(n.id) === selected;
@@ -187,7 +178,6 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
         const t = (l.source as N & GraphNode).type;
         return (t ? colors.kinds[t].ink : colors.ink) + (alpha || "cc");
       }
-      if (l.kind === "likes") return colors.butterInk + (alpha || "aa");
       return colors.line + (alpha || "");
     },
     [colors, lit, selected],
@@ -206,8 +196,8 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
         nodeCanvasObject={drawNode}
         nodePointerAreaPaint={paintArea}
         linkColor={linkColor}
-        linkWidth={(l) => (l.kind === "related" ? 1.6 : l.kind === "likes" ? 1.2 : 0.8)}
-        linkLineDash={(l) => (l.kind === "related" ? [4, 3] : l.kind === "likes" ? [1, 3] : null)}
+        linkWidth={(l) => (l.kind === "related" ? 1.6 : 0.8)}
+        linkLineDash={(l) => (l.kind === "related" ? [4, 3] : null)}
         cooldownTicks={140}
         onEngineStop={() => {
           if (!fitted.current) {

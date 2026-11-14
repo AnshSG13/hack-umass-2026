@@ -1,20 +1,20 @@
-"""The knowledge graph: how a person's saves, sub-categories, kinds and interests connect.
+"""The knowledge graph: how a person's saves, sub-categories and kinds connect.
 
 Nodes
   type      a kind of save ("Food"), the top of the hierarchy
   sub       a sub-category inside a type ("Food > Baking")
   save      one reel
-  interest  something the person picked or typed in the intro ("Broadway musicals")
+            Interests and hobbies from the intro are sub-categories too (profile.starters),
+            drawn even before a reel lands in them, marked from_intro.
 
 Edges
   has       type -> sub (the hierarchy)
   holds     sub -> save, or type -> save when the save has no sub-category yet
   related   sub <-> sub, when the centroids of their saves' embeddings are close. This is the
             part a flat list can't show: "Food > Baking" sits next to "Places > Bakeries".
-  likes     interest -> sub, when the interest's embedding is close to the sub's centroid
 
 Every number here is computed in code from embeddings already stored on the saves; the only
-model call is one embedding request for interests that haven't been embedded before.
+model calls happen elsewhere (embedding saves, filing interests under a type at the intro).
 
 Retrieval uses the same graph (`expand`): after hybrid search, saves in the top hits'
 sub-categories and their related sub-categories are added when they are still close to the
@@ -28,7 +28,7 @@ from typing import Any
 
 import numpy as np
 
-from . import db, gemini
+from . import db, subcats
 from .models import TASTE_LABELS
 
 log = logging.getLogger("realize.graph")
@@ -36,12 +36,9 @@ log = logging.getLogger("realize.graph")
 SEARCHABLE = ["planned", "enriching", "ready"]
 # Gemini embeddings of short reels sit close together (on a 16-reel sample library the median
 # centroid-to-centroid cosine was 0.717), so a fixed cutoff links unrelated things. Edges are
-# relative instead: mutual nearest neighbours for "related", near the best match for "likes".
+# relative instead: mutual nearest neighbours.
 RELATED_K = 2           # "related" when each is among the other's K closest sub-categories
 RELATED_MIN = 0.75      # and their centroid cosine is at least this
-LIKES_MIN = 0.55        # interest-to-centroid cosine floor for a "likes" edge
-LIKES_MARGIN = 0.05     # keep sub-categories within this of the interest's best match
-LIKES_TOP = 3           # at most this many sub-categories per interest
 MAX_SAVES = 300         # newest saves drawn as nodes
 EXPAND_ANCHORS = 3      # top hits whose sub-categories seed expansion
 EXPAND_RELATED = 2      # related sub-categories followed from each anchor
@@ -113,43 +110,6 @@ def related_edges(cents: dict[str, dict]) -> list[tuple[str, str, float]]:
     return sorted(pairs, key=lambda p: -p[2])
 
 
-def interest_vectors(user_id: str, interests: list[str]) -> dict[str, np.ndarray]:
-    """Embeddings for the person's interests, embedded once and kept in graph_cache."""
-    if not interests:
-        return {}
-    cache = db.graph_cache().find_one({"_id": user_id}, {"interests": 1}) or {}
-    rows = cache.get("interests") if isinstance(cache.get("interests"), list) else []
-    have: dict[str, list] = {r["text"]: r["vec"] for r in rows if isinstance(r, dict) and "text" in r}
-    missing = [i for i in interests if i not in have]
-    if missing:
-        try:
-            vecs = gemini.embed(missing, "RETRIEVAL_QUERY")
-            have.update({t: v for t, v in zip(missing, vecs)})
-            db.graph_cache().update_one({"_id": user_id}, {"$set": {
-                "interests": [{"text": t, "vec": v} for t, v in have.items()]}}, upsert=True)
-        except Exception as e:  # noqa: BLE001 - the graph still draws without interest edges
-            log.warning("interest embeddings failed for %s: %s", user_id, str(e)[:160])
-    return {t: _unit(np.asarray(have[t], dtype=float)) for t in interests if t in have}
-
-
-def likes_edges(ivecs: dict[str, np.ndarray], cents: dict[str, dict]) -> list[tuple[str, str, float]]:
-    if not ivecs or not cents:
-        return []
-    keys = list(cents)
-    m = np.stack([cents[k]["vec"] for k in keys])
-    out = []
-    for name, v in ivecs.items():
-        sims = m @ v
-        order = np.argsort(-sims)
-        best = float(sims[order[0]])
-        for j in order[:LIKES_TOP]:
-            s = float(sims[j])
-            if s < LIKES_MIN or s < best - LIKES_MARGIN:
-                break
-            out.append((name, keys[j], round(s, 3)))
-    return out
-
-
 def related_map(user_id: str) -> dict[str, list[str]]:
     """{sub_key: [related sub_keys, closest first]}, cached until the saves change."""
     sig = _signature(user_id)
@@ -174,15 +134,10 @@ def related_map(user_id: str) -> dict[str, list[str]]:
 # ---------- the graph for the page ----------
 
 
-def _interests(user: dict) -> list[str]:
-    p = user.get("profile") or {}
-    seen: set[str] = set()
-    out = []
-    for v in (p.get("interests") or []) + (p.get("hobbies") or []):
-        if isinstance(v, str) and v.strip() and v.lower() not in seen:
-            seen.add(v.lower())
-            out.append(v.strip())
-    return out
+def _starters(user: dict) -> dict[str, list[str]]:
+    raw = ((user.get("profile") or {}).get("starters")) or {}
+    return {t: [x for x in v if isinstance(x, str) and x.strip()]
+            for t, v in raw.items() if t in TASTE_LABELS and isinstance(v, list)}
 
 
 def build(user: dict) -> dict[str, Any]:
@@ -191,22 +146,31 @@ def build(user: dict) -> dict[str, Any]:
     saves = _load(uid)
     cents = centroids(saves)
     rel = related_edges(cents)
-    interests = _interests(user)
-    likes = likes_edges(interest_vectors(uid, interests), cents)
+    starters = _starters(user)
 
     nodes: list[dict] = []
     links: list[dict] = []
-    type_counts: dict[str, int] = {}
+    type_counts: dict[str, int] = {t: 0 for t in starters}
     for s in saves:
         if s.get("type") in TASTE_LABELS:
             type_counts[s["type"]] = type_counts.get(s["type"], 0) + 1
     for t, n in type_counts.items():
         nodes.append({"id": f"type:{t}", "kind": "type", "type": t, "label": TASTE_LABELS[t], "count": n})
-    for k, c in cents.items():
-        if c["type"] not in type_counts:
-            continue
-        nodes.append({"id": f"sub:{k}", "kind": "sub", "type": c["type"], "label": c["name"], "count": c["count"]})
-        links.append({"source": f"type:{c['type']}", "target": f"sub:{k}", "kind": "has"})
+
+    # Folders with reels, then the intro's interests and hobbies that don't have one yet.
+    intro = {(t, subcats.key(x)) for t, xs in starters.items() for x in xs}
+    subs = [(k, c["type"], c["name"], c["count"]) for k, c in cents.items() if c["type"] in type_counts]
+    have = {(t, subcats.key(name)) for _, t, name, _ in subs}
+    for t, xs in starters.items():
+        for x in xs:
+            if (t, subcats.key(x)) not in have:
+                have.add((t, subcats.key(x)))
+                subs.append((sub_key(t, x), t, x, 0))
+    for k, t, name, count in subs:
+        nodes.append({"id": f"sub:{k}", "kind": "sub", "type": t, "label": name, "count": count,
+                      "from_intro": (t, subcats.key(name)) in intro})
+        links.append({"source": f"type:{t}", "target": f"sub:{k}", "kind": "has"})
+
     newest = sorted(saves, key=lambda s: s["created_at"], reverse=True)[:MAX_SAVES]
     for s in newest:
         t = s.get("type")
@@ -220,16 +184,11 @@ def build(user: dict) -> dict[str, Any]:
         links.append({"source": f"sub:{k}" if k in cents else f"type:{t}", "target": nid, "kind": "holds"})
     for a, b, sim in rel:
         links.append({"source": f"sub:{a}", "target": f"sub:{b}", "kind": "related", "weight": sim})
-    liked = {name for name, _, _ in likes}
-    for name in interests:
-        if name in liked:
-            nodes.append({"id": f"interest:{name}", "kind": "interest", "label": name})
-    for name, k, sim in likes:
-        links.append({"source": f"interest:{name}", "target": f"sub:{k}", "kind": "likes", "weight": sim})
     return {
         "nodes": nodes, "links": links,
-        "counts": {"saves": len(saves), "types": len(type_counts), "subcategories": len(cents),
-                   "related": len(rel), "interests": len(liked), "interests_total": len(interests)},
+        "counts": {"saves": len(saves), "types": sum(1 for n in type_counts.values() if n),
+                   "subcategories": len(subs), "related": len(rel),
+                   "from_intro": sum(1 for n in nodes if n.get("from_intro"))},
     }
 
 

@@ -46,15 +46,20 @@ def test_related_edges_drop_one_sided_neighbours(monkeypatch):
     assert edges == {("recipe/Baking", "recipe/Desserts")}
 
 
-def test_likes_edges_keep_matches_near_the_best_one():
-    c = cents(recipe__Desserts=unit(1, 0, 0), recipe__Baking=unit(0.97, 0.24, 0), product__Hair=unit(0.6, 0, 0.8))
-    edges = graph.likes_edges({"Baking": np.asarray(unit(1, 0.1, 0))}, c)
-    assert [k for _, k, _ in edges] == ["recipe/Desserts", "recipe/Baking"]
-
-
-def test_likes_edges_respect_the_floor():
-    c = cents(recipe__Desserts=unit(1, 0, 0))
-    assert graph.likes_edges({"Chess": np.asarray(unit(0, 1, 0))}, c) == []
+def test_build_shows_interests_and_hobbies_as_folders(monkeypatch):
+    from datetime import datetime, timezone
+    reel = save("recipe", "Desserts", unit(1, 0, 0), "Tiramisu")
+    reel["created_at"] = datetime.now(timezone.utc)
+    monkeypatch.setattr(graph, "_load", lambda uid: [reel])
+    user = {"_id": "u_1", "profile": {"starters": {"recipe": ["Dessert"], "workout": ["Pickleball"]}}}
+    g = graph.build(user)
+    subs = {n["label"]: n for n in g["nodes"] if n["kind"] == "sub"}
+    assert set(subs) == {"Desserts", "Pickleball"}         # "Dessert" is the same folder as "Desserts"
+    assert subs["Desserts"]["from_intro"] and subs["Desserts"]["count"] == 1
+    assert subs["Pickleball"]["from_intro"] and subs["Pickleball"]["count"] == 0
+    assert any(n["id"] == "type:workout" for n in g["nodes"])  # its kind is drawn with no reels yet
+    assert {"source": "type:workout", "target": "sub:workout/Pickleball", "kind": "has"} in g["links"]
+    assert not any(n["kind"] == "interest" for n in g["nodes"])
 
 
 class FakeSaves:

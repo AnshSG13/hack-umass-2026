@@ -412,29 +412,30 @@ export interface BundlesResponse {
 }
 
 // ---- GET /api/graph: the knowledge graph ----
-export type GraphNodeKind = "type" | "sub" | "save" | "interest";
+export type GraphNodeKind = "type" | "sub" | "save";
 
 export interface GraphNode {
-  id: string; // "type:recipe", "sub:recipe/Desserts", "save:<id>", "interest:Baking"
+  id: string; // "type:recipe", "sub:recipe/Desserts", "save:<id>"
   kind: GraphNodeKind;
   label: string;
   type?: SaveType; // type, sub and save nodes
   count?: number; // type and sub nodes
+  from_intro?: boolean; // sub nodes: an interest or hobby from the intro
   save_id?: string; // save nodes
   thumb_url?: string | null; // save nodes
 }
 
-export type GraphLinkKind = "has" | "holds" | "related" | "likes";
+export type GraphLinkKind = "has" | "holds" | "related";
 
 export interface GraphLink {
   source: string;
   target: string;
   kind: GraphLinkKind;
-  weight?: number; // cosine, related and likes links
+  weight?: number; // cosine, related links
 }
 
 export interface KnowledgeGraph {
   nodes: GraphNode[];
   links: GraphLink[];
-  counts: { saves: number; types: number; subcategories: number; related: number; interests: number; interests_total: number };
+  counts: { saves: number; types: number; subcategories: number; related: number; from_intro: number };
 }

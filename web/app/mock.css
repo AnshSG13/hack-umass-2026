@@ -3087,9 +3087,6 @@ button.note {
 .kg-key:first-child {
   margin-left: 0;
 }
-.kg-key-likes {
-  border-top: 2px dotted var(--butter-ink);
-}
 .kg-hint {
   margin-top: 16px;
   font-size: 14.5px;

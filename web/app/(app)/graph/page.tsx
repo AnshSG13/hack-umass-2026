@@ -1,8 +1,8 @@
 "use client";
 
-// "How your saves connect": the knowledge graph. Kinds, their sub-categories, reels and the
-// interests from the intro, with "related" links between sub-categories whose reels are
-// alike. Under the canvas, the same connections as text, and details for whatever is tapped.
+// "How your saves connect": the knowledge graph. Kinds, their sub-categories (including the
+// interests and hobbies from the intro, which are folders too) and reels, with "related"
+// links between sub-categories whose reels are alike. Under the canvas, the same connections as text, and details for whatever is tapped.
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
@@ -28,7 +28,6 @@ export default function GraphPage() {
   const { data, error, mutate } = useSWR<KnowledgeGraph>("/api/graph", fetcher, { revalidateOnFocus: false });
   const [selected, setSelected] = useState<string | null>(null);
   const [savesChoice, setSavesChoice] = useState<boolean | null>(null);
-  const [showInterests, setShowInterests] = useState(true);
   const wide = useMediaQuery("(min-width: 700px)");
 
   const showSaves = savesChoice ?? (data ? data.counts.saves <= SAVES_ON_BY_DEFAULT : true);
@@ -38,15 +37,6 @@ export default function GraphPage() {
     () => (data?.links ?? []).filter((l) => l.kind === "related").sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)),
     [data],
   );
-  const likes = useMemo(() => {
-    const m = new Map<string, string[]>();
-    for (const l of data?.links ?? []) {
-      if (l.kind !== "likes") continue;
-      m.set(l.source, [...(m.get(l.source) ?? []), l.target]);
-    }
-    return m;
-  }, [data]);
-
   const head = (
     <header className="page-head with-back">
       <div className="block-head" style={{ minHeight: 44 }}>
@@ -119,29 +109,30 @@ export default function GraphPage() {
     const reels = neighbourIds(node.id, "holds")
       .map((id) => byId.get(id))
       .filter((n): n is GraphNode => Boolean(n && n.kind === "save"));
-    // A kind lists its folders and an interest its closest folders; a folder or a reel names
-    // the one thing it sits in.
-    const subs =
-      node.kind === "type" ? neighbourIds(node.id, "has") : node.kind === "interest" ? neighbourIds(node.id, "likes") : [];
+    // A kind lists its folders; a folder or a reel names the one thing it sits in.
+    const subs = node.kind === "type" ? neighbourIds(node.id, "has") : [];
     const rel = neighbourIds(node.id, "related");
-    const fans = node.kind === "sub" ? neighbourIds(node.id, "likes") : [];
     const parent =
       node.kind === "sub" ? neighbourIds(node.id, "has")[0] : node.kind === "save" ? neighbourIds(node.id, "holds")[0] : undefined;
     return (
       <section className="kg-detail" aria-live="polite" style={node.type ? tint(KINDS[node.type].color) : undefined}>
         <p className="kg-detail-kind">
-          {node.kind === "type" ? "Kind" : node.kind === "sub" ? "Folder" : node.kind === "interest" ? "Your interest" : "Reel"}
+          {node.kind === "type" ? "Kind" : node.kind === "sub" ? (node.from_intro ? "Folder from your intro" : "Folder") : "Reel"}
         </p>
         <h2 className="kg-detail-title">{node.kind === "save" ? node.label : name(node.id)}</h2>
-        {node.count !== undefined && <p className="kg-detail-sub">{plural(node.count, "save", "saves")}</p>}
+        {node.count !== undefined && (
+          <p className="kg-detail-sub">
+            {node.count === 0 ? "No reels yet. Saves that fit land here." : plural(node.count, "save", "saves")}
+          </p>
+        )}
         {parent && <p className="kg-detail-sub">In {name(parent)}</p>}
         {subs.length > 0 && (
           <div className="kg-detail-row">
-            <h3>{node.kind === "interest" ? "Closest folders" : "Folders"}</h3>
+            <h3>Folders</h3>
             <div className="kg-chips">
               {subs.map((id) => (
                 <button key={id} type="button" className="fchip" onClick={() => setSelected(id)}>
-                  {node.kind === "interest" ? name(id) : byId.get(id)?.label}
+                  {byId.get(id)?.label}
                 </button>
               ))}
             </div>
@@ -154,18 +145,6 @@ export default function GraphPage() {
               {rel.map((id) => (
                 <button key={id} type="button" className="fchip" onClick={() => setSelected(id)}>
                   {name(id)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {fans.length > 0 && (
-          <div className="kg-detail-row">
-            <h3>Matches your interests</h3>
-            <div className="kg-chips">
-              {fans.map((id) => (
-                <button key={id} type="button" className="fchip" onClick={() => setSelected(id)}>
-                  {byId.get(id)?.label}
                 </button>
               ))}
             </div>
@@ -209,15 +188,6 @@ export default function GraphPage() {
         <button type="button" className="fchip" aria-pressed={showSaves} onClick={() => setSavesChoice(!showSaves)}>
           Reels
         </button>
-        <button
-          type="button"
-          className="fchip"
-          aria-pressed={showInterests}
-          onClick={() => setShowInterests(!showInterests)}
-          disabled={!data || data.counts.interests === 0}
-        >
-          Your interests
-        </button>
       </div>
 
       <div className="gutter">
@@ -225,7 +195,6 @@ export default function GraphPage() {
           <GraphCanvas
             graph={data}
             showSaves={showSaves}
-            showInterests={showInterests}
             selected={selected}
             onSelect={setSelected}
             height={wide ? 560 : 500}
@@ -234,8 +203,7 @@ export default function GraphPage() {
           <div className="kg-canvas kg-loading" aria-hidden="true" />
         )}
         <p className="kg-legend" aria-hidden="true">
-          <span className="kg-key kg-key-related" /> alike reels
-          <span className="kg-key kg-key-likes" /> your interests
+          <span className="kg-key kg-key-related" /> folders with alike reels
         </p>
 
         {sel ? (
@@ -244,7 +212,7 @@ export default function GraphPage() {
           data && <p className="kg-hint">Tap a circle to see what&apos;s in it and what it connects to.</p>
         )}
 
-        {data && (related.length > 0 || likes.size > 0) && (
+        {data && related.length > 0 && (
           <section className="kg-list" aria-labelledby="kg-links-h">
             <h2 className="block-title" id="kg-links-h">
               Connections
@@ -259,22 +227,6 @@ export default function GraphPage() {
                   <button type="button" onClick={() => pickFromList(l.target)}>
                     {name(l.target)}
                   </button>
-                </li>
-              ))}
-              {[...likes.entries()].map(([interest, subs]) => (
-                <li key={interest}>
-                  <button type="button" onClick={() => pickFromList(interest)}>
-                    {byId.get(interest)?.label}
-                  </button>
-                  <span className="kg-rel">leads to</span>
-                  {subs.map((s, i) => (
-                    <span key={s}>
-                      <button type="button" onClick={() => pickFromList(s)}>
-                        {name(s)}
-                      </button>
-                      {i < subs.length - 1 ? ", " : ""}
-                    </span>
-                  ))}
                 </li>
               ))}
             </ul>
