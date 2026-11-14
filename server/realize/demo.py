@@ -19,6 +19,8 @@ LIVE_LIMIT = 3
 CHAT_LIMIT = 20
 LIVE_LIMIT_MESSAGE = "That's the live limit for this demo. The samples still work."
 CHAT_LIMIT_MESSAGE = "That's the chat limit for this demo."
+TRIP_LIMIT = 3  # trip plans per demo session; each one is paid searches
+TRIP_LIMIT_MESSAGE = "That's the trip limit for this demo."
 
 
 def sample_for(shortcode: str) -> dict | None:
@@ -165,7 +167,7 @@ def hero_ticket() -> dict | None:
 
 def reset() -> dict:
     """Delete all demo users and their documents (TTL does this too)."""
-    total = {"users": 0, "saves": 0, "plans": 0, "jobs": 0, "agent_runs": 0, "thumbnails": 0}
+    total = {"users": 0, "saves": 0, "plans": 0, "jobs": 0, "agent_runs": 0, "trips": 0, "thumbnails": 0}
     for u in list(db.users().find({"is_demo": True}, {"_id": 1})):
         counts = accounts.delete_user_data(u["_id"])
         for k, v in counts.items():

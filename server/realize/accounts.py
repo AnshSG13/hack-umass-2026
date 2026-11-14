@@ -59,7 +59,7 @@ def delete_user_data(user_id: str) -> dict:
     """Delete a user and everything they own. Sample-owned thumbnails are never touched."""
     counts = {}
     for name, coll in (("saves", db.saves()), ("plans", db.plans()), ("jobs", db.jobs()),
-                       ("agent_runs", db.agent_runs())):
+                       ("agent_runs", db.agent_runs()), ("trips", db.trips())):
         counts[name] = coll.delete_many({"user_id": user_id}).deleted_count
     counts["thumbnails"] = db.thumbnails().delete_many({"owner_user_id": user_id}).deleted_count
     counts["users"] = db.users().delete_one({"_id": user_id}).deleted_count

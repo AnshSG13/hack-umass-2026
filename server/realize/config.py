@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     worker_enrich_threads: int = 2
     default_timezone: str = "America/New_York"
 
+    # Trip plans: forecast and place lookup (Open-Meteo, free, no key).
+    weather_api_url: str = "https://api.open-meteo.com/v1/forecast"
+    geocode_api_url: str = "https://geocoding-api.open-meteo.com/v1/search"
+    weather_source_url: str = "https://open-meteo.com/"
+    maps_search_url: str = "https://www.google.com/maps/search/"
+    maps_directions_url: str = "https://www.google.com/maps/dir/"
+
     shortcut_url: str = ""
     judge_shortcut_url: str = ""
     first_save_reel_url: str = ""

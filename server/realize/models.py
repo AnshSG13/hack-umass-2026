@@ -25,6 +25,10 @@ STEP_LABELS = {
     "grounding": "Checking facts against the video",
     "embed": "Filing it",
     "replan": "Updating the plan",
+    "trip_research": "Searching the web",
+    "trip_layout": "Laying out the days",
+    "trip_weather": "Checking the forecast",
+    "trip_day": "Planning the day",
     "get_save": "Opening a save",
     "list_plans": "Checking your plans",
     "propose_plans": "Drafting plans",
@@ -124,6 +128,11 @@ class SavePatch(BaseModel):
     """What a person can change on a save: where it's filed, and their own note."""
     type: Literal["recipe", "event", "place", "workout", "product", "tip", "other"] | None = None
     note: str | None = Field(default=None, max_length=NOTE_MAX)
+
+
+class TripRequest(BaseModel):
+    """Build a trip plan, or move it to other dates."""
+    start_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class PlanStatusRequest(BaseModel):

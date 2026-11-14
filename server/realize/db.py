@@ -39,6 +39,10 @@ def plans() -> Collection:
     return get_db()["plans"]
 
 
+def trips() -> Collection:
+    return get_db()["trips"]
+
+
 def jobs() -> Collection:
     return get_db()["jobs"]
 
