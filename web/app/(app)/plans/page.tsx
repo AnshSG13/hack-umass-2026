@@ -103,9 +103,9 @@ export default function PlansPage() {
         {header}
         <div className="mt-6">
           <p className="text-[17px] font-semibold text-ink">No plans yet.</p>
-          <p className="mt-1 text-[16px] text-muted">Share a reel from Instagram to make your first ticket.</p>
-          <Link href="/setup" className={cn(btnPrimary, "mt-5")}>
-            Set up sharing
+          <p className="mt-1 text-[16px] text-muted">Save a reel from Instagram to make your first ticket.</p>
+          <Link href="/save" className={cn(btnPrimary, "mt-5")}>
+            Save a reel
           </Link>
           <Link href="/demo" className={cn(btnOutline, "mt-3 w-full")}>
             Try a sample reel

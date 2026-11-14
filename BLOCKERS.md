@@ -23,11 +23,15 @@ Open items are at the top. Resolved items move to the bottom with how they were 
 - **Not verified.** The phase 4 check "3 queries from queries.csv return the expected card in Ask", and the answer, confidence-none and propose_plans screenshots with real answers.
 - **Next.** With quota back, ask three questions from `fixtures/queries.csv` in `/ask` and retake those three screenshots.
 
-### 4. `docker compose build` was not run
-- **Why.** Docker 29.7.2 is installed, but the daemon was not running. Starting Docker Desktop from the build did not bring the engine up within several minutes (`docker info` hung), so it probably wants a click in its window.
-- **What is verified.** `docker compose config` validates; `npm run build` produces the standalone output the web image copies; the server image is the Dockerfile from SPEC section 18 unchanged.
-- **Next.** Open Docker Desktop, wait for "Engine running", then `docker compose build`.
+### 4. Docker Desktop on the dev laptop crashes on every start
+- **What happens.** The backend stops with "remove ...\Docker\run\dockerInference: The file cannot be accessed by the system". The unix socket files Docker Desktop 4.86 leaves in `%LOCALAPPDATA%\Docker\run` and `%LOCALAPPDATA%\docker-secrets-engine` can't be deleted once it has stopped, so the next start fails. A socket made and closed by a test program in a temp folder deleted fine, so it is specific to how Docker leaves them.
+- **Workaround.** Quit Docker Desktop, rename both folders (they can't be deleted), start it again. The engine came up in about 15 seconds. It has to be repeated before each start.
+- **Scope.** Only this Windows laptop. The Linux VPS doesn't use Docker Desktop.
+- **Next.** Update Docker Desktop or reset it to factory defaults (the human's call; a reset removes local images).
 
 ## Resolved
 
-_None yet._
+### `docker compose build` and the stack in containers (2026-11-14)
+- `docker compose build` built `realize-api`, `realize-worker` (1.15 GB each, Python 3.12 with ffmpeg) and `realize-web` (397 MB). No `.env` is inside the images.
+- `docker compose up` with a local override (Caddy on plain http port 8080, `DOMAIN=:80`) ran all four services. Through Caddy: `/api/health` ok with the container's worker seen, all seven pages HTTP 200, and the demo-flow script passed 22 of its 23 checks (sample save to proposal median 3.8 s). The one miss was the script reading the share link from the wrong field.
+- Not verified: Caddy with a real domain and certificates, which needs the VPS and DNS.

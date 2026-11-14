@@ -6,7 +6,7 @@
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarCheck, Library, MessageCircle, Settings, Sparkles, type LucideIcon } from "lucide-react";
+import { CalendarCheck, Library, MessageCircle, Plus, Settings, Sparkles, type LucideIcon } from "lucide-react";
 import { ToastViewport, useToast } from "@/components/toast";
 import { TraceBody, TraceContext, type TraceApi } from "@/components/trace";
 import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -55,6 +55,8 @@ const TABS: Tab[] = [
   { href: "/ask", label: "Ask", icon: MessageCircle, match: (p) => p.startsWith("/ask") },
 ];
 const SAMPLES_TAB: Tab = { href: "/demo", label: "Samples", icon: Sparkles, match: (p) => p.startsWith("/demo") };
+// A real account saves from inside the app: copy the link in Instagram, paste it here.
+const SAVE_TAB: Tab = { href: "/save", label: "Save", icon: Plus, match: (p) => p.startsWith("/save") };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const key = useKey();
@@ -116,7 +118,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!key) return <div className="min-h-dvh bg-paper" />;
 
   const isDemo = Boolean(me?.is_demo);
-  const tabs = isDemo ? [SAMPLES_TAB, ...TABS] : TABS;
+  // Until /api/me answers, show the three tabs both kinds of account have.
+  const tabs = me === undefined ? TABS : isDemo ? [SAMPLES_TAB, ...TABS] : [SAVE_TAB, ...TABS];
 
   return (
     <TraceContext.Provider value={trace}>

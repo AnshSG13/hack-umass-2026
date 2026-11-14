@@ -137,3 +137,18 @@ Backend fixes that came out of the UI review:
 ## Phase 5: demo mode (browser check)
 
 With the built-in browser at 375 px wide, logged out: landing showed the real hero ticket; "Try the demo" opened `/demo`; "Save to Realize" on the chickpea curry sample printed "Saved" and "Checking your saves", then proposed "Wed 6:30 pm" with "Add to Wednesday"; tapping it showed "Added to Wednesday", the two reminder lines and both calendar links; `/plans` listed it under Wednesday, Nov 18 next to the two seeded plans; `/ask` showed three chips built from the account's data. Tapping a chip was not verified to return cards (Gemini quota).
+
+## 2026-11-14: web app on iPhone becomes the main path
+
+The user's direction after the build: "we're making this a web app for ios". SPEC.md is written around the iOS Shortcut; where they differ, this direction wins. Decisions:
+
+- **Saving happens inside the web app.** A web app on iOS can't appear in Instagram's share sheet, so the flow is copy link, open the app, paste. New `/save` page with a one-tap "Paste the link I copied" button (shown only on https, where the browser allows clipboard reads) and the paste box. `/save?url=` saves a link handed over in the address, so a bookmark or a one-step Shortcut can open it.
+- **Real accounts get a Save tab** where demo accounts have Samples. Plans' empty state points to it.
+- **Installable.** Web app manifest, Apple Home Screen tags and three icons drawn from the DESIGN tokens by `server/scripts/make_icons.py`. The name in the manifest and the title is read from `GET /api/config`.
+- **The key has to follow the app to the Home Screen.** An installed web app on iOS has its own storage, so it would open signed out. The manifest has no `start_url`; while `/setup` is open in Safari on an iPhone the key sits in the link's fragment, the Home Screen icon keeps that link, and the installed app reads the key on first launch and goes to Plans. A key already stored in the app wins over the one in the link, so "New key" in Settings doesn't lock the app out. Not tested on a real iPhone yet. Fallback: "Already have a key?" on `/setup`.
+- **Calendar.** A web page can't write Reminders. The ticket's .ics link is now served `inline` so Safari opens its "Add to Calendar" sheet, opens in a new tab so an installed app keeps its own page, and reads "Add to Apple Calendar". The file already carries the alerts.
+- **The Shortcut is optional.** `/setup` on iPhone shows the web steps first and offers the Shortcut only when `SHORTCUT_URL` is set.
+- **README was UTF-16** in the repo; converted to UTF-8.
+- **No new dependencies.**
+
+Checked at 375 px with an iPhone user agent in the built-in browser: `/setup` created an account, showed the three steps and kept the key in the link; `/save?url=` saved the tiramisu reel and printed its ticket; "Add to Monday" showed both calendar links; no sideways scroll. `npm run build`, `npm run lint` and 49 unit tests pass.

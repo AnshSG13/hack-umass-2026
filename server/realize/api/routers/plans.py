@@ -130,4 +130,6 @@ def public_ics(plan_id: str, t: str | None = None) -> Response:
     if not body:
         raise HTTPException(status_code=404, detail="This plan has nothing to add to a calendar yet.")
     return Response(content=body.encode("utf-8"), media_type="text/calendar",
-                    headers={"Content-Disposition": 'attachment; filename="plan.ics"'})
+                    # inline, so Safari on an iPhone opens its "Add to Calendar" sheet
+                    # straight away; browsers that can't show a calendar file still save it.
+                    headers={"Content-Disposition": 'inline; filename="plan.ics"'})

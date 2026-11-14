@@ -107,6 +107,17 @@ export function useDevice(): Device | undefined {
   return useSyncExternalStore<Device | undefined>(noopSubscribe, readDevice, () => undefined);
 }
 
+export function readStandalone(): boolean {
+  // iOS Safari reports a Home Screen web app through navigator.standalone.
+  const nav = navigator as Navigator & { standalone?: boolean };
+  return nav.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+}
+
+/** True when the app was opened from the Home Screen icon, undefined until hydrated. */
+export function useStandalone(): boolean | undefined {
+  return useSyncExternalStore<boolean | undefined>(noopSubscribe, readStandalone, () => undefined);
+}
+
 /** Seconds since an ISO time, ticking once a second while active. */
 export function useElapsed(active: boolean, sinceIso: string | null | undefined): number {
   const [now, setNow] = useState(() => Date.now());

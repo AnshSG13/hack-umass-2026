@@ -537,8 +537,15 @@ export function Ticket({
                   </a>
                 )}
                 {plan.ics_url && (
-                  <a className={cn(linkInk, "inline-flex min-h-11 items-center text-[14px]")} href={plan.ics_url}>
-                    Download for Apple Calendar
+                  // A new tab on purpose: a Home Screen web app has no back button, so the
+                  // calendar file must not replace the app's own page.
+                  <a
+                    className={cn(linkInk, "inline-flex min-h-11 items-center text-[14px]")}
+                    href={plan.ics_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Add to Apple Calendar
                   </a>
                 )}
               </div>

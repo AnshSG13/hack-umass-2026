@@ -1,6 +1,8 @@
 # The iOS Shortcut
 
-The Shortcut is how a reel gets from Instagram into Realize. It sends only the reel's link, shows the plan as a menu, and writes the calendar event and reminders on the phone itself. It is built by hand in the Shortcuts app; these are the steps.
+The Shortcut is optional. Realize is a web app: you can save any reel by copying its link and pasting it on the Save tab (see the main README). The Shortcut adds a one-step path from Instagram's share sheet, which a web app on iOS can't offer by itself.
+
+It sends only the reel's link, shows the plan as a menu, and writes the calendar event and reminders on the phone itself. It is built by hand in the Shortcuts app; these are the steps.
 
 Nothing is added to Calendar or Reminders unless you pick an option from the menu.
 
