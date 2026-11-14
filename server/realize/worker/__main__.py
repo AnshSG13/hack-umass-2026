@@ -32,9 +32,16 @@ def _heartbeat(job_id, done: threading.Event) -> None:
 
 
 def handle_propose(job: dict, save: dict, user: dict) -> None:
+    final = int(job.get("attempts") or 1) >= int(job.get("max_attempts") or 3)
     try:
-        planner.run_propose_job(save, user)
+        planner.run_propose_job(save, user, final_attempt=final)
         jobs.complete(job["_id"])
+    except planner.PlannerBusy as e:
+        # Gemini is rate limited or overloaded: wait and try again; the last attempt
+        # uses the deterministic fallback so the user still gets a ticket.
+        log.warning("planner busy for %s: %s", save["shortcode"], str(e)[:120])
+        jobs.retry_or_fail(job, str(e), delays=[8, 25])
+        db.saves().update_one({"_id": save["_id"]}, {"$set": {"status": "queued"}})
     except ReelError as e:
         permanent = e.reason in PERMANENT_REASONS
         will_retry = jobs.retry_or_fail(job, str(e), permanent=permanent)
@@ -124,11 +131,6 @@ def main() -> None:
         signal.signal(signal.SIGTERM, lambda *_: stop.set())
     except (AttributeError, ValueError):
         pass
-    if s.planner_mode != "fake":
-        # Probe the model's lowest thinking level now, not inside the first user's 20 seconds.
-        from .. import gemini
-
-        log.info("thinking level for %s: %s", s.gemini_model_fast, gemini.lowest_thinking(s.gemini_model_fast))
     threads = [threading.Thread(target=beat, args=(["propose", "enrich"],), daemon=True)]
     for i in range(max(1, s.worker_propose_threads)):
         threads.append(threading.Thread(target=lane, args=("propose", i + 1), daemon=True))

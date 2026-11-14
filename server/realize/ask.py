@@ -203,7 +203,7 @@ def _run(user: dict, message: str, history: list[dict], emit) -> None:
             lines.append(f"{who}: {str(turn.get('text') or '')[:600]}")
         text = (("Earlier in this chat:\n" + "\n".join(lines) + "\n\nNew message: ") if lines else "") + message[:1000]
         gemini.run_tool_loop(
-            model=s.gemini_model_fast, system=system, history=[gemini.user_step(text)],
+            role="fast", system=system, history=[gemini.user_step(text)],
             tools=tool_defs(), execute=execute, max_turns=5, force_tool="respond",
             force_from_turn=4, timeout_s=TIMEOUT_S)
         ans = state["answer"]

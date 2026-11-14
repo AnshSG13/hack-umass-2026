@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     gemini_model_video: str = ""
     gemini_embed_model: str = ""
     embed_dim: int = 768
+    # Optional, comma separated. Tried in order when the main model answers 429 or 503
+    # (free-tier keys have a small per-model daily quota). Never put a Lite model in the fast list.
+    gemini_model_fast_fallbacks: str = ""
+    gemini_model_video_fallbacks: str = ""
 
     instagram_cookies_path: str = ""
 
@@ -59,6 +63,15 @@ class Settings(BaseSettings):
         if not p.is_absolute():
             p = REPO_ROOT / p
         return p if p.is_file() else None
+
+    def model_chain(self, role: str) -> list[str]:
+        """The model for a role ("fast" or "video") followed by its fallbacks, no duplicates."""
+        if role == "video":
+            first, extra = self.gemini_model_video, self.gemini_model_video_fallbacks
+        else:
+            first, extra = self.gemini_model_fast, self.gemini_model_fast_fallbacks
+        chain = [first] + [m.strip() for m in extra.split(",") if m.strip()]
+        return list(dict.fromkeys(chain))
 
     @property
     def wait_cap(self) -> int:

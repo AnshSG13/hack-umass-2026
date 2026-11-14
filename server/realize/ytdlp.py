@@ -53,7 +53,8 @@ def map_error(message: str) -> str:
 
 def _base_opts(tmp: str) -> dict:
     global _logged_no_cookies
-    opts: dict = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 15}
+    opts: dict = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 15,
+                  "noprogress": True}
     cookies = get_settings().cookies_file
     if cookies:
         # yt-dlp writes cookies back, threads must not share a file, and the

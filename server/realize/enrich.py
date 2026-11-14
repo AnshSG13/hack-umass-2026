@@ -81,10 +81,10 @@ def analyze_video(path: str, caption: str) -> tuple[dict, str | None]:
     f = gemini.upload_video(path)
     try:
         result = gemini.generate_json(
-            model=s.gemini_model_video,
+            role="video",
             input=[{"type": "video", "uri": f.uri, "mime_type": f.mime_type or "video/mp4"},
                    {"type": "text", "text": PROMPT.format(caption=(caption or "")[:3000])}],
-            schema=ENRICH_SCHEMA, timeout_s=180, thinking="low")
+            schema=ENRICH_SCHEMA, timeout_s=180, thinking="low", retries=2)
     except Exception:
         gemini.delete_file(f.name)
         raise

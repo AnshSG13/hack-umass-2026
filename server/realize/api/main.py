@@ -19,18 +19,6 @@ app.include_router(plans.router)
 
 
 
-@app.on_event("startup")
-def _warm_up() -> None:
-    """Probe the fast model's thinking level off the request path, so the first
-    sample save doesn't spend its 10 seconds on it."""
-    s = get_settings()
-    if s.planner_mode != "fake" and s.gemini_api_key:
-        from .. import gemini
-        from .deps import background
-
-        background.submit(gemini.lowest_thinking, s.gemini_model_fast)
-
-
 # Sections 6 and 7: these two always answer HTTP 200 so the Shortcut can show the message.
 _SOFT = ("/api/save",)
 

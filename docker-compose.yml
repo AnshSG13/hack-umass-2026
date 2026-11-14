@@ -1,0 +1,33 @@
+services:
+  api:
+    build: ./server
+    command: uvicorn realize.api.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*
+    env_file: .env
+    restart: unless-stopped
+  worker:
+    build: ./server
+    command: python -m realize.worker
+    env_file: .env
+    environment:
+      WORKER_ID: vultr-1
+    volumes:
+      - ./secrets:/secrets:ro
+    restart: unless-stopped
+  web:
+    build: ./web
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    ports: ["80:80", "443:443", "443:443/udp"]
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api, web]
+    restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:

@@ -55,10 +55,10 @@ def complete(job_id: ObjectId) -> None:
         {"$set": {"status": "done", "locked_by": None, "locked_until": None, "updated_at": now_utc()}})
 
 
-def retry_or_fail(job: dict, error: str, permanent: bool = False) -> bool:
+def retry_or_fail(job: dict, error: str, permanent: bool = False, delays: list[int] | None = None) -> bool:
     """Schedule a retry with backoff, or mark the job failed. Returns True if it will retry."""
     now = now_utc()
-    backoff = BACKOFF[job["kind"]]
+    backoff = delays or BACKOFF[job["kind"]]
     attempt = int(job.get("attempts") or 1)
     if not permanent and attempt < int(job.get("max_attempts") or 3):
         delay = backoff[min(attempt - 1, len(backoff) - 1)]

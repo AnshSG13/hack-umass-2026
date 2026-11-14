@@ -35,8 +35,9 @@ concrete plan that fits their week. They confirm or decline; you never act yours
    on-screen text says. Never invent quantities, prices, dates, names or places. If the caption is
    unrelated to the video ("follow for part 2", lyrics, only hashtags), set caption_sufficient
    to false and keep fields minimal.
-3. Call search_saves with a short description to see whether they saved something similar.
-   For recipe, workout and place, call find_free_slot. You may call both in the same turn.
+3. The app has already called search_saves and find_free_slot with default arguments; the
+   results are under SIMILAR SAVES and FREE SLOTS. Call those tools yourself only when you need
+   a different search, window or duration (a long recipe that needs a weekend slot).
 4. Call propose_plan exactly once.
    - recipe, workout, place: every option start must be one of the slots find_free_slot returned.
      Prefer the first slot unless the content suggests otherwise (a long weekend recipe fits a
@@ -58,6 +59,11 @@ DEFAULT_QUESTION = {
     "event": "Go to this?", "product": "Look into this?", "tip": "Come back to this?",
     "other": "Keep this one?",
 }
+
+
+class PlannerBusy(Exception):
+    """Gemini is rate limited or overloaded. The propose job retries later instead of
+    settling for the deterministic fallback on the first attempt."""
 
 
 def system_prompt() -> str:
@@ -131,7 +137,44 @@ def upcoming_lines(user: dict, now: datetime) -> list[str]:
     return out
 
 
-def build_message(user: dict, save: dict, now: datetime, with_enrichment: bool) -> str:
+def precompute(save: dict, user: dict, now: datetime, run: Run, with_enrichment: bool) -> dict:
+    """Run search_saves and find_free_slot in code before the first model turn.
+
+    Measured on the free-tier key: one extra model turn costs 4 to 9 seconds, which a
+    Shortcut waiting 20 seconds can't spare. The model still has both tools and can
+    call them again with other arguments. Both calls are recorded as agent steps.
+    """
+    tz = tz_of(user)
+    similar: list[dict] = []
+    others = db.saves().count_documents({"user_id": user["_id"], "_id": {"$ne": save["_id"]},
+                                         "status": {"$in": search.SEARCHABLE}}, limit=1)
+    query = " ".join(((save.get("title") or "") + " " + (save.get("summary") or "")
+                      if with_enrichment and save.get("title") else (save.get("caption") or "")).split())[:300]
+    with run.step("search_saves", {"query": query, "limit": 3}) as h:
+        if others and query:
+            try:
+                docs, _ = search.hybrid_search(user["_id"], query, limit=4)
+            except Exception as e:  # noqa: BLE001 - similar saves are a nice-to-have
+                log.warning("similar-saves search failed: %s", str(e)[:120])
+                docs = []
+            docs = [d for d in docs if d["_id"] != save["_id"]][:3]
+            pmap = {p["save_id"]: p["status"] for p in db.plans().find(
+                {"save_id": {"$in": [d["_id"] for d in docs]}}, {"save_id": 1, "status": 1})} if docs else {}
+            similar = [{"save_id": str(d["_id"]), "title": d.get("title"), "type": d.get("type"),
+                        "saved_on": month_day(as_utc(d["created_at"]).astimezone(tz)),
+                        "plan_status": pmap.get(d["_id"])} for d in docs]
+        h["result"] = similar
+    found: dict[str, list[dict]] = {}
+    with run.step("find_free_slot", {"kind": "recipe, workout, place"}) as h:
+        accepted = slots.load_accepted(user["_id"])
+        for kind in SLOT_KINDS:
+            found[kind] = slots.find_free_slot(user, kind, now=now, accepted=accepted)
+        h["result"] = {k: [slots.public_slot(x) for x in v[:3]] for k, v in found.items()}
+    return {"similar": similar, "slots": found}
+
+
+def build_message(user: dict, save: dict, now: datetime, with_enrichment: bool,
+                  pre: dict | None = None) -> str:
     tz = tz_of(user)
     now_l = as_utc(now).astimezone(tz)
     up = upcoming_lines(user, now)
@@ -159,6 +202,14 @@ def build_message(user: dict, save: dict, now: datetime, with_enrichment: bool) 
         lines.append(f'TRANSCRIPT: """{(save.get("transcript_text") or "")[:6000]}"""')
         lines.append("ON SCREEN: " + (" | ".join(save.get("on_screen_text") or [])[:1500] or "none"))
         lines.append("VISUAL: " + (save.get("visual_summary") or "none")[:1200])
+    if pre is not None:
+        lines.append("SIMILAR SAVES (search_saves, already run):")
+        lines += [f"- {x['save_id']} | {x['type']} | {x['title']} | saved {x['saved_on']} | plan: {x['plan_status'] or 'none'}"
+                  for x in pre["similar"]] or ["- none"]
+        lines.append("FREE SLOTS (find_free_slot, already run with default settings):")
+        for kind in SLOT_KINDS:
+            opts = ", ".join(f"{x['start_local']} ({x['big_time']})" for x in pre["slots"].get(kind, [])[:4])
+            lines.append(f"- {kind}: {opts or 'none free in the next 14 days'}")
     return "\n".join(lines)
 
 
@@ -289,7 +340,7 @@ def fake_plan(save: dict, user: dict) -> dict:
 
 def run_planner(save: dict, user: dict, *, run_kind: str = "propose", with_enrichment: bool = False,
                 timeout_s: float = PROPOSE_TIMEOUT_S, cached_plan: dict | None = None,
-                on_step=None, run: Run | None = None) -> tuple[dict, str]:
+                on_step=None, run: Run | None = None, raise_busy: bool = False) -> tuple[dict, str]:
     """Run the planner agent. Always returns a plan; the second value is the run status
     (done or fallback)."""
     s = get_settings()
@@ -338,14 +389,20 @@ def run_planner(save: dict, user: dict, *, run_kind: str = "propose", with_enric
         return {"error": f"unknown tool {name}"}, False
 
     try:
+        pre = precompute(save, user, now, run, with_enrichment)
+        for found in pre["slots"].values():
+            state["slots"] += found
         image = thumbs.get_bytes(save.get("thumb_id"))
-        history = [gemini.user_step(build_message(user, save, now, with_enrichment), image)]
+        history = [gemini.user_step(build_message(user, save, now, with_enrichment, pre), image)]
         gemini.run_tool_loop(
-            model=s.gemini_model_fast, system=system_prompt(), history=history, tools=tool_defs(),
+            role="fast", system=system_prompt(), history=history, tools=tool_defs(),
             execute=execute, max_turns=4, force_tool="propose_plan", force_from_turn=3,
             timeout_s=timeout_s)
         if state["plan"] is None:
             raise RuntimeError("planner finished without calling propose_plan")
+        used = gemini.last_model.get("fast")
+        if used and used != s.gemini_model_fast:
+            db.agent_runs().update_one({"_id": run.id}, {"$set": {"model": used}})
         run.finish("done")
         return state["plan"], "done"
     except Exception as e:  # noqa: BLE001 - any failure falls back; the user still gets a ticket
@@ -353,6 +410,9 @@ def run_planner(save: dict, user: dict, *, run_kind: str = "propose", with_enric
         if state["plan"] is not None:
             run.finish("done")
             return state["plan"], "done"
+        if raise_busy and isinstance(e, (gemini.RateLimited, gemini.Unavailable)):
+            run.finish("failed", str(e))
+            raise PlannerBusy(str(e)[:300]) from e
         fresh = db.saves().find_one({"_id": save["_id"]}) or save
         plan = cached_plan_fallback(fresh, user, cached_plan) if cached_plan else fallback_plan(fresh, user)
         run.finish("fallback", str(e))
@@ -362,8 +422,9 @@ def run_planner(save: dict, user: dict, *, run_kind: str = "propose", with_enric
 # ---------- propose job (worker, propose lane) ----------
 
 
-def run_propose_job(save: dict, user: dict) -> None:
-    """Steps 1 to 5 of SPEC 8.1. Raises ReelError (from ytdlp) on read failures."""
+def run_propose_job(save: dict, user: dict, final_attempt: bool = True) -> None:
+    """Steps 1 to 5 of SPEC 8.1. Raises ReelError (from ytdlp) on read failures and
+    PlannerBusy when Gemini is rate limited and another attempt is still allowed."""
     from . import ytdlp  # only the worker reaches Instagram
 
     sid = save["_id"]
@@ -384,7 +445,8 @@ def run_propose_job(save: dict, user: dict) -> None:
     db.saves().update_one({"_id": sid}, {"$set": update})
     save = {**save, **update}
 
-    run_planner(save, user, run_kind="propose", timeout_s=PROPOSE_TIMEOUT_S, run=meta_run)
+    run_planner(save, user, run_kind="propose", timeout_s=PROPOSE_TIMEOUT_S, run=meta_run,
+                raise_busy=not final_attempt)
 
     # The plan is ready: flip to planned first so a waiting Shortcut gets its menu
     # without also waiting on the embedding call, then file the caption-level vector.
