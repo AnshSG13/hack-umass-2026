@@ -13,3 +13,17 @@ venv/
 # Node
 node_modules/
 .next/
+*.egg-info/
+.pytest_cache/
+
+# Build output and media never committed
+screenshots/
+*.mp4
+*.mov
+*.webm
+reels/
+web/out/
+web/.next/
+*.tsbuildinfo
+.claude/launch.json
+.claude/settings.local.json

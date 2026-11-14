@@ -1,0 +1,17 @@
+url,expected_type,sample,featured,why_chosen
+https://www.instagram.com/reel/DfYi19kRNT0/,recipe,yes,yes,Full ingredient list and steps in the caption (Greek yogurt tiramisu)
+https://www.instagram.com/reel/DfTLDelM0PL/,recipe,yes,yes,Recipe is in the video and not the caption (chicken au poivre)
+https://www.instagram.com/reel/Dfs7pYmMFOy/,recipe,yes,no,Short caption recipe (chickpea curry)
+https://www.instagram.com/reel/Dfiz45_R-M_/,recipe,yes,no,Sponsored recipe with a long caption (pomegranate brie bites)
+https://www.instagram.com/reel/Dfdq6Vvjm1U/,event,yes,yes,Event with explicit dates in the caption (Carrie: The Musical on Nov 13 and 14)
+https://www.instagram.com/reel/Dfppln1HOfa/,event,yes,no,Event with a date range and venue (Holiday Train Show from Nov 14)
+https://www.instagram.com/reel/DfmpjJVNa85/,place,yes,yes,Named restaurant with neighborhood (Somssi)
+https://www.instagram.com/reel/DfkgVpfAb1S/,place,yes,no,Destination with no fixed date (Rockaway Hotel winter pool house)
+https://www.instagram.com/reel/DfkqMXeyo3S/,workout,yes,yes,Light weight sculpt workout shown in the video
+https://www.instagram.com/reel/DfiT7-QxmY-/,workout,yes,no,20 minute walking cardio workout
+https://www.instagram.com/reel/Dfik_KdjOO5/,product,yes,yes,Tested product roundup (curling irons)
+https://www.instagram.com/reel/DffyhrWijBQ/,product,yes,no,Product comparison with prices (rolling tote bag)
+https://www.instagram.com/reel/DfYBJN-yVsl/,tip,yes,yes,Advice with a long explanatory caption (exercise and focus)
+https://www.instagram.com/reel/DfVopoLoTbN/,tip,yes,no,Speech only: one line caption and the advice is spoken
+https://www.instagram.com/reel/DfqZ2hUzlea/,other,yes,yes,Animal meme with nothing to do
+https://www.instagram.com/reel/Dfq1HqRsMUn/,other,yes,no,Animal meme with nothing to do
