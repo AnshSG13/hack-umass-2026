@@ -13,6 +13,8 @@ Read SPEC.md and DESIGN.md before any change. SPEC.md wins on behavior, DESIGN.m
 - mongodb-search-and-ai: Vector Search, Atlas Search, $rankFusion.
 - frontend-design: all UI work. DESIGN.md overrides its aesthetic defaults.
 - webapp-testing: screenshots at 390x844 and 1440x900 at the end of every phase that touches UI.
+- beli-inspired-ui: the look the owner asked for on 2026-11-14 ("aesthetic like Beli"). Read it before designing or restyling a screen. No restyle until the owner says go.
+- web-design-guidelines: a review pass on changed UI files (accessibility, focus, forms, touch, safe areas) before UI work is called done.
 
 ## Rules
 - No hardcoded secrets, keys, URLs or model names. Server reads everything through server/realize/config.py; the web app reads runtime values from GET /api/config.
