@@ -1,9 +1,9 @@
 "use client";
 
-// Price research for a product reel, run only when asked. The server searches big stores,
-// brands' own sites and review sites, and drops any price from a site it doesn't know.
+// Price research for a product reel, run only when asked. The server searches stores big and
+// small, brands' own sites and review sites, and drops coupon sites and anything that looks unsafe.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { Icon } from "@/components/icons";
 import { api, ApiError, fetcher } from "@/lib/api";
@@ -29,7 +29,7 @@ function Offer({ o, best }: { o: ShopOffer; best?: boolean }) {
   );
 }
 
-export function ShopResearch({ saveId, settled }: { saveId: string; settled: boolean }) {
+export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; settled: boolean; go?: number }) {
   const key = `/api/saves/${saveId}/shop`;
   const { data, mutate } = useSWR<{ shop: Shop | null }>(settled ? key : null, fetcher, {
     refreshInterval: (latest) => (latest?.shop?.status === "building" ? 2500 : 0),
@@ -52,10 +52,21 @@ export function ShopResearch({ saveId, settled }: { saveId: string; settled: boo
     }
   }
 
+  // The action's "Check prices": run it once data has loaded and nothing is there yet.
+  const handled = useRef(0);
+  useEffect(() => {
+    if (go === 0 || go === handled.current || data === undefined) return;
+    handled.current = go;
+    // A one-off command from the action button (a prop bump), not state syncing.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!data.shop && !starting) void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [go, data]);
+
   if (!settled) return null;
 
   return (
-    <section className="sec" aria-labelledby="shop-h">
+    <section className="sec" id="shop" aria-labelledby="shop-h">
       <div className="sec-head">
         <h2 className="sec-title" id="shop-h">
           Best price
@@ -70,7 +81,7 @@ export function ShopResearch({ saveId, settled }: { saveId: string; settled: boo
 
       {!shop && !building && (
         <div className="shop-ask">
-          <p>Find where to buy this for less. It looks at big stores, the brand&apos;s own site and review sites, and skips sites we don&apos;t know.</p>
+          <p>Find where to buy this for less. It looks at the brand&apos;s own site, real stores big and small, and review sites, and skips coupon sites and anything that looks unsafe.</p>
           <button type="button" className="btn btn-primary btn-block" onClick={() => void run()}>
             <Icon name="search" />
             Find the best price
@@ -108,11 +119,11 @@ export function ShopResearch({ saveId, settled }: { saveId: string; settled: boo
       {shop?.status === "ready" && !building && (
         <>
           {shop.offers.length === 0 ? (
-            <p className="msg">No prices from stores we know turned up. Try again later, or open the reel for where they bought it.</p>
+            <p className="msg">No prices from a store we could check turned up. Try again later, or open the reel for where they bought it.</p>
           ) : (
             <>
               {(() => {
-                // One highlighted: the lowest trusted price for what the reel shows. Then
+                // One highlighted: the lowest kept price for what the reel shows. Then
                 // the rest, cheapest first.
                 const same = shop.offers.filter((o) => !o.alternative).sort((a, b) => a.price - b.price);
                 const [top, ...rest] = same;
@@ -153,7 +164,7 @@ export function ShopResearch({ saveId, settled }: { saveId: string; settled: boo
           )}
           <p className="nut-note">
             Checked {shop.checked_on}. Prices change; the store&apos;s page has the current one.
-            {shop.dropped > 0 ? ` ${plural(shop.dropped, "price", "prices")} from sites we don't know ${shop.dropped === 1 ? "was" : "were"} left out.` : ""}
+            {shop.dropped > 0 ? ` ${plural(shop.dropped, "price", "prices")} ${shop.dropped === 1 ? "was" : "were"} left out: no readable price, or a coupon site or one that looked unsafe.` : ""}
           </p>
         </>
       )}

@@ -26,7 +26,7 @@ from bson import ObjectId
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from . import actions, board, db, gemini, planops, slots, tickets
+from . import actions, board, db, gemini, intent, planops, slots, tickets
 from .models import AISLES
 
 # Bundles whose Start books times on the week. Recipes don't: a saved recipe is cooked
@@ -36,7 +36,11 @@ from .timeutil import as_utc, big_time, long_day, now_utc, tz_of
 
 log = logging.getLogger("realize.bundles")
 
-TYPES = ["recipe", "workout", "place", "product"]   # the order they are offered in
+# One action per reel is the rule. Saves are grouped only when doing them together is the
+# point: product reels in the same sub-category (three curling irons) become one comparison.
+# Recipes, workouts, places and events are never merged; each gets its own action.
+TYPES = ["product"]
+GROUP_BY_SUBCATEGORY = {"product"}
 MIN_SAVES = 2
 MAX_SAVES = 4
 POOL = 8                    # newest saves of a type considered for one bundle
@@ -60,7 +64,7 @@ WORDS = {
     "place": {"one": "place", "many": "places", "title": "{n} places to go",
               "blurb": "The places you saved, on your free days.",
               "done": "{n} outings added."},
-    "product": {"one": "reel", "many": "reels", "title": "Your product saves, compared",
+    "product": {"one": "reel", "many": "reels", "title": "Compare {n} product picks",
                 "blurb": "Everything those reels recommended, side by side.",
                 "done": ""},
 }
@@ -68,8 +72,8 @@ WORDS = {
 POLISH_PROMPT = """You name small plans inside Realize, an app that turns saved reels into plans.
 Below are {n} {type} reels one person saved. Code has already grouped them. Write the words.
 
-- title: what this group is, in at most 30 characters. Specific to these reels ("Thai week",
-  "Three one-pan dinners", "Legs and core"). Not generic ("Meal plan", "Workout plan").
+- title: a call to action for what is ready, in at most 30 characters, verb first and specific
+  to these reels ("Compare 3 curling irons", "Pick your next serum"). Not generic ("Products").
 - blurb: one sentence, at most 100 characters, about what doing these together gets them.
 - order: the save_ids in the order to do them (easiest or quickest first). Use every id once.
 - notes: for each save_id, at most 60 characters on why it sits where it does or what to know
@@ -214,6 +218,14 @@ def _candidates(user: dict) -> dict[str, list[dict]]:
             free = [d for d in free if actions.ingredients(d.get("fields"))] or free
         if t == "product":
             free = [d for d in free if ((d.get("fields") or {}).get("product") or {}).get("items")]
+        if t in GROUP_BY_SUBCATEGORY:
+            # The biggest group of saves that share a sub-category; unrelated saves stay apart.
+            groups: dict[str, list[dict]] = {}
+            for d in free:
+                sub = str(d.get("subcategory") or "").strip().lower()
+                if sub:
+                    groups.setdefault(sub, []).append(d)
+            free = max(groups.values(), key=len) if groups else []
         if len(free) >= MIN_SAVES:
             out[t] = free[:MAX_SAVES]
     return out
@@ -224,6 +236,8 @@ def ensure(user: dict) -> list[ObjectId]:
     Returns the ids of bundles that still want their words from the model."""
     found = _candidates(user)
     want_polish: list[ObjectId] = []
+    # Bundles of types no longer grouped (dinners, training weeks, outings) leave the list.
+    db.bundles().delete_many({"user_id": user["_id"], "status": "ready", "type": {"$nin": TYPES}})
     for t in TYPES:
         ready = list(db.bundles().find({"user_id": user["_id"], "type": t, "status": "ready"}))
         docs = found.get(t)
@@ -396,14 +410,46 @@ def view(bundle: dict, user: dict, *, full: bool = False) -> dict:
     return out
 
 
+SINGLES_MAX = 10
+# Saves whose plan was answered (on the calendar, done, skipped, or "just save it") are not
+# offered again as ready.
+ANSWERED = ("accepted", "done", "skipped", "declined")
+
+
+def singles(user: dict, exclude: set) -> list[dict]:
+    """One action per reel, newest first: what is ready for each save that hasn't been acted
+    on. The words are the plan's action (the model's call to action, checked by code)."""
+    docs = list(db.saves().find(
+        {"user_id": user["_id"], "status": {"$in": ["planned", "enriching", "ready"]},
+         "type": {"$in": [t for t in intent.DEFAULT_DELIVER if t != "other"]}},
+        {"embedding": 0, "transcript": 0, "transcript_text": 0}).sort("created_at", -1).limit(40))
+    docs = [d for d in docs if d["_id"] not in exclude]
+    plans = {p["save_id"]: p for p in db.plans().find(
+        {"user_id": user["_id"], "save_id": {"$in": [d["_id"] for d in docs]}})} if docs else {}
+    out = []
+    for s in docs:
+        plan = plans.get(s["_id"])
+        if plan and plan.get("status") in ANSWERED:
+            continue
+        a = intent.view(plan, s)
+        if not a or a["deliver"] == "keep":
+            continue
+        out.append({"save_id": str(s["_id"]), "type": s.get("type"), "title": s.get("title") or "Saved reel",
+                    "thumb_url": tickets.thumb_url(s), "meta": board.meta_line(s), **a})
+        if len(out) >= SINGLES_MAX:
+            break
+    return out
+
+
 def listing(user: dict) -> dict:
-    ready = list(db.bundles().find({"user_id": user["_id"], "status": "ready"}))
+    ready = list(db.bundles().find({"user_id": user["_id"], "status": "ready", "type": {"$in": TYPES}}))
     ready.sort(key=lambda b: TYPES.index(b["type"]))
     since = now_utc() - timedelta(days=STARTED_DAYS)
     started = list(db.bundles().find({"user_id": user["_id"], "status": "started",
                                       "started_at": {"$gte": since}}).sort("started_at", -1).limit(6))
-    views = [view(b, user) for b in ready]
-    return {"ready": [v for v in views if len(v["items"]) >= MIN_SAVES],
+    views = [v for v in (view(b, user) for b in ready) if len(v["items"]) >= MIN_SAVES]
+    grouped = {db.oid(i["save_id"]) for v in views for i in v["items"]}
+    return {"ready": views, "actions": singles(user, grouped),
             "started": [view(b, user) for b in started]}
 
 

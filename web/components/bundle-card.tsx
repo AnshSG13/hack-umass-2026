@@ -10,8 +10,8 @@ import { Icon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { useRefresh } from "@/lib/hooks";
-import { kindOf, tint } from "@/lib/kinds";
-import type { Bundle, BundlesResponse } from "@/lib/types";
+import { actionHref, DELIVERY, kindOf, tint } from "@/lib/kinds";
+import type { Bundle, BundlesResponse, ReadyAction } from "@/lib/types";
 
 /** The list of bundles. Asked again every few seconds while a new one's words are being written. */
 export function useBundles(enabled = true) {
@@ -99,6 +99,58 @@ export function BundleCard({
         )}
       </div>
     </article>
+  );
+}
+
+/** Home's gallery tile: the plan's reels fill the tile, title and timing below. Opens the
+ *  plan's page, where Start lives. Set apart from the tinted taste tiles on purpose. */
+export function ReadyTile({ bundle }: { bundle: Bundle }) {
+  const kind = kindOf(bundle.type);
+  const shots = bundle.thumbs.slice(0, 3);
+  return (
+    <Link href={`/b/${bundle.id}`} className="rtile" style={kind ? tint(kind.color) : undefined}>
+      <span className={`rtile-media n${Math.max(shots.length, 1)}`} aria-hidden="true">
+        {shots.length > 0 ? (
+          shots.map((u, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={u + i} src={u} alt="" loading="lazy" />
+          ))
+        ) : (
+          <span className="rtile-empty">{kind && <Icon name={kind.icon} />}</span>
+        )}
+        <span className="rtile-kind">
+          {kind && <Icon name={kind.icon} />}
+          {bundle.count_label}
+        </span>
+      </span>
+      <span className="rtile-title">{bundle.title}</span>
+      <span className="rtile-meta">{bundle.first_when ? `Starts ${bundle.first_when}` : bundle.cta}</span>
+    </Link>
+  );
+}
+
+/** One reel's action in the gallery: the reel fills the tile, the pill says what is ready
+ *  (cook mode, prices, an itinerary), the caption is the call to action. */
+export function ActionTile({ item }: { item: ReadyAction }) {
+  const kind = kindOf(item.type);
+  const d = DELIVERY[item.deliver];
+  return (
+    <Link href={actionHref(item.save_id, item.deliver)} className="rtile" style={kind ? tint(kind.color) : undefined}>
+      <span className="rtile-media n1" aria-hidden="true">
+        {item.thumb_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.thumb_url} alt="" loading="lazy" />
+        ) : (
+          <span className="rtile-empty">{kind && <Icon name={kind.icon} />}</span>
+        )}
+        <span className="rtile-kind">
+          <Icon name={d.icon} />
+          {d.label}
+        </span>
+      </span>
+      <span className="rtile-title">{item.cta}</span>
+      <span className="rtile-meta">{item.title}</span>
+    </Link>
   );
 }
 

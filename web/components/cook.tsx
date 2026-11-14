@@ -20,12 +20,15 @@ export function CookCard({
   steps,
   onCook,
   onShop,
+  headline,
 }: {
   minutes?: number;
   ingredients: number;
   steps: number;
   onCook: () => void;
   onShop: () => void;
+  /** The action's call to action ("Cook this tiramisu tonight"). */
+  headline?: string;
 }) {
   const bits = [
     minutes ? (minutes >= 90 ? `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60} min` : ""}` : `${minutes} min`) : null,
@@ -36,8 +39,9 @@ export function CookCard({
     <section className="cook-card" aria-label="Cook this">
       <p className="cook-kicker">
         <Icon name="food" />
-        Ready when you are
+        Cook mode
       </p>
+      <p className="action-cta">{headline || "Let's cook this"}</p>
       {bits.length > 0 && <p className="cook-facts">{bits.join(" · ")}</p>}
       <div className="cook-btns">
         <button type="button" className="btn btn-primary" onClick={onCook} disabled={steps === 0 && ingredients === 0}>

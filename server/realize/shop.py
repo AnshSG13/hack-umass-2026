@@ -2,9 +2,13 @@
 from stores people trust. Runs only when the person asks for it.
 
 Gemini searches the web and reports prices with the page each came from. Code decides what
-is shown: a price is kept only when the page it came from is a well-known store, a known
-review site, or the brand's own site, and only when a dollar amount can be read from it.
-Everything else is dropped, so a price never comes from a site nobody has heard of.
+is shown: a price is kept only when a dollar amount can be read from it and the page it came
+from passes `source_of`. Any ordinary store or brand site passes, big or small (a specialist
+paddle maker counts as much as Target). What is dropped is what a careful shopper would skip:
+coupon and deal aggregators, marketplaces of unknown sellers, social posts, link shorteners,
+plain http, bare IP addresses, lookalike hosts and domain endings mostly used for spam.
+Well-known stores and review sites keep their familiar names; any other site shows its own
+domain, so the person always sees where a price came from.
 """
 from __future__ import annotations
 
@@ -45,14 +49,42 @@ REVIEWS = {
     "travelandleisure.com": "Travel + Leisure", "cntraveler.com": "Condé Nast Traveler",
 }
 
+# Never a source of a price: deal and coupon aggregators, cashback portals, marketplaces of
+# unknown third-party sellers, social and forum posts, link shorteners, search redirects.
+BLOCKED = {
+    "retailmenot.com", "slickdeals.net", "joinhoney.com", "honey.com", "rakuten.com", "groupon.com",
+    "dealnews.com", "couponfollow.com", "knoji.com", "dontpayfull.com", "capitaloneshopping.com",
+    "coupons.com", "offers.com", "dealspotr.com", "wethrift.com", "couponbirds.com", "savings.com",
+    "aliexpress.com", "alibaba.com", "temu.com", "wish.com", "dhgate.com", "banggood.com",
+    "reddit.com", "facebook.com", "instagram.com", "tiktok.com", "youtube.com", "pinterest.com",
+    "x.com", "twitter.com", "quora.com", "medium.com",
+    "bit.ly", "tinyurl.com", "t.co", "goo.gl", "linktr.ee", "amzn.to",
+    "vertexaisearch.cloud.google.com",
+}
+# Domain endings that are mostly spam or throwaway shops.
+RISKY_TLDS = {
+    "xyz", "top", "icu", "buzz", "click", "cfd", "sbs", "monster", "cyou", "quest", "bond", "biz",
+    "loan", "work", "gq", "ml", "tk", "ga", "cf", "zip", "mov", "country", "kim", "rest", "lol",
+}
+# Words in a host name that say "deal site" or "fake", not "store".
+RISKY_WORDS = ("coupon", "promocode", "promo-code", "deals", "cheap", "replica", "knockoff", "discount-")
+IP_HOST = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$|:")
+
+
+def _matches(h: str, dom: str) -> bool:
+    return h == dom or h.endswith("." + dom)
+
+
 PRICE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)")
 
 RESEARCH_PROMPT = """Someone saved an Instagram reel about these products and wants to buy one at a good price.
 {products}
 
-Use Google Search. Look only at major US retailers (Amazon, Target, Walmart, Best Buy, Costco, Sephora,
-Ulta, Home Depot and stores like them), the brand's own website, and established review sites. Ignore
-coupon sites, unknown shops, marketplaces of unknown sellers and anything that looks unsafe.
+Use Google Search. Look at the brand's own website, established retailers big or small (including
+specialist stores for this kind of product, like a sports, outdoor or beauty shop), and review sites.
+A store does not need to be famous; it needs to be a real business selling the real product. Skip
+coupon and deal sites, marketplaces of unknown third-party sellers, social posts, knockoffs and anything
+that looks unsafe. Prefer pages that show the price directly.
 
 Report short factual lines, one per price found, in this form:
 PRODUCT | STORE | PRICE | what is notable (sale, size, bundle, refurbished)
@@ -87,21 +119,39 @@ def host(url: str) -> str:
     return h[4:] if h.startswith("www.") else h
 
 
-def trusted(url: str, brands: list[str]) -> str | None:
-    """The name to show for a source we trust, or None. A brand's own site counts when
-    the host carries the brand's name (dyson.com for Dyson)."""
-    h = host(url)
-    if not h:
+def source_of(url: str, brands: list[str]) -> tuple[str, str] | None:
+    """(name to show, kind) for a page a price may come from, or None to drop it.
+    kind is "store", "review", "brand" or "site" (any other credible-looking shop)."""
+    try:
+        scheme = (urlparse(url).scheme or "").lower()
+    except ValueError:
         return None
-    for table in (STORES, REVIEWS):
+    h = host(url)
+    if scheme != "https" or not h or "." not in h or IP_HOST.search(h) or h.startswith("xn--") or ".xn--" in h:
+        return None
+    for table, kind in ((STORES, "store"), (REVIEWS, "review")):
         for dom, name in table.items():
-            if h == dom or h.endswith("." + dom):
-                return name
+            if _matches(h, dom):
+                return name, kind
+    if any(_matches(h, dom) for dom in BLOCKED):
+        return None
+    # A familiar store's name followed by more labels is a lookalike (amazon.com.deals.net).
+    if any(f"{dom}." in h for dom in (*STORES, *REVIEWS)):
+        return None
+    if h.rsplit(".", 1)[-1] in RISKY_TLDS or any(w in h for w in RISKY_WORDS):
+        return None
+    flat = h.replace("-", "").replace(".", "")
     for b in brands:
-        token = re.sub(r"[^a-z0-9]", "", b.lower())
-        if len(token) >= 4 and token in h.replace("-", "").replace(".", ""):
-            return b
-    return None
+        for token in {re.sub(r"[^a-z0-9]", "", b.lower()), *(re.sub(r"[^a-z0-9]", "", w) for w in b.lower().split())}:
+            if len(token) >= 4 and token in flat:
+                return b, "brand"
+    return h, "site"
+
+
+def trusted(url: str, brands: list[str]) -> str | None:
+    """The name to show for a source a price may come from, or None."""
+    got = source_of(url, brands)
+    return got[0] if got else None
 
 
 def parse_price(text: str) -> float | None:
@@ -128,14 +178,14 @@ def keep_offers(raw: list[dict], sources: list[dict], brands: list[str]) -> list
         price = parse_price(str(o.get("price_text") or ""))
         if not src or price is None:
             continue
-        via = trusted(src["url"], brands)
-        if not via:
+        got = source_of(src["url"], brands)
+        if not got:
             continue
+        via, kind = got
         product = " ".join(str(o.get("product") or "").split())[:80]
-        # When the page is a store's own, the price is that store's, whatever the notes said.
-        # From a review site, the store the review names is kept.
-        store = via if via in STORES.values() or via in brands else (
-            " ".join(str(o.get("store") or "").split())[:40] or via)
+        # When the page is a store's or brand's own, the price is that site's, whatever the
+        # notes said. From a review site, the store the review names is kept.
+        store = (" ".join(str(o.get("store") or "").split())[:40] or via) if kind == "review" else via
         key = (product.lower(), store.lower(), price)
         if not product or key in seen:
             continue

@@ -810,7 +810,7 @@ def test_nutrition_drops_impossible_and_made_up_lines():
     assert off["per_serving"]["kcal"] == 4 * 5 + 4 * 10 + 9 * 4
 
 
-# ---------- shopping research: only trusted sources, only readable prices ----------
+# ---------- shopping research: credible sources only, only readable prices ----------
 
 
 def test_only_trusted_sources_count():
@@ -824,11 +824,27 @@ def test_only_trusted_sources_count():
     assert shop.trusted("not a url", []) is None
 
 
+def test_any_credible_store_counts_but_risky_sites_do_not():
+    from realize import shop
+
+    # Smaller real stores and brand sites pass and show their own name or domain.
+    assert shop.source_of("https://www.pickleballcentral.com/paddle", []) == ("pickleballcentral.com", "site")
+    assert shop.source_of("https://joola.com/products/x", ["JOOLA"]) == ("JOOLA", "brand")
+    assert shop.source_of("https://www.selkirk.com/p", ["Selkirk Sport"]) == ("Selkirk Sport", "brand")
+    # Coupon sites, unknown-seller marketplaces, social posts, shorteners, http, IPs, spam endings.
+    for bad in ("https://www.retailmenot.com/view/joola.com", "https://www.aliexpress.com/item/1",
+                "https://www.reddit.com/r/Pickleball/x", "https://bit.ly/abc", "http://smallshop.com/p",
+                "https://192.168.0.1/p", "https://paddles.shop.xyz/p", "https://best-paddle-deals.com/p",
+                "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc", "https://localhost/p"):
+        assert shop.source_of(bad, []) is None, bad
+
+
 def test_offers_keep_only_backed_readable_prices():
     from realize import shop
 
     sources = [{"n": 1, "url": "https://www.target.com/p/1", "title": "t"},
-               {"n": 2, "url": "https://sketchy-store.biz/x", "title": "s"}]
+               {"n": 2, "url": "https://sketchy-store.biz/x", "title": "s"},
+               {"n": 3, "url": "https://www.pickleballcentral.com/p", "title": "p"}]
     raw = [{"product": "Hulken bag", "store": "Target", "price_text": "$79.99", "source": 1, "alternative": False},
            {"product": "Hulken bag", "store": "Target", "price_text": "$79.99", "source": 1, "alternative": False},
            {"product": "Hulken bag", "store": "Sketchy", "price_text": "$20", "source": 2, "alternative": False},
@@ -844,3 +860,49 @@ def test_offers_keep_only_backed_readable_prices():
     # A store's page sets the store name, even when the notes named another.
     moved = shop.keep_offers([{"product": "X", "store": "Walmart", "price_text": "$5", "source": 1, "alternative": False}], sources, [])
     assert moved[0]["store"] == "Target"
+    # A smaller store's page is named by its own domain, not by what the notes claimed.
+    small = shop.keep_offers([{"product": "Paddle", "store": "Amazon", "price_text": "$149.99", "source": 3, "alternative": False}], sources, [])
+    assert small[0]["store"] == "pickleballcentral.com" and small[0]["via"] == "pickleballcentral.com"
+
+
+# ---------- actions: what the person wants from the reel, delivered ----------
+
+
+def test_action_keeps_a_fitting_model_pick_in_its_own_words():
+    from realize import intent
+
+    a = intent.clean({"deliver": "cook", "need": "make this tiramisu", "cta": "Cook this tiramisu tonight!",
+                      "pitch": "7 ingredients — 15 minutes", "schedule": False}, "recipe", is_dated=False)
+    assert a["deliver"] == "cook" and a["cta"] == "Cook this tiramisu tonight" and a["source"] == "model"
+    assert "—" not in a["pitch"] and a["schedule"] is False
+
+
+def test_action_falls_back_when_the_pick_does_not_fit():
+    from realize import intent
+
+    # A product never gets cook mode, and a reminder-ish calendar entry needs a dated event.
+    assert intent.clean({"deliver": "cook", "cta": "x"}, "product", is_dated=False)["deliver"] == "shop"
+    undated = intent.clean({"deliver": "calendar", "cta": "Save the date"}, "event", is_dated=False)
+    assert undated["deliver"] == "itinerary" and undated["source"] == "default"
+    assert intent.clean({"deliver": "calendar"}, "event", is_dated=True)["deliver"] == "calendar"
+    assert intent.clean(None, "tip", is_dated=False)["deliver"] == "learn"
+    assert intent.clean({"deliver": "teleport"}, "other", is_dated=False)["deliver"] == "keep"
+    # schedule only sticks where a set time can mean something
+    assert intent.clean({"deliver": "shop", "schedule": True}, "product", is_dated=False)["schedule"] is False
+    long_cta = intent.clean({"deliver": "shop", "cta": "Compare every single one of these lovely curling irons now"},
+                            "product", is_dated=False)["cta"]
+    assert len(long_cta) <= intent.CTA_MAX and not long_cta.endswith(" ")
+
+
+def test_action_view_defaults_for_old_plans_and_stale_types():
+    from datetime import timedelta
+
+    from realize import intent
+    from realize.timeutil import now_utc
+
+    assert intent.view(None, {"type": "recipe"})["deliver"] == "cook"
+    assert intent.view(None, {"type": None}) is None
+    soon = [{"action": "event", "start_utc": now_utc() + timedelta(days=2)}]
+    assert intent.view({"options": soon}, {"type": "event"})["deliver"] == "calendar"
+    # A stored cook action on a save since moved to products becomes the product default.
+    assert intent.view({"action": {"deliver": "cook", "cta": "Cook it"}}, {"type": "product"})["deliver"] == "shop"

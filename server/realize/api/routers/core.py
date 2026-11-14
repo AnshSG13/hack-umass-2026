@@ -7,12 +7,12 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import accounts, ask, board, db, demo, jobs, planops, ratelimit, search, subcats, thumbs, tickets, visits
+from ... import accounts, ask, board, db, demo, intent, jobs, planops, ratelimit, search, subcats, thumbs, tickets, visits
 from ...config import get_settings
 from ...models import (
     ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
 )
-from ...timeutil import as_utc, now_utc, valid_tz
+from ...timeutil import as_utc, now_utc, tz_of, valid_tz
 from ..deps import client_ip, current_user, optional_user
 
 router = APIRouter()
@@ -183,9 +183,34 @@ def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
     return {"items": items, "mode": mode}
 
 
+@router.get("/api/remember")
+def remember(user: dict = Depends(current_user)) -> dict:
+    """One just-vibes reel saved before today, to bring back on Home: a different one each
+    day, picked in code. Not a reminder; nothing is scheduled."""
+    import hashlib
+    from datetime import datetime as _dt
+
+    tz = tz_of(user)
+    today = now_utc().astimezone(tz).date()
+    start_of_day = _dt.combine(today, _dt.min.time(), tzinfo=tz)
+    docs = list(db.saves().find(
+        {"user_id": user["_id"], "type": "other", "status": {"$in": ["planned", "enriching", "ready"]},
+         "created_at": {"$lt": start_of_day}},
+        {"title": 1, "thumb_id": 1, "created_at": 1}).sort("created_at", -1).limit(60))
+    if not docs:
+        return {"item": None}
+    seed = int(hashlib.sha256(f"{user['_id']}:{today.isoformat()}".encode()).hexdigest()[:8], 16)
+    s = docs[seed % len(docs)]
+    a = intent.view(planops.get_for_save(s["_id"]), {"type": "other"}) or {}
+    line = a.get("cta") if a.get("deliver") == "keep" else None
+    return {"item": {"save_id": str(s["_id"]), "title": s.get("title") or "Saved reel",
+                     "thumb_url": tickets.thumb_url(s), "saved_on": tickets.saved_on(s, user),
+                     "line": line or intent.WORDS["keep"]["cta"], "day": today.isoformat()}}
+
+
 @router.get("/api/chips")
 def chips(user: dict = Depends(current_user)) -> dict:
-    return {"chips": ask.chips(user)}
+    return {"chips": ask.chips(user), "actions": ask.recommended(user)}
 
 
 @router.post("/api/chat")
