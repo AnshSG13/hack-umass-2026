@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Second Brain</title>
+<meta name="theme-color" content="#2F5BFF">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --brand: #2F5BFF; --accent: #FF7A2F; --bg: #F6F7FB; --card: #fff;
+    --text: #151826; --muted: #6B7080; --line: #E4E6EE; --ok: #1E9E62; --err: #D93B3B;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--brand); color: #fff; padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px 22px; }
+  header h1 { margin: 0; font-size: 24px; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+  .token { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; background: rgba(255,255,255,.16); border-radius: 99px; padding: 4px 6px 4px 12px; font-size: 13px; }
+  .token input { width: 90px; border: 0; border-radius: 99px; padding: 4px 10px; font: inherit; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 40px); }
+  .panel { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(20,24,40,.06); }
+  .panel h2 { margin: 0 0 10px; font-size: 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row input { flex: 1 1 200px; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+  button { border: 0; border-radius: 10px; padding: 11px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  .primary { background: var(--accent); color: #fff; }
+  .ghost { background: #EEF1FF; color: var(--brand); }
+  .small { padding: 6px 10px; font-size: 13px; }
+  .banner { border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-weight: 600; }
+  .banner.ok { background: #E3F6EC; color: var(--ok); } .banner.err { background: #FDE8E8; color: var(--err); }
+  .list-head { display: flex; justify-content: space-between; align-items: center; margin: 4px 2px 10px; }
+  .list-head h2 { margin: 0; font-size: 18px; }
+  .list-head label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .reel { display: flex; gap: 12px; align-items: center; background: var(--card); border-radius: 14px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(20,24,40,.06); }
+  .thumb { flex: 0 0 52px; height: 68px; border-radius: 10px; background: linear-gradient(160deg, #833AB4, #E1306C 55%, #F77737); display: grid; place-items: center; color: #fff; font-size: 22px; }
+  .reel .body { flex: 1; min-width: 0; }
+  .reel a { color: var(--text); font-weight: 600; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .pill { border-radius: 99px; padding: 1px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  .s-queued, .s-downloading { background: #FFF1E6; color: #B85412; }
+  .s-processing { background: #EEF1FF; color: var(--brand); }
+  .s-ready { background: #E3F6EC; color: var(--ok); }
+  .x { background: none; color: var(--muted); font-size: 18px; padding: 4px 8px; }
+  .empty { text-align: center; color: var(--muted); padding: 28px 12px; }
+  details { background: var(--card); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(20,24,40,.06); }
+  summary { font-weight: 700; cursor: pointer; }
+  details ol { padding-left: 20px; margin: 10px 0 0; } details li { margin-bottom: 6px; }
+  code { background: #F0F1F6; border-radius: 6px; padding: 1px 6px; font-size: 13px; word-break: break-all; }
+  .err-text { color: var(--err); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Second Brain</h1>
+  <p>Share a reel from Instagram and it lands here.</p>
+  <div class="token">Token <input id="token" aria-label="Your token" autocomplete="off"></div>
+</header>
+
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="panel">
+    <h2>Add a reel</h2>
+    <form id="pasteForm" class="row">
+      <input id="pasteInput" placeholder="Paste an instagram.com/reel/… link" inputmode="url">
+      <button class="primary" type="submit">Save</button>
+    </form>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost small" id="clipBtn" type="button">Paste from clipboard</button>
+      <button class="ghost small" id="testBtn" type="button">Send test share</button>
+    </div>
+    <div id="addError" class="err-text" hidden></div>
+  </section>
+
+  <div class="list-head">
+    <h2>Saved reels (<span id="count">0</span>)</h2>
+    <label><input type="checkbox" id="mineOnly"> Only my token</label>
+  </div>
+  <div id="conn" class="err-text" hidden></div>
+  <div id="list"></div>
+
+  <h2 style="font-size:18px;margin:24px 2px 10px">Set up sharing</h2>
+  <details>
+    <summary>iPhone: Instagram → Share to… → Shortcut</summary>
+    <ol>
+      <li>Open <b>Shortcuts</b>, tap <b>+</b>, add the action <b>Get Contents of URL</b>.</li>
+      <li>URL: <code id="shareUrl"></code></li>
+      <li>Tap <b>Show More</b>: Method <b>POST</b>, Request Body <b>JSON</b>.</li>
+      <li>Add field <code>url</code> → value <b>Shortcut Input</b>. Add field <code>token</code> → <code id="tokenEcho"></code>.</li>
+      <li>Optional: add <b>Show Notification</b> “Saved to your brain”.</li>
+      <li>Tap <b>ⓘ</b>, turn on <b>Show in Share Sheet</b>, accept <b>URLs</b> and <b>Text</b>. Name it “Save to Brain”.</li>
+      <li>In Instagram open a reel → <b>Share</b> → <b>Share to…</b> (or <b>More</b>) → <b>Save to Brain</b>.</li>
+    </ol>
+    <p class="meta" id="addrHint"></p>
+  </details>
+  <details>
+    <summary>Android: install this app → appears in Share menu</summary>
+    <ol>
+      <li>Open this page over <b>HTTPS</b> (run <code>npx ngrok http 3000</code> and use its https URL). Chrome only installs web apps from HTTPS.</li>
+      <li>Chrome menu <b>⋮</b> → <b>Install app</b> (or <b>Add to Home screen</b>).</li>
+      <li>Set your token above once (it's saved as a cookie for shares).</li>
+      <li>In Instagram open a reel → <b>Share</b> → <b>Share via…</b> (or <b>More</b>) → <b>Brain</b>.</li>
+    </ol>
+  </details>
+  <details>
+    <summary>Anywhere: copy link + paste</summary>
+    <ol>
+      <li>In Instagram tap <b>Share</b> → <b>Copy link</b>.</li>
+      <li>Open this page and tap <b>Paste from clipboard</b> (needs HTTPS or localhost) or paste into the box.</li>
+    </ol>
+  </details>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  // ---- token ----
+  const tokenInput = $("token");
+  function setToken(t) {
+    t = (t || "").trim() || "me";
+    tokenInput.value = t;
+    store.set("brain_token", t);
+    document.cookie = `brain_token=${encodeURIComponent(t)}; path=/; max-age=31536000; SameSite=Lax`;
+    $("tokenEcho").textContent = t;
+  }
+  setToken(store.get("brain_token", "me"));
+  tokenInput.addEventListener("change", () => { setToken(tokenInput.value); load(); });
+
+  // ---- setup text ----
+  $("shareUrl").textContent = `${location.origin}/share`;
+  fetch("/config").then((r) => r.json()).then((c) => {
+    if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+      $("addrHint").textContent = c.addresses.length
+        ? `You're on localhost. From the phone use ${c.addresses.map((a) => a + "/share").join(" or ")}`
+        : "";
+      if (c.addresses[0]) $("shareUrl").textContent = `${c.addresses[0]}/share`;
+    }
+  }).catch(() => {});
+
+  // ---- banner after an Android share ----
+  const shared = new URLSearchParams(location.search).get("shared");
+  if (shared) {
+    const b = $("banner");
+    b.hidden = false;
+    b.className = "banner " + (shared === "error" ? "err" : "ok");
+    b.textContent = { saved: "Saved to your brain ✓", duplicate: "Already saved — it's below.", error: "That share had no Instagram link." }[shared] || "";
+    history.replaceState(null, "", "/");
+    setTimeout(() => (b.hidden = true), 4000);
+  }
+
+  // ---- list ----
+  const mineOnly = $("mineOnly");
+  mineOnly.checked = store.get("brain_mine", "0") === "1";
+  mineOnly.addEventListener("change", () => { store.set("brain_mine", mineOnly.checked ? "1" : "0"); load(); });
+
+  const viaLabel = { shortcut: "iPhone Shortcut", "android-share": "Android share", "web-paste": "Pasted", test: "Test" };
+  function ago(iso) {
+    const s = Math.round((Date.now() - new Date(iso)) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) k === "class" ? (n.className = v) : n.setAttribute(k, v);
+    for (const k of kids) n.append(k);
+    return n;
+  }
+
+  let lastJson = "";
+  async function load() {
+    try {
+      const q = mineOnly.checked ? `?token=${encodeURIComponent(tokenInput.value)}` : "";
+      const res = await fetch(`/reels${q}`, { cache: "no-store" });
+      const reels = await res.json();
+      $("conn").hidden = true;
+      const json = JSON.stringify(reels);
+      if (json === lastJson) return;
+      lastJson = json;
+      render(reels);
+    } catch {
+      $("conn").hidden = false;
+      $("conn").textContent = "Can't reach the server. Is node server.js still running?";
+    }
+  }
+
+  function render(reels) {
+    $("count").textContent = reels.length;
+    const list = $("list");
+    list.replaceChildren();
+    if (!reels.length) {
+      list.append(el("div", { class: "empty panel" }, "Nothing yet. Share a reel from Instagram, or tap “Send test share”."));
+      return;
+    }
+    for (const r of reels) {
+      const del = el("button", { class: "x", title: "Remove", "aria-label": "Remove" }, "×");
+      del.onclick = async () => { await fetch(`/reels/${r.id}`, { method: "DELETE" }); load(); };
+      list.append(el("div", { class: "reel" },
+        el("div", { class: "thumb" }, "▶"),
+        el("div", { class: "body" },
+          el("a", { href: r.url, target: "_blank", rel: "noopener" }, r.shortcode ? `Reel ${r.shortcode}` : r.url),
+          el("div", { class: "meta" },
+            el("span", { class: `pill s-${r.status}` }, r.status),
+            `${viaLabel[r.via] || r.via} · ${r.token} · ${ago(r.savedAt)}`)),
+        del));
+    }
+  }
+
+  // ---- add ----
+  async function share(text, via) {
+    $("addError").hidden = true;
+    const res = await fetch("/share", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: text, token: tokenInput.value, via }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      $("addError").hidden = false;
+      $("addError").textContent = data.error || "Couldn't save that.";
+      return false;
+    }
+    load();
+    return true;
+  }
+
+  $("pasteForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (await share($("pasteInput").value, "web-paste")) $("pasteInput").value = "";
+  });
+  $("clipBtn").addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      $("pasteInput").value = text;
+      await share(text, "web-paste");
+    } catch {
+      $("addError").hidden = false;
+      $("addError").textContent = "Clipboard needs HTTPS or localhost. Long-press the box and paste instead.";
+      $("pasteInput").focus();
+    }
+  });
+  $("testBtn").addEventListener("click", () =>
+    share(`https://www.instagram.com/reel/TEST${Math.floor(Math.random() * 1e5)}/`, "test"));
+
+  load();
+  setInterval(load, 3000);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+</script>
+</body>
+</html>
