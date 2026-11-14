@@ -149,6 +149,49 @@ export interface SavePatch {
   note?: string;
 }
 
+// ---- GET, POST, PATCH /api/saves/{id}/trip and POST .../trip/days/{index} ----
+// Every label, time, date and link here is made by the server; the page shows them as sent.
+export interface TripSource { n: number; title: string; url: string }
+export interface TripWeather { text: string; wet: boolean; high: number; low: number; unit: "F" | "C"; rain_chance: number | null }
+export interface TripStop {
+  name: string; from_reel: boolean; kind: string;
+  part: string; // "Morning" | "Midday" | "Afternoon" | "Evening"
+  time: string; // "10 am", a suggested start
+  time_source: TripSource | null; // set when the time is a real start the search found, not a suggestion
+  area: string; what: string;
+  cost: string; cost_source: TripSource | null;
+  hours: string; hours_source: TripSource | null;
+  booking: "none" | "recommended" | "required" | "unknown"; booking_source: TripSource | null;
+  source: TripSource | null; // for a stop that is not from the reel: where it came from
+  maps_url: string; gcal_url: string | null; next_directions_url: string | null;
+}
+export interface TripSourced { text: string; source: TripSource | null }
+export interface TripDayDetail {
+  stops: { name: string; book: string; book_source: TripSource | null; highlights: TripSourced[] }[];
+  eat: { name: string; why: string; near: string; source: TripSource | null; maps_url: string }[];
+  rain: TripSourced | null; around: TripSourced | null;
+}
+export interface TripDay {
+  index: number; date: string; label: string; // "Saturday, Nov 21"
+  title: string; weather: TripWeather | null; stops: TripStop[];
+  detail_status: "none" | "building" | "ready" | "failed"; detail_error: string | null; detail: TripDayDetail | null;
+  ics_url: string; // a calendar file for the whole day
+}
+export interface Trip {
+  id: string; city: string; start_date: string; date_label: string;
+  date_options: { start_date: string; label: string }[]; dates_fixed: boolean;
+  days: TripDay[];
+  stay: { area: string; why: string; source: TripSource | null; maps_url: string } | null;
+  heads_up: TripSourced[];
+  weather_note: string | null; // e.g. "The forecast opens on Nov 27."
+  weather_source: { title: string; url: string } | null;
+  times_note: string; sources: TripSource[];
+}
+export interface TripState {
+  status: "none" | "building" | "ready" | "failed"; can_build: boolean; error: string | null;
+  steps: StepLine[]; trip: Trip | null;
+}
+
 // ---- GET /api/tastes ----
 export interface Taste {
   type: SaveType;

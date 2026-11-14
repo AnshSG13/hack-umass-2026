@@ -1,7 +1,8 @@
 "use client";
 
 // The Reel page, after the mockup: hero, category chip, title, summary, facts, the plan
-// card, actions, your note, what was pulled from the reel, how it was read and planned.
+// card, actions, the trip plan (places and events), your note, what was pulled from the
+// reel, how it was read and planned.
 
 import { useId, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -13,6 +14,7 @@ import { ReelSections } from "@/components/reel-sections";
 import { useApp, useAskStore } from "@/components/shell";
 import { useToast } from "@/components/toast";
 import { SEEDED_SAMPLE_NOTE } from "@/components/trace";
+import { TripPlan } from "@/components/trip-plan";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHead, SheetTitle } from "@/components/ui/sheet";
 import { api, ApiError } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
@@ -448,6 +450,8 @@ export default function ReelPage() {
             Open original
           </a>
         </div>
+
+        <TripPlan saveId={ticket.save_id} type={type} settled={!reading} />
 
         <Note note={note} onSave={saveNote} />
 
