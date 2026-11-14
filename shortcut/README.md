@@ -13,7 +13,7 @@ It posts the reel's link and you are done. The plan waits in the app under Waiti
 3. In Get Contents of URL:
 
    ```
-   URL            http://<YOUR-LAN-IP>:3100/api/save
+   URL            http://<YOUR-LAN-IP>:3200/api/save
    Method         POST
    Headers
       Authorization   Bearer <your key>
@@ -30,7 +30,7 @@ The server reads this request loosely, because it is typed on a phone: field nam
 
 If the Shortcut seems to do nothing, add **Show Result** with **Contents of URL** as its last action to see the server's answer.
 
-**Local testing: point the Shortcut at the API, not at the web server.** Seen on 2026-11-14 with a real iPhone (iOS Shortcuts, `BackgroundShortcutRunner`): the Shortcut's POST to the Next.js server (`:3100/api/save`, which proxies `/api` to the API) came back empty and never reached the API, while Safari on the same phone used that port normally and the same request sent from the laptop went through. The cause is not known. Sent straight to the API it worked first time: the reel was saved, planned in a second and read in 47 seconds. So for local testing run the API where the phone can reach it (`uvicorn realize.api.main:app --host 0.0.0.0 --port 8000`) and use `http://<YOUR-LAN-IP>:8000/api/save` in the Shortcut. A deployed site is not affected: Caddy sends `/api/*` straight to the API.
+**Local testing: point the Shortcut at the API, not at the web server.** Seen on 2026-11-14 with a real iPhone (iOS Shortcuts, `BackgroundShortcutRunner`): the Shortcut's POST to the Next.js server (`:3100/api/save`, which proxies `/api` to the API) came back empty and never reached the API, while Safari on the same phone used that port normally and the same request sent from the laptop went through. The cause is not known. Sent straight to the API it worked first time: the reel was saved, planned in a second and read in 47 seconds. So for local testing give the Shortcut a way straight to the API. Either run the small pass-through, `python -m scripts.phone_door` from `server/`, and use `http://<YOUR-LAN-IP>:3200/api/save` (it also prints every request it gets, which shows what the Shortcut really sends); or start the API with `--host 0.0.0.0` and use `http://<YOUR-LAN-IP>:8000/api/save`. A deployed site is not affected: Caddy sends `/api/*` straight to the API.
 
 What changed from the prototype: the path is `/api/save` instead of `/share`, the body field is `input` instead of `url`, and the key goes in the `Authorization` header instead of a `token` field. Your key is on the app's `/setup` page ("Copy key"). Leave `wait` out and the Shortcut waits up to 20 seconds and gets the plan back (`prompt` and `menu`), which is what the full version below builds on.
 
