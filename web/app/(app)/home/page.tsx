@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
+import { BundleCard, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { PullToRefresh } from "@/components/pull-refresh";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
@@ -85,6 +86,7 @@ export default function HomePage() {
   const { data: me } = useMe();
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
   const saves = useSWR<SavesPage>("/api/saves?limit=10", fetcher);
+  const bundles = useBundles();
   const { data: chips } = useSWR<{ chips: string[] }>("/api/chips", fetcher, { revalidateOnFocus: false });
 
   // A reel just added goes first in the rail: bring the rail and the page back to it.
@@ -113,6 +115,7 @@ export default function HomePage() {
   const isEmpty = loaded && listed.length === 0 && fresh.length === 0;
   const ideas = chips?.chips ?? [];
   const tasteList = tastes.data?.tastes ?? [];
+  const readyList = bundles.data?.ready ?? [];
   // Still being read right now: just added in this visit, or in the list and not done.
   // The list is asked again when a new save finishes, so its status is the current one.
   const statusOf = new Map((saves.data?.items ?? []).map((t) => [t.save_id, t.processing]));
@@ -219,6 +222,26 @@ export default function HomePage() {
               )}
             </div>
           )}
+        </section>
+      )}
+
+      {readyList.length > 0 && !isEmpty && (
+        <section className="blk" aria-labelledby="ready-h">
+          <div className="gutter block-head">
+            <h2 className="block-title" id="ready-h">
+              Ready for you
+              <span className="pill">{plural(readyList.length, "plan", "plans")}</span>
+            </h2>
+            <Link href="/plans" className="see-all">
+              See all
+              <Icon name="right" />
+            </Link>
+          </div>
+          <div className="rail">
+            {readyList.map((b) => (
+              <BundleCard key={b.id} bundle={b} compact />
+            ))}
+          </div>
         </section>
       )}
 

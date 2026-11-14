@@ -37,6 +37,10 @@ def regular_indexes() -> None:
     db.trips().create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
     db.trips().create_index([("expires_at", ASCENDING)], **ttl)
 
+    db.bundles().create_index([("user_id", ASCENDING), ("type", ASCENDING), ("signature", ASCENDING)], unique=True)
+    db.bundles().create_index([("user_id", ASCENDING), ("status", ASCENDING)])
+    db.bundles().create_index([("expires_at", ASCENDING)], **ttl)
+
     db.discussions().create_index([("user_id", ASCENDING), ("save_id", ASCENDING), ("updated_at", DESCENDING)])
     db.discussions().create_index([("expires_at", ASCENDING)], **ttl)
 

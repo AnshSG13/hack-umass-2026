@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
+import { Fan, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { useApp } from "@/components/shell";
 import { ApiError, fetcher } from "@/lib/api";
@@ -73,6 +74,8 @@ export default function TasteBoardPage() {
   const { openAdd } = useApp();
   const { data, error, isLoading, mutate } = useSWR<Board>(type ? `/api/tastes/${type}` : null, fetcher);
   const [tag, setTag] = useState<string | null>(null);
+  const bundles = useBundles(Boolean(type));
+  const ready = bundles.data?.ready.find((b) => b.type === type);
 
   const kind = type ? KINDS[type] : null;
   const items = useMemo(() => data?.items ?? [], [data]);
@@ -147,6 +150,22 @@ export default function TasteBoardPage() {
               {sentence(t.tag)} <b>{t.count}</b>
             </button>
           ))}
+        </div>
+      )}
+
+      {ready && data && data.count > 0 && (
+        <div className="gutter">
+          <Link href={`/b/${ready.id}`} className="bstrip" style={kind ? tint(kind.color) : undefined}>
+            <Fan urls={ready.thumbs} />
+            <span className="bstrip-text">
+              <span className="bstrip-title">{ready.title} is ready</span>
+              <span className="bstrip-meta">
+                {ready.count_label}
+                {ready.first_when ? ` · first one ${ready.first_when}` : ""}
+              </span>
+            </span>
+            <Icon name="right" />
+          </Link>
         </div>
       )}
 

@@ -16,7 +16,9 @@ MAX_TAGS = 6
 NEW_HOURS = 24
 # Hashtags that say nothing about one save among others of its kind.
 DULL_TAGS = {"recipe", "recipes", "food", "foodie", "workout", "fitness", "travel", "reels", "reel", "fyp",
-             "viral", "explore", "explorepage", "instagood", "trending", "tips", "tip", "product", "products"}
+             "viral", "explore", "explorepage", "instagood", "trending", "tips", "tip", "product", "products",
+             "easy recipe", "easyrecipe", "easy recipes", "easyrecipes", "recipe idea", "recipe ideas",
+             "foodie", "foodstagram", "healthy", "healthyrecipes", "healthy recipes"}
 
 
 def _count(n: int, one: str, many: str) -> str:

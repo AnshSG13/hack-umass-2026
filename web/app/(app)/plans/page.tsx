@@ -1,18 +1,20 @@
 "use client";
 
-// Plans: what is waiting on you (plan cards with the same controls as the Reel page),
-// this week by day, what is done, and what is coming up later.
+// Actions (the route is still /plans): what is ready for you (plans built from several
+// saves, one tap to start), what is waiting on you (plan cards with the same controls as
+// the Reel page), what is coming up by day, what is done, and what is later.
 
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
+import { BundleCard, BundleRow, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { SaveRow } from "@/components/save-row";
 import { useApp } from "@/components/shell";
-import { fetcher } from "@/lib/api";
+import { api, fetcher } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
-import type { PlansResponse } from "@/lib/types";
+import type { Bundle, PlansResponse } from "@/lib/types";
 
 function DayList({ days, headingLevel }: { days: PlansResponse["days"]; headingLevel: "h2" | "h3" }) {
   const Heading = headingLevel;
@@ -52,6 +54,7 @@ export default function PlansPage() {
   const { openAdd } = useApp();
   const { data: me } = useMe();
   const { data, error, isLoading, mutate } = useSWR<PlansResponse>("/api/plans?range=week", fetcher);
+  const bundles = useBundles();
   const [showLater, setShowLater] = useState(false);
   const { data: later, error: laterError } = useSWR<PlansResponse>(
     showLater ? "/api/plans?range=upcoming" : null,
@@ -60,7 +63,7 @@ export default function PlansPage() {
 
   const header = (
     <header className="page-head">
-      <h1 className="page-title">Plans</h1>
+      <h1 className="page-title">Actions</h1>
       {data && <p className="page-sub">{data.week_label}</p>}
     </header>
   );
@@ -70,7 +73,7 @@ export default function PlansPage() {
       <div className="gutter">
         {header}
         <div className="msg" role="alert">
-          <p>Plans didn&apos;t load. Check your connection.</p>
+          <p>Your actions didn&apos;t load. Check your connection.</p>
           <button type="button" className="btn" onClick={() => void mutate()}>
             Try again
           </button>
@@ -92,15 +95,36 @@ export default function PlansPage() {
     );
   }
 
+  const ready = bundles.data?.ready ?? [];
+  const started = bundles.data?.started ?? [];
+
+  // "Not now": it leaves at once and stays away until the saves in it change.
+  async function dismiss(b: Bundle) {
+    void bundles.mutate(
+      (cur) => (cur ? { ...cur, ready: cur.ready.filter((x) => x.id !== b.id) } : cur),
+      { revalidate: false },
+    );
+    try {
+      await api<{ ok: boolean }>(`/api/bundles/${b.id}/dismiss`, { method: "POST" });
+    } catch {
+      void bundles.mutate();
+    }
+  }
+
   const empty =
-    data.waiting.length === 0 && data.days.length === 0 && data.done.length === 0 && data.later_count === 0;
+    data.waiting.length === 0 &&
+    data.days.length === 0 &&
+    data.done.length === 0 &&
+    data.later_count === 0 &&
+    ready.length === 0 &&
+    started.length === 0;
 
   if (empty) {
     return (
       <div className="gutter">
         {header}
         <div className="empty">
-          <h2 className="empty-title">No plans yet</h2>
+          <h2 className="empty-title">Nothing to do yet</h2>
           <p className="empty-text">Add a reel from Instagram and its plan shows up here.</p>
           <button type="button" className="btn btn-primary" onClick={openAdd}>
             <Icon name="plus" />
@@ -124,11 +148,29 @@ export default function PlansPage() {
     <div className="gutter">
       {header}
 
+      {ready.length > 0 && (
+        <section className="blk" aria-labelledby="ready-h">
+          <div className="block-head">
+            <h2 id="ready-h" className="block-title">
+              Ready for you
+              <span className="pill">{ready.length}</span>
+            </h2>
+          </div>
+          <p className="blk-sub">Built from what you saved. One tap puts it on your week.</p>
+          <div className="stack-col">
+            {ready.map((b) => (
+              <BundleCard key={b.id} bundle={b} onDismiss={dismiss} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {hasWaiting && (
         <section className="blk" aria-labelledby="waiting-h">
           <div className="block-head">
             <h2 id="waiting-h" className="block-title">
               Waiting on you
+              <span className="pill">{data.waiting.length}</span>
             </h2>
             <button type="button" className="add" onClick={openAdd}>
               <Icon name="plus" />
@@ -147,7 +189,7 @@ export default function PlansPage() {
         <section className="blk" aria-labelledby="week-h">
           <div className="block-head">
             <h2 id="week-h" className="block-title">
-              This week
+              Coming up
             </h2>
             {!hasWaiting && (
               <button type="button" className="add" onClick={openAdd}>
@@ -157,6 +199,23 @@ export default function PlansPage() {
             )}
           </div>
           <DayList days={data.days} headingLevel="h3" />
+        </section>
+      )}
+
+      {started.length > 0 && (
+        <section className="blk" aria-labelledby="started-h">
+          <div className="block-head">
+            <h2 id="started-h" className="block-title">
+              Started
+            </h2>
+          </div>
+          <ul className="brows">
+            {started.map((b) => (
+              <li key={b.id}>
+                <BundleRow bundle={b} />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

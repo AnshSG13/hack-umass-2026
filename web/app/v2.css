@@ -838,3 +838,461 @@
     animation: none;
   }
 }
+
+/* ---------- Ready for you: plans built from several saves ---------- */
+.blk-sub {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.see-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 36px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.see-all .i {
+  width: 15px;
+  height: 15px;
+}
+.bcard {
+  display: flex;
+  flex-direction: column;
+  border-radius: 26px;
+  background: var(--p, var(--surface));
+  color: var(--ink);
+  padding: 18px;
+  gap: 16px;
+  min-width: 0;
+}
+.stack-col > .bcard + .bcard {
+  margin-top: 0;
+}
+.bcard-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bcard-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+}
+.bcard-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--d, var(--ink-2));
+}
+.bcard-kind .i {
+  width: 16px;
+  height: 16px;
+}
+.bcard-title {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-size: 26px;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.bcard-blurb {
+  margin-top: 8px;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.bcard-when {
+  margin-top: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--d, var(--ink-2));
+  font-variant-numeric: tabular-nums;
+}
+.bcard-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bcard-go {
+  flex: 1;
+  height: 48px;
+}
+.bcard-foot .text-btn {
+  flex: none;
+  color: var(--ink-2);
+}
+.bcard.is-compact {
+  width: 244px;
+  flex: none;
+  scroll-snap-align: start;
+  padding: 16px;
+  gap: 14px;
+}
+.bcard.is-compact .bcard-title {
+  font-size: 21px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.24em;
+}
+.bcard.is-compact .bcard-go {
+  height: 44px;
+  font-size: 14.5px;
+}
+/* three thumbnails, overlapped like a hand of cards */
+.bfan {
+  display: inline-flex;
+  flex: none;
+  padding-left: 14px;
+}
+.bfan img {
+  width: 44px;
+  height: 58px;
+  margin-left: -14px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--surface);
+  box-shadow: 0 0 0 2.5px var(--p, #ffffff), 0 6px 12px -6px rgba(30, 31, 36, 0.35);
+}
+.bfan img:nth-child(1) {
+  transform: rotate(-5deg);
+}
+.bfan img:nth-child(3) {
+  transform: rotate(5deg);
+}
+.bfan img:only-child {
+  transform: none;
+}
+
+/* a started bundle, as a row */
+.brows {
+  margin-top: 6px;
+}
+.brow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 76px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.brow .bfan img {
+  width: 34px;
+  height: 46px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+.brow-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.brow-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brow-meta {
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.brow > .i {
+  color: var(--ink-3);
+  width: 18px;
+  height: 18px;
+}
+
+/* the strip on a taste board */
+.bstrip {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 22px;
+  background: var(--p, var(--surface));
+}
+.bstrip .bfan img {
+  width: 30px;
+  height: 40px;
+  border-radius: 9px;
+}
+.bstrip-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bstrip-title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bstrip-meta {
+  font-size: 13px;
+  color: var(--d, var(--ink-2));
+  font-variant-numeric: tabular-nums;
+}
+.bstrip > .i {
+  width: 18px;
+  height: 18px;
+  color: var(--d, var(--ink-2));
+}
+
+/* the plan's own page */
+.bhead-kind {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: var(--p, var(--surface));
+  color: var(--d, var(--ink-2));
+  font-size: 13px;
+  font-weight: 700;
+}
+.bhead-kind .i {
+  width: 16px;
+  height: 16px;
+}
+.bhead-wait {
+  font-weight: 500;
+  opacity: 0.8;
+}
+.bhead-wait::before {
+  content: "·";
+  margin-right: 8px;
+}
+.bhead-blurb {
+  font-size: 15.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 38ch;
+}
+.bstart {
+  margin-top: 22px;
+}
+.bstart-note {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.bdone {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--mint);
+  color: var(--mint-ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.bdone .i {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+.bitems {
+  margin-top: 8px;
+}
+.bitem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.bitems li:last-child .bitem {
+  border-bottom: 0;
+}
+.bitem-thumb {
+  width: 60px;
+  height: 78px;
+  flex: none;
+  border-radius: 14px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--p, var(--surface));
+  color: var(--d, var(--ink-3));
+}
+.bitem-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bitem-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bitem-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--display);
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.bitem-when.is-set {
+  color: var(--mint-ink);
+}
+.bitem-when .i {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+}
+.bitem-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.bitem-note {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.bitem > .i {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-3);
+}
+
+/* the merged grocery list */
+.gbar {
+  margin-top: 16px;
+  height: 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.gbar span {
+  display: block;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--peach-ink);
+  transition: width 0.5s var(--ease);
+}
+.gbar-note {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.ing .from {
+  margin-left: auto;
+  display: inline-flex;
+  flex: none;
+  padding-left: 8px;
+}
+.ing .from img {
+  width: 24px;
+  height: 24px;
+  margin-left: -8px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* products side by side */
+.bpick {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px;
+  border-radius: 24px;
+  background: var(--p, var(--surface));
+}
+.bpick-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--d, var(--ink-2));
+}
+.bpick-label .i {
+  width: 15px;
+  height: 15px;
+}
+.bpick-name {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-size: 24px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.bpick-why {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.cmp {
+  margin-top: 8px;
+}
+.cmp li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cmp li:last-child {
+  border-bottom: 0;
+}
+.cmp-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+.cmp li.is-pick .cmp-name::after {
+  content: none;
+}
+.cmp-price {
+  flex: none;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--d, var(--ink-2));
+  font-variant-numeric: tabular-nums;
+}
+.cmp-brand,
+.cmp-where {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.cmp-why {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}

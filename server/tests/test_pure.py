@@ -697,3 +697,61 @@ def test_board_tags_drop_the_dull_and_the_universal():
     assert board.meta_line({"type": "recipe", "fields": {"recipe": {"total_time_min": 120}}}) == "2 h"
     assert chips[0] == {"tag": "thai", "count": 2}
     assert board.top_tags([["solo"]]) == [{"tag": "solo", "count": 1}]    # one save: its tags still show
+
+
+# ---------- bundles: plans from several saves ----------
+
+
+def test_bundle_signature_ignores_order():
+    from realize import bundles
+
+    assert bundles.signature("recipe", ["b", "a"]) == bundles.signature("recipe", ["a", "b"])
+    assert bundles.signature("recipe", ["a", "b"]) != bundles.signature("workout", ["a", "b"])
+    assert bundles.signature("recipe", ["a", "b"]) != bundles.signature("recipe", ["a", "b", "c"])
+
+
+def test_groceries_merge_across_recipes():
+    from realize import bundles
+
+    out = bundles.merge_groceries([
+        {"save_id": "A", "ingredients": [
+            {"item": "Garlic, minced", "qty": 2, "unit": "cloves", "aisle": "Produce"},
+            {"item": "butter", "qty": 2, "unit": "tablespoons", "aisle": "Dairy & Eggs"},
+            {"item": "soy sauce", "aisle": "Pantry"}]},
+        {"save_id": "B", "ingredients": [
+            {"item": "garlic", "qty": 3, "unit": "cloves", "aisle": "Produce"},
+            {"item": "butter", "qty": 100, "unit": "g", "aisle": "Dairy & Eggs"},
+            {"item": "", "qty": 1}]},
+    ])
+    flat = {i["key"]: i for g in out for i in g["items"]}
+    assert flat["garlic"]["text"] == "5 cloves garlic" and flat["garlic"]["from"] == ["A", "B"]
+    assert flat["butter"]["text"] == "2 tablespoons + 100 g butter"       # units differ: both kept
+    assert flat["soy sauce"]["text"] == "soy sauce" and flat["soy sauce"]["from"] == ["A"]
+    assert [g["aisle"] for g in out] == ["Produce", "Dairy & Eggs", "Pantry"]   # store order
+    assert len(flat) == 3                                                 # the nameless line is dropped
+
+
+def test_bundle_words_from_the_model_are_checked():
+    from realize import bundles
+
+    ids = ["s1", "s2", "s3"]
+    good = bundles.checked_polish(
+        {"title": "Thai week — easy!", "blurb": "Three fast dinners.", "order": ["s3", "nope", "s3"],
+         "notes": [{"save_id": "s3", "note": "Quickest one"}, {"save_id": "zzz", "note": "invented"}],
+         "pick_save_id": "s1", "pick_name": "Anything", "pick_why": "because"},
+        "recipe", ids, {})
+    assert good["title"] == "Thai week, easy."
+    assert good["order"] == ["s3", "s1", "s2"]            # reordered, nothing dropped or invented
+    assert good["notes"] == {"s3": "Quickest one"}
+    assert good["pick"] is None                           # only product bundles have a pick
+
+    names = {"s1": ["Dyson Airwrap"], "s2": ["Shark FlexStyle"]}
+    pick = bundles.checked_polish({"title": "t", "blurb": "b", "order": [], "notes": [],
+                                   "pick_save_id": "s1", "pick_name": "dyson airwrap", "pick_why": "Six of 35 stood out"},
+                                  "product", ids, names)["pick"]
+    assert pick == {"save_id": "s1", "name": "dyson airwrap", "why": "Six of 35 stood out"}
+    assert bundles.checked_polish({"title": "t", "blurb": "b", "order": [], "notes": [],
+                                   "pick_save_id": "s1", "pick_name": "A made up iron"},
+                                  "product", ids, names)["pick"] is None
+    assert len(bundles.clean("x" * 200, 34)) == 34
+    assert bundles.count_label("recipe", 3) == "3 dinners" and bundles.count_label("workout", 1) == "1 workout"

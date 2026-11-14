@@ -43,6 +43,10 @@ def trips() -> Collection:
     return get_db()["trips"]
 
 
+def bundles() -> Collection:
+    return get_db()["bundles"]
+
+
 def discussions() -> Collection:
     return get_db()["discussions"]
 

@@ -158,7 +158,7 @@ export default function DemoPage() {
       {added && (
         <p className="mt-4 flex flex-wrap gap-x-5">
           <Link href="/plans" className={cn(linkInk, "inline-flex min-h-11 items-center text-[16px]")}>
-            See it in Plans
+            See it in Actions
           </Link>
           <Link href="/ask" className={cn(linkInk, "inline-flex min-h-11 items-center text-[16px]")}>
             Ask about your saves

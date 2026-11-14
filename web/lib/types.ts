@@ -290,3 +290,49 @@ export interface Board {
   tags: { tag: string; count: number }[]; // the filter chips, at most 6
   items: BoardItem[];
 }
+
+// ---- bundles: "Ready for you", plans built from several saves ----
+export interface BundleItem {
+  save_id: string;
+  title: string;
+  thumb_url: string | null;
+  meta: string;
+  note: string; // why it sits where it does; "" until the words arrive
+  when: string | null; // "Mon 6:30 pm": the time Start would pick, or the accepted time
+  plan_status: PlanStatus | null;
+}
+export interface GroceryGroup {
+  aisle: string;
+  items: { key: string; text: string; from: string[] }[]; // from: the save_ids that need it
+}
+export interface BundleProduct {
+  save_id: string;
+  name: string;
+  brand: string;
+  price_hint: string;
+  why: string;
+  where_to_buy: string;
+}
+export interface Bundle {
+  id: string;
+  type: SaveType;
+  status: "ready" | "started" | "dismissed";
+  title: string;
+  blurb: string;
+  count_label: string; // "3 dinners"
+  items: BundleItem[];
+  thumbs: string[];
+  polishing: boolean; // the name and notes are still being written
+  cta: string; // "Start Monday", "Compare them", "Open"
+  can_start: boolean;
+  first_when: string | null;
+  // GET /api/bundles/{id} only:
+  groceries?: GroceryGroup[];
+  grocery_count?: number;
+  products?: BundleProduct[];
+  pick?: { save_id: string; name: string; why: string } | null;
+}
+export interface BundlesResponse {
+  ready: Bundle[];
+  started: Bundle[];
+}

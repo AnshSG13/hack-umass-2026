@@ -228,3 +228,17 @@ A taste tile on Home now opens a board (`/t/{type}`), not the plain saves list: 
 - Reel thumbnails all have one shape, so the board crops them to five heights chosen from the save's id (stable between visits), and fills the shorter column first so reading order stays left to right.
 
 101 unit tests pass (2 new). Checked in headless Chrome at 390x844 on a demo account: Food board with 3 saves, a chip narrowing it to 1, a board for another type, and an unknown type.
+
+## 2026-11-14: Actions and "Ready for you"
+
+The owner renamed Plans to Actions (the route stays `/plans`) and asked for plans built from several saves at once.
+
+- **Bundles** (`server/realize/bundles.py`, `bundles` collection): per type (recipes, workouts, places, products), up to 4 of the newest saves that aren't on the calendar yet. Code decides the grouping, every time (the same `find_free_slot` a single plan uses, each one reserving its slot for the next) and the merged grocery list (same item from two recipes is one line; quantities add when units match, both amounts kept when they don't). A bundle is keyed by a signature of its saves, so it is rebuilt only when they change, and "Not now" holds until they do.
+- **Gemini writes words only**, once per bundle, after the response: a name, one line, a note per save, an order, and for products the one the reels back most. `checked_polish` keeps the order a permutation of the real saves, drops notes for ids that aren't there, and drops a product pick that no reel names. Without the model the bundle still shows with plain code-made words.
+- **Start** accepts one plan per save through the existing `propose_plans` and `planops.accept`, one at a time, so they never collide. Nothing is added before the tap.
+- **API:** `GET /api/bundles` (grouping runs here, no model wait), `GET /api/bundles/{id}`, `POST .../start`, `POST .../dismiss`.
+- **Screens:** Actions has Ready for you, Waiting on you, Coming up, Started, Done. Home has a Ready for you rail. A taste board shows a strip when that taste has a ready plan. A plan's page (`/b/{id}`) has the reels with their times, one Start button, and either the merged grocery list (ticks, progress bar, the recipes each item is for) or products side by side.
+
+Measured on a demo account: listing 0.8 to 0.9 s, the model's words arrive within about 9 s. Start on a 2-workout bundle added both (Mon 7 am, Wed 7 am). 104 unit tests pass (3 new). Checked in headless Chrome at 390x844 with no console or network errors.
+
+Found while testing, not changed: a sample save is planned in a thread inside the API, so a dev reload (`--reload`) while one is planning leaves it in "planning" with no job to resume it. Production doesn't reload; locally, `demo.plan_sample` finishes it.

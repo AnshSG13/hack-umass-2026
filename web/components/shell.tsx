@@ -219,7 +219,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
             <Icon name="plans" />
-            Plans
+            Actions
           </Link>
         </nav>
 
