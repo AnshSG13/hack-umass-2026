@@ -261,3 +261,20 @@ The owner renamed Plans to Actions (the route stays `/plans`) and asked for plan
 Measured on a demo account: listing 0.8 to 0.9 s, the model's words arrive within about 9 s. Start on a 2-workout bundle added both (Mon 7 am, Wed 7 am). 104 unit tests pass (3 new). Checked in headless Chrome at 390x844 with no console or network errors.
 
 Found while testing, not changed: a sample save is planned in a thread inside the API, so a dev reload (`--reload`) while one is planning leaves it in "planning" with no job to resume it. Production doesn't reload; locally, `demo.plan_sample` finishes it.
+
+## 2026-11-14: reanalyze and re-sort
+
+The user asked for a small button at the end of each reel that reanalyzes and re-sorts it. `POST /api/saves/{id}/reanalyze` queues the video pass again. A type or sub-category set by hand is let go so the new reading can re-file the reel; the note and an accepted plan stay; a plan still waiting follows a new type (the video pass already did that). It refuses while a reading is queued or running, and is limited to 5 per 10 minutes per account, because each one is a paid video pass. Checked live: a recipe hand-filed as a tip with a wrong label came back as Food > Dessert in 15.7 s. The first run found that a second tap during the queued state started a second pass; the guard now counts "planned" and a pending job as busy.
+
+## 2026-11-14: deliverables
+
+The user asked for the chat to suggest something to export at the end, "such as an itinerary that I can message someone", and to think of others. Decisions:
+
+- **Nine kinds, each tied to what the reel has:** itinerary (place or event, from the trip plan), invite (an event, or any accepted plan with a time), grocery list and recipe (recipe), workout, shortlist (product), places list, key points (tip), and notes from the chat (the questions and answers of one discussion).
+- **Built in code, no model call.** Each is assembled from stored data: the video pass's fields, the accepted plan, the sourced trip plan, the discussion. So it is instant and free, and it can't say more than the reel, the plan or the trip already said. `server/realize/deliverables.py`.
+- **A message and a page.** Each deliverable is plain text that reads well in a text thread, ending with a link to a public page (`/d/{id}?t=token`) that shows the same content to someone with no account. Map links stay on the page so the message stays short. Remaking one keeps its link.
+- **The itinerary needs the trip plan.** Until one is built, the option says so (`needs: "trip"`), and the chat builds the trip first when that chip is tapped. That is the only paid step.
+- **Option order:** what is about the reel first, then an invite for a plan with a time, then chat notes.
+- **No new dependencies.**
+
+Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invite, the itinerary refused before the trip existed and made after it (five timed stops with prices, hours, forecast and the sources named), the public data opening with the token and no key, a wrong token and another account refused. 117 unit tests pass (15 new).
