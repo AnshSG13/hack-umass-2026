@@ -283,7 +283,7 @@ Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invi
 
 The user asked for intro pages like a video app's onboarding (how you identify, age, ethnicity, hobbies, skills, interests) and for categories the model makes, with a new one whenever a saved reel fits none. Decisions:
 
-- **One question per screen, three sections:** "Tell us about yourself" (how you identify, age, ethnicity), "Choose what you like" (interest chips), "Hobbies and skills" (chips plus your own). A progress bar, Back and Skip on every screen; single choices move on by themselves. `web/app/welcome/page.tsx`.
+- **One question per screen, three sections:** "Tell us about yourself" (how you identify, age, ethnicity), "Choose what you like" (interest chips plus your own), "Your hobbies" (chips plus your own). A first version also asked "What are you good at?"; the owner cut it to keep the intro short. A progress bar, Back and Skip on every screen; single choices move on by themselves. `web/app/welcome/page.tsx`.
 - **Gemini in two places.** While interests are picked, "More for you" adds more specific chips. At the end, Gemini proposes starter sub-categories inside each type, shown as "Your folders".
 - **Built on the existing sub-categories, not a second system.** The owner asked for type first (Food) and sub-categories under it. A first version kept its own categories collection; it was dropped for `profile.starters`, which `subcats` offers to the model next to the labels in use. So the hierarchy, the library chips, Home's taste tiles and "File under" all work unchanged.
 - **Identity and ethnicity never reach Gemini.** They are stored on the profile only, so filing follows what someone likes, not who they are.

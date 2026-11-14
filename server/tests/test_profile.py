@@ -7,7 +7,7 @@ from realize import profile, subcats
 from realize.api.routers.onboarding import Profile, clean_profile, starter_view
 
 PROFILE = {"identity": "Woman", "ethnicity": ["Asian"], "age_range": "18 to 24",
-           "interests": ["Food and cooking", "Meal prep"], "hobbies": ["Running"], "skills": ["Coding"]}
+           "interests": ["Food and cooking", "Meal prep"], "hobbies": ["Running"]}
 
 
 def gemini_says(monkeypatch, answer):
@@ -22,7 +22,7 @@ def gemini_says(monkeypatch, answer):
 
 def test_taste_lines_never_include_identity_or_ethnicity():
     text = "\n".join(profile.taste_lines(PROFILE))
-    assert "Meal prep" in text and "Running" in text and "Coding" in text and "18 to 24" in text
+    assert "Meal prep" in text and "Running" in text and "18 to 24" in text
     assert "Woman" not in text and "Asian" not in text
 
 
@@ -32,7 +32,7 @@ def test_taste_lines_skip_prefer_not_to_say():
 
 def test_clean_profile_drops_unknown_choices_and_near_duplicates():
     p = clean_profile(Profile(identity="Robot", age_range="25 to 34", ethnicity=["White", "Martian"],
-                              interests=["Travel", "travel", "Travels!"], hobbies=[""], skills=["Coding"]))
+                              interests=["Travel", "travel", "Travels!"], hobbies=[""]))
     assert p["identity"] is None
     assert p["age_range"] == "25 to 34"
     assert p["ethnicity"] == ["White"]

@@ -226,7 +226,7 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
             About you
           </h2>
           <p className="mt-2 text-[15px] text-muted">
-            Your interests, hobbies and skills shape how your saves are sorted and planned.
+            Your interests and hobbies shape how your saves are sorted and planned.
           </p>
           <Link href="/welcome" className={cn(btnOutline, "mt-3")}>
             Redo the intro

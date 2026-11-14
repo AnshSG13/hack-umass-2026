@@ -3,7 +3,7 @@
 // The intro, one question per screen like a video app's onboarding:
 //   1. Tell us about yourself: how you identify, age, ethnicity (all skippable)
 //   2. Choose what you like: interest chips, plus more specific ones Gemini suggests
-//   3. Hobbies and skills
+//   3. Your hobbies
 // Then the server asks Gemini for starter sub-categories inside each type (Food > Weeknight
 // dinners) and shows them. New reels reuse them, or get a new sub-category when none fits.
 // Identity and ethnicity are stored on the profile only; they are never sent to Gemini.
@@ -17,7 +17,8 @@ import { useKey, useMe } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
 import type { OnboardingOptions, Profile, StarterGroup } from "@/lib/types";
 
-type StepId = "identity" | "age" | "ethnicity" | "interests" | "hobbies" | "skills";
+type StepId = "identity" | "age" | "ethnicity" | "interests" | "hobbies";
+type OwnList = "interests" | "hobbies"; // lists people can add their own entries to
 
 interface Step {
   id: StepId;
@@ -26,18 +27,17 @@ interface Step {
   sub?: string;
 }
 
-const SECTIONS = ["Tell us about yourself", "Choose what you like", "Hobbies and skills"];
+const SECTIONS = ["Tell us about yourself", "Choose what you like", "Your hobbies"];
 
 const STEPS: Step[] = [
   { id: "identity", section: 0, title: "How do you identify?" },
   { id: "age", section: 0, title: "How old are you?" },
   { id: "ethnicity", section: 0, title: "What's your ethnicity?", sub: "Pick any that fit. Only you see this." },
-  { id: "interests", section: 1, title: "What are you into?", sub: "Pick a few. Your saves get sorted around them." },
+  { id: "interests", section: 1, title: "What are you into?", sub: "Pick a few, or add your own. Your saves get sorted around them." },
   { id: "hobbies", section: 2, title: "What do you do for fun?", sub: "Tap any, or add your own." },
-  { id: "skills", section: 2, title: "What are you good at?", sub: "Tap any, or add your own." },
 ];
 
-const EMPTY: Profile = { identity: null, age_range: null, ethnicity: [], interests: [], hobbies: [], skills: [] };
+const EMPTY: Profile = { identity: null, age_range: null, ethnicity: [], interests: [], hobbies: [] };
 const PREFER_NOT = "Prefer not to say";
 
 function toggle(list: string[], value: string): string[] {
@@ -114,7 +114,7 @@ function Welcome() {
 
   const [index, setIndex] = useState(0);
   const [profile, setProfile] = useState<Profile>(EMPTY);
-  const [extra, setExtra] = useState<{ hobbies: string[]; skills: string[] }>({ hobbies: [], skills: [] });
+  const [extra, setExtra] = useState<Record<OwnList, string[]>>({ interests: [], hobbies: [] });
   const [suggested, setSuggested] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
   const [phase, setPhase] = useState<"asking" | "building" | "done">("asking");
@@ -138,11 +138,11 @@ function Welcome() {
     headingRef.current?.focus();
   }, [index, phase]);
 
-  // Gemini's "More for you" chips follow the broad interests picked, after a short pause.
-  const broadPicked = useMemo(
-    () => profile.interests.filter((i) => options?.interests.includes(i)),
-    [profile.interests, options],
-  );
+  // Gemini's "More for you" chips follow what the person picked or typed (not Gemini's own
+  // chips), after a short pause. The joined key keeps a new array with the same picks from
+  // asking again.
+  const broadKey = profile.interests.filter((i) => !suggested.includes(i)).join("\n");
+  const broadPicked = useMemo(() => (broadKey ? broadKey.split("\n") : []), [broadKey]);
   useEffect(() => {
     if (STEPS[index]?.id !== "interests" || broadPicked.length === 0) return;
     let live = true;
@@ -191,6 +191,13 @@ function Welcome() {
   function advance() {
     if (index < STEPS.length - 1) setIndex(index + 1);
     else void finish();
+  }
+
+  function addOwn(list: OwnList, value: string) {
+    const same = (x: string) => x.toLowerCase() === value.toLowerCase();
+    const shown = [...(options?.[list] ?? []), ...extra[list], ...(list === "interests" ? suggested : [])];
+    if (!shown.some(same)) setExtra((e) => ({ ...e, [list]: [...e[list], value] }));
+    setProfile((p) => (p[list].some(same) ? p : { ...p, [list]: [...p[list], value] }));
   }
 
   function pickOne(field: "identity" | "age_range", value: string) {
@@ -337,10 +344,11 @@ function Welcome() {
           <>
             <Chips
               label="Interests"
-              values={options.interests}
+              values={[...options.interests, ...extra.interests]}
               picked={profile.interests}
               onToggle={(v) => setProfile((p) => ({ ...p, interests: toggle(p.interests, v) }))}
             />
+            <AddOwn key="interests" placeholder="Add your own" onAdd={(v) => addOwn("interests", v)} />
             {(suggested.length > 0 || suggesting) && (
               <section className="ob-more" aria-live="polite">
                 <h2>
@@ -362,25 +370,15 @@ function Welcome() {
           </>
         )}
 
-        {(step.id === "hobbies" || step.id === "skills") && (
+        {step.id === "hobbies" && (
           <>
             <Chips
               label={step.title}
-              values={[...options[step.id], ...extra[step.id]]}
-              picked={profile[step.id]}
-              onToggle={(v) => setProfile((p) => ({ ...p, [step.id]: toggle(p[step.id as "hobbies" | "skills"], v) }))}
+              values={[...options.hobbies, ...extra.hobbies]}
+              picked={profile.hobbies}
+              onToggle={(v) => setProfile((p) => ({ ...p, hobbies: toggle(p.hobbies, v) }))}
             />
-            <AddOwn
-              key={step.id}
-              placeholder={step.id === "hobbies" ? "Add a hobby" : "Add a skill"}
-              onAdd={(v) => {
-                const id = step.id as "hobbies" | "skills";
-                if (![...options[id], ...extra[id]].some((x) => x.toLowerCase() === v.toLowerCase())) {
-                  setExtra((e) => ({ ...e, [id]: [...e[id], v] }));
-                }
-                setProfile((p) => (p[id].some((x) => x.toLowerCase() === v.toLowerCase()) ? p : { ...p, [id]: [...p[id], v] }));
-              }}
-            />
+            <AddOwn key="hobbies" placeholder="Add a hobby" onAdd={(v) => addOwn("hobbies", v)} />
           </>
         )}
 

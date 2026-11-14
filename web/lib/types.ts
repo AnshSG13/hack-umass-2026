@@ -254,7 +254,6 @@ export interface Profile {
   ethnicity: string[];
   interests: string[];
   hobbies: string[];
-  skills: string[];
   starters?: Partial<Record<SaveType, string[]>>;
 }
 
@@ -264,7 +263,6 @@ export interface OnboardingOptions {
   ethnicities: string[];
   interests: string[];
   hobbies: string[];
-  skills: string[];
 }
 
 /** Starter sub-categories Gemini made inside one type at the end of the intro. */

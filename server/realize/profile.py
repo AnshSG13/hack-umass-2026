@@ -1,10 +1,10 @@
 """The intro profile and the starter sub-categories Gemini makes from it.
 
-The intro asks how someone identifies, their age, ethnicity, interests, hobbies and skills.
+The intro asks how someone identifies, their age, ethnicity, interests and hobbies.
 Identity and ethnicity are stored but never sent to Gemini: what gets filed where comes from
 what someone said they like, not from who they are.
 
-From interests, hobbies and skills Gemini proposes starter sub-categories inside each type
+From interests and hobbies Gemini proposes starter sub-categories inside each type
 ("Food > Weeknight dinners", "Fitness > Running"). They are stored on the profile and
 offered to the model next to the labels the user already has (subcats.prompt_line), so the
 first reels land in them. When a reel fits none, the model makes a new one as before.
@@ -40,10 +40,10 @@ def live() -> bool:
 
 
 def taste_lines(profile: dict | None) -> list[str]:
-    """Interests, hobbies, skills and age range. Never identity or ethnicity."""
+    """Interests, hobbies and age range. Never identity or ethnicity."""
     p = profile or {}
     lines = []
-    for label, field in (("Interests", "interests"), ("Hobbies", "hobbies"), ("Skills", "skills")):
+    for label, field in (("Interests", "interests"), ("Hobbies", "hobbies")):
         vals = [str(v) for v in (p.get(field) or []) if str(v).strip()]
         if vals:
             lines.append(f"{label}: {', '.join(vals[:20])}")

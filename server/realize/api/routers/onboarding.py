@@ -18,8 +18,6 @@ ETHNICITIES = ["Asian", "Black or African", "Hispanic or Latino", "Middle Easter
                profile.PREFER_NOT]
 HOBBY_IDEAS = ["Cooking", "Running", "Gym", "Yoga", "Hiking", "Photography", "Reading", "Gaming",
                "Drawing", "Music", "Dancing", "Travel", "Gardening", "Thrifting", "Baking", "Cycling"]
-SKILL_IDEAS = ["Coding", "Design", "Writing", "Public speaking", "Languages", "Cooking", "Video editing",
-               "Marketing", "Investing", "Instruments", "Sewing", "Woodworking", "Teaching", "Sales"]
 
 
 class Profile(BaseModel):
@@ -28,7 +26,6 @@ class Profile(BaseModel):
     ethnicity: list[str] = Field(default_factory=list, max_length=9)
     interests: list[str] = Field(default_factory=list, max_length=40)
     hobbies: list[str] = Field(default_factory=list, max_length=30)
-    skills: list[str] = Field(default_factory=list, max_length=30)
 
 
 class FinishRequest(BaseModel):
@@ -56,7 +53,6 @@ def clean_profile(p: Profile) -> dict:
         "ethnicity": [e for e in ETHNICITIES if e in p.ethnicity],
         "interests": _tags(p.interests, 40),
         "hobbies": _tags(p.hobbies, 30),
-        "skills": _tags(p.skills, 30),
     }
 
 
@@ -69,7 +65,7 @@ def starter_view(starters: dict[str, list[str]]) -> list[dict]:
 @router.get("/api/onboarding/options")
 def options() -> dict:
     return {"identities": IDENTITIES, "age_ranges": AGE_RANGES, "ethnicities": ETHNICITIES,
-            "interests": profile.INTERESTS, "hobbies": HOBBY_IDEAS, "skills": SKILL_IDEAS}
+            "interests": profile.INTERESTS, "hobbies": HOBBY_IDEAS}
 
 
 @router.post("/api/onboarding/suggest")
