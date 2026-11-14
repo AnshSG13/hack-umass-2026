@@ -181,3 +181,17 @@ Checked by a subagent in headless Chromium at 390x844 and 1440x900 and again by 
 ## 2026-11-14: landing headline
 
 The owner asked for the line "Bring back intentional scrolling" somewhere strong. It is now the landing headline, the first thing anyone sees before the demo. "Every save becomes a plan." stays as the bold lead of the paragraph under it. The word "intentional" carries the same highlighter mark as a ticket's planned time, so the promise and the plan read as one idea. Checked at 375, 800 and 1280 px wide: two lines at each, no sideways scroll.
+
+## 2026-11-14: trip plans for travel reels
+
+The user asked for more to do with a travel reel than one visit slot: an itinerary, dates, weather, costs, sources, and more detail when a day is tapped. First slice, for `place` and `event` saves. Decisions:
+
+- **Built on request, not on save.** A trip build is two model calls plus web searches, so it runs when the person taps "Build the trip plan", and a day's detail runs when they open that day. Demo accounts get 3 trips.
+- **Search grounding, then structure.** Call 1 uses Gemini's `google_search` tool and returns notes with cited spans. Code turns each cited span into a `[n]` marker and a numbered source list, and follows each search redirect once so the saved link is the real page. Call 2 turns the marked notes into JSON with no tools. `gemini-api-dev` docs were read for the tool and the citation format; one test request confirmed it (`url_citation` annotations with `end_index`, `url`, `title`).
+- **Code decides what is kept** (`trip.clean_trip`, `trip.clean_day`): a price, opening time, booking note, start time, place to stay or heads-up is kept only when its source number exists; an added stop with no source is dropped; a stop is "from the reel" only when its name matches one the video pass recorded, whatever the model says; every reel place is in the plan even if the model left it out; at most 3 days and 5 stops a day.
+- **Code makes every date, time and link.** Place trips start on the first free weekend day (`slots.find_free_slot`) and can be moved to any of the next four Saturdays without a model call. An event keeps its own date and its trip covers only the event's remaining days. Clock times come from part-of-day starts, each stop's minutes and a 30 minute gap; a start time the search found (with a source) replaces the default. Maps, directions, Google Calendar and the per-day calendar file are built from names and times.
+- **Weather is Open-Meteo** (free, no key; `WEATHER_API_URL`, `GEOCODE_API_URL` in config). Only real forecast days are shown; outside the 16 day window the trip says when the forecast opens. The geocoder's first hit for "Rockaway Beach" is in Oregon, so the lookup matches on country and then on state.
+- **No new Python dependencies.** `httpx` was already in the stack.
+- **Not in this slice:** frames from the reel as stop photos (needs `ffmpeg`, which this laptop doesn't have), online images, flight and hotel prices, and the cooking equivalent.
+
+Measured live (`gemini-3.5-flash`): the Rockaway Hotel reel built in 23.7 s with 4 stops and 11 sources, its day detail in 28.8 s (8 sourced highlights, 2 places to eat); moving the dates took 0.2 s; 21 of 21 checks passed. The Carrie event built in 13.4 s and 17.2 s on two runs. Prices differed between those two runs because the search cited different pages; each number links to its page. 94 unit tests pass (21 for trips and weather).

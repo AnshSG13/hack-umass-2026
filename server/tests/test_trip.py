@@ -215,3 +215,36 @@ def test_forecast_window_and_parsing():
                                   "rain_chance": 0}}                                     # the incomplete day is left out
     assert weather.forecast(None, [date(2026, 11, 21)], fahrenheit=True, today=today) == {}
     assert weather.describe(63) == "Rain" and weather.describe(None) == ""
+
+
+
+def test_a_sourced_start_time_sets_the_clock_and_an_unsourced_one_does_not():
+    reel = [{"name": "Carrie: The Musical", "kind": "event", "city": "Amherst", "why": ""}]
+    raw = {"city": "Amherst", "country": "United States", "days": [{"title": "Show night", "stops": [
+        stop("Dinner Spot", part="afternoon", added_source=1, starts_at="18:00", starts_source=0),
+        stop("Carrie: The Musical", kind="event", part="evening", starts_at="19:30", starts_source=2),
+    ]}]}
+    plan = trip.clean_trip(raw, reel, n_sources=2)
+    dinner, show = plan["days"][0]["stops"]
+    assert "start_hhmm" not in dinner and show["start_hhmm"] == "19:30" and show["start_source"] == 2
+    trip.schedule(plan["days"][0]["stops"], date(2026, 11, 14), NY)
+    assert show["start_utc"].astimezone(NY).strftime("%H:%M") == "19:30"
+    assert dinner["start_utc"].astimezone(NY).strftime("%H:%M") == "14:30"
+    bad = trip.clean_trip({"city": "A", "country": "B", "days": [{"title": "x", "stops": [
+        stop("Carrie: The Musical", starts_at="7:30 PM", starts_source=1)]}]}, reel, 1)
+    assert "start_hhmm" not in bad["days"][0]["stops"][0]
+
+
+def test_an_events_trip_covers_only_the_events_days():
+    one_night = {"type": "event", "fields": {"event": {"name": "Carrie", "date_text": "November 13th and 14th"}}}
+    assert trip.trip_days(one_night, USER, date(2026, 11, 14)) == 1        # only the 14th is left
+    assert trip.trip_days(one_night, USER, date(2026, 11, 13)) == 2
+    undated = {"type": "event", "fields": {"event": {"name": "Some show"}}}
+    assert trip.trip_days(undated, USER, date(2026, 11, 21)) == 1
+    place = {"type": "place", "fields": {}}
+    assert trip.trip_days(place, USER, date(2026, 11, 21)) == trip.MAX_DAYS
+    # and the cap is applied to whatever the model returns
+    raw = {"city": "A", "country": "B", "days": [
+        {"title": "d1", "stops": [stop("Carrie")]}, {"title": "d2", "stops": [stop("The Drake", added_source=1)]}]}
+    plan = trip.clean_trip(raw, [{"name": "Carrie", "kind": "event", "city": "", "why": ""}], 1, max_days=1)
+    assert len(plan["days"]) == 1

@@ -59,6 +59,9 @@ TRIP_SCHEMA = {
                 "area": {"type": "string", "description": "Neighborhood or district"},
                 "what": {"type": "string", "description": "One sentence, max 120 characters"},
                 "minutes": _I,
+                "starts_at": {"type": "string", "description": "HH:MM, 24 hour, only for a show or booking "
+                              "with a set start the notes state. Otherwise empty."},
+                "starts_source": _I,
                 "cost": _S, "cost_source": _I, "hours": _S, "hours_source": _I,
                 "booking": {"type": "string", "enum": ["none", "recommended", "required", "unknown"]},
                 "booking_source": _I,
@@ -169,6 +172,24 @@ def default_start(save: dict, user: dict, now: datetime | None = None) -> date:
     return date_options(user, now, 1)[0]
 
 
+def trip_days(save: dict, user: dict, start: date) -> int:
+    """How many days a trip may run. A place trip can take up to MAX_DAYS. An event's trip
+    covers the event's own remaining days and no more: one evening show is one day."""
+    if save.get("type") != "event":
+        return MAX_DAYS
+    first, end = actions.event_times(save.get("fields"), user)
+    last = None
+    if first and end and actions.event_has_end(save.get("fields")):
+        last = end.date()
+    else:
+        days = actions.event_date_range(save.get("fields"), start, save.get("posted_at"))
+        if days:
+            last = days[1]
+    if not last or last < start:
+        return 1
+    return max(1, min(MAX_DAYS, (last - start).days + 1))
+
+
 def span_label(start: date, n_days: int) -> str:
     if n_days <= 1:
         return heading_day(start)
@@ -208,13 +229,16 @@ def _src(n: Any, count: int) -> int:
     return v if 1 <= v <= count else 0
 
 
-def clean_trip(raw: dict, reel: list[dict], n_sources: int) -> dict:
+_HHMM = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+
+
+def clean_trip(raw: dict, reel: list[dict], n_sources: int, max_days: int = MAX_DAYS) -> dict:
     """What the model proposed, after the rules: a stop is "from the reel" only when its name
     matches one the reel named; an added stop needs a source or it is dropped; a price, opening
     time or booking note without a source is blanked; every reel stop is in the plan."""
     days: list[dict] = []
     seen: list[str] = []
-    for d in (raw.get("days") or [])[:MAX_DAYS]:
+    for d in (raw.get("days") or [])[:max(1, min(max_days, MAX_DAYS))]:
         stops: list[dict] = []
         for s in d.get("stops") or []:
             name = tidy(s.get("name"), 70)
@@ -243,6 +267,12 @@ def clean_trip(raw: dict, reel: list[dict], n_sources: int) -> dict:
             }
             if match and match.get("start_local"):
                 stop["start_local"] = match["start_local"]
+            # A start time the search found (a show at 7:30 pm) beats the part-of-day default.
+            starts_src = _src(s.get("starts_source"), n_sources)
+            hhmm = _HHMM.match(str(s.get("starts_at") or "").strip())
+            if starts_src and hhmm:
+                stop["start_hhmm"] = f"{int(hhmm.group(1)):02d}:{hhmm.group(2)}"
+                stop["start_source"] = starts_src
             seen.append(stop["name"])
             stops.append(stop)
             if len(stops) >= MAX_STOPS_PER_DAY:
@@ -322,6 +352,9 @@ def schedule(stops: list[dict], day: date, tz) -> None:
                 fixed = None
         if fixed and fixed.date() == day:
             begin = fixed
+        elif s.get("start_hhmm"):
+            h, m = s["start_hhmm"].split(":")
+            begin = datetime.combine(day, time(int(h), int(m)), tzinfo=tz)
         elif cursor and cursor > begin:
             begin = cursor
         end = begin + timedelta(minutes=int(s.get("minutes") or 60))
@@ -456,7 +489,8 @@ def _source_block(sources: list[dict]) -> str:
     return "\n".join(f"[{s['n']}] {s['title']}" for s in sources) or "(none)"
 
 
-def propose_trip(save: dict, reel: list[dict], when: str, sources: list[dict]) -> tuple[dict, str]:
+def propose_trip(save: dict, reel: list[dict], when: str, sources: list[dict],
+                 max_days: int = MAX_DAYS) -> tuple[dict, str]:
     notes = research(
         "You are researching a short trip for someone who saved an Instagram reel.\n"
         f"{_reel_block(save, reel)}\nWHEN: {when}\n\n"
@@ -483,6 +517,9 @@ def propose_trip(save: dict, reel: list[dict], when: str, sources: list[dict]) -
                 "notes don't say, leave the text empty and the source 0. Never estimate.\n"
                 "- what: one sentence, at most 120 characters, on what to do there.\n"
                 "- minutes: how long a visit usually takes, 30 to 240.\n"
+                "- starts_at: only for a show, tour or booking whose start time the notes state, as "
+                "HH:MM in 24 hour time, with its [n] number in starts_source. Otherwise leave it empty.\n"
+                f"- Use at most {max_days} day{'s' if max_days != 1 else ''}.\n"
                 "- Do not put [n] markers inside any text field.\n- " + PLAIN_WORDS),
         input=f"{_reel_block(save, reel)}\nWHEN: {when}\n\nRESEARCH NOTES:\n{notes}\n\nSOURCES:\n{_source_block(sources)}")
     return raw, notes
@@ -572,11 +609,12 @@ def build(save_id: ObjectId, user_id: str) -> None:
         reel = reel_stops(save)
         start = date.fromisoformat(trip["start_date"])
         sources: list[dict] = []
+        max_days = trip_days(save, user, start)
         with run.step("trip_research", {"places": [r["name"] for r in reel]}) as h:
-            raw, _notes = propose_trip(save, reel, f"around {heading_day(start)}, {start.year}", sources)
+            raw, _notes = propose_trip(save, reel, f"around {heading_day(start)}, {start.year}", sources, max_days)
             h["result"] = {"sources": len(sources)}
         with run.step("trip_layout") as h:
-            plan = clean_trip(raw, reel, len(sources))
+            plan = clean_trip(raw, reel, len(sources), max_days)
             if not plan["days"]:
                 raise ValueError("no days")
             plan.update({"sources": sources})
@@ -696,6 +734,7 @@ def view(trip: dict | None, save: dict, user: dict) -> dict:
             stops.append({
                 "name": st["name"], "from_reel": st["from_reel"], "kind": st["kind"],
                 "part": PART_LABEL[st["part"]], "time": fmt_time(begin) if begin else "",
+                "time_source": src(st.get("start_source") or 0),
                 "area": st.get("area") or "", "what": st.get("what") or "",
                 "cost": st.get("cost") or "", "cost_source": src(st.get("cost_source") or 0),
                 "hours": st.get("hours") or "", "hours_source": src(st.get("hours_source") or 0),
