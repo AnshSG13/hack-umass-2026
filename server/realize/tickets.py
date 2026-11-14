@@ -67,6 +67,7 @@ def ticket(save: dict, plan: dict | None, user: dict, *, with_steps: bool = Fals
         "url": save.get("url"),
         "title": save.get("title"),
         "type": save.get("type"),
+        "subcategory": save.get("subcategory"),
         "creator": f"@{creator}" if creator else None,
         "thumb_url": thumb_url(save),
         "saved_on": saved_on(save, user),

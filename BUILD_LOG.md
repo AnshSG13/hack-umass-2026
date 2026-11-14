@@ -181,3 +181,36 @@ Checked by a subagent in headless Chromium at 390x844 and 1440x900 and again by 
 ## 2026-11-14: landing headline
 
 The owner asked for the line "Bring back intentional scrolling" somewhere strong. It is now the landing headline, the first thing anyone sees before the demo. "Every save becomes a plan." stays as the bold lead of the paragraph under it. The word "intentional" carries the same highlighter mark as a ticket's planned time, so the promise and the plan read as one idea. Checked at 375, 800 and 1280 px wide: two lines at each, no sideways scroll.
+
+## 2026-11-14: trip plans for travel reels
+
+The user asked for more to do with a travel reel than one visit slot: an itinerary, dates, weather, costs, sources, and more detail when a day is tapped. First slice, for `place` and `event` saves. Decisions:
+
+- **Built on request, not on save.** A trip build is two model calls plus web searches, so it runs when the person taps "Build the trip plan", and a day's detail runs when they open that day. Demo accounts get 3 trips.
+- **Search grounding, then structure.** Call 1 uses Gemini's `google_search` tool and returns notes with cited spans. Code turns each cited span into a `[n]` marker and a numbered source list, and follows each search redirect once so the saved link is the real page. Call 2 turns the marked notes into JSON with no tools. `gemini-api-dev` docs were read for the tool and the citation format; one test request confirmed it (`url_citation` annotations with `end_index`, `url`, `title`).
+- **Code decides what is kept** (`trip.clean_trip`, `trip.clean_day`): a price, opening time, booking note, start time, place to stay or heads-up is kept only when its source number exists; an added stop with no source is dropped; a stop is "from the reel" only when its name matches one the video pass recorded, whatever the model says; every reel place is in the plan even if the model left it out; at most 3 days and 5 stops a day.
+- **Code makes every date, time and link.** Place trips start on the first free weekend day (`slots.find_free_slot`) and can be moved to any of the next four Saturdays without a model call. An event keeps its own date and its trip covers only the event's remaining days. Clock times come from part-of-day starts, each stop's minutes and a 30 minute gap; a start time the search found (with a source) replaces the default. Maps, directions, Google Calendar and the per-day calendar file are built from names and times.
+- **Weather is Open-Meteo** (free, no key; `WEATHER_API_URL`, `GEOCODE_API_URL` in config). Only real forecast days are shown; outside the 16 day window the trip says when the forecast opens. The geocoder's first hit for "Rockaway Beach" is in Oregon, so the lookup matches on country and then on state.
+- **No new Python dependencies.** `httpx` was already in the stack.
+- **Not in this slice:** frames from the reel as stop photos (needs `ffmpeg`, which this laptop doesn't have), online images, flight and hotel prices, and the cooking equivalent.
+
+Measured live (`gemini-3.5-flash`): the Rockaway Hotel reel built in 23.7 s with 4 stops and 11 sources, its day detail in 28.8 s (8 sourced highlights, 2 places to eat); moving the dates took 0.2 s; 21 of 21 checks passed. The Carrie event built in 13.4 s and 17.2 s on two runs. Prices differed between those two runs because the search cited different pages; each number links to its page. 94 unit tests pass (21 for trips and weather).
+
+## 2026-11-14: email and password accounts
+
+- **Why:** a key with no password was easy to lose and hard to use on a second device. People now create an account with an email and password and sign in anywhere.
+- **Server:** `POST /api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, and `/api/auth/credentials` (gives a key-only account an email and password). Passwords use stdlib `hashlib.scrypt` (no new dependency). Sign-in returns a session token (`rs_...`, 30 days, stored as sha256 in a new `sessions` collection with a TTL index). `accounts.find_by_key` accepts either a session token or an API key, so every existing route and its `user_id` filter is unchanged. Unique partial index on `users.email`. Login is rate limited per IP and per email; an unknown email still runs one scrypt check so timing doesn't reveal it.
+- **Web:** `/signup` and `/login`. The landing "Use it for real" goes to `/signup`, with a "Sign in" link. `/setup` no longer makes keyless accounts; for email accounts the QR code opens `/login` and no key is shown. Settings shows "Signed in as" and Sign out (ends the session on the server); key-only accounts get an "Add an email and password" form. The Shortcut key is still made in Settings and shown once.
+- **Kept:** API keys, `POST /api/users`, demo sessions and the judge user work as before.
+
+Checks: a live script against Atlas passed 17 of 17 (signup, duplicate email, bad email and short password refused, login with a case-changed email, wrong password, user B can't list or open user A's save, logout ends only that session, key account adds credentials and its key still works, login rate limit). In the browser at 390x844: sign up, Settings, sign out, wrong password message, sign in, setup QR. 70 unit tests, `tsc` and `eslint` pass.
+
+## 2026-11-14: sub-categories
+
+- **Why:** the mockup files saves as "Food › Thai", and the owner asked for sub-categories. Until now the data had only the seven types, so the Home taste tile showed tags in its sub-category row.
+- **How:** the planner and the video pass each return a `subcategory`, shown the account's existing labels so they reuse one; no extra Gemini calls. `server/realize/subcats.py` tidies the label and snaps it onto an existing one that differs only in case, punctuation or a plural. Hand-set labels are `user_edited` and never overwritten; moving a save to another type clears its label.
+- **UI:** "Food › Dessert" on the save page chip (tap to pick, add or remove) and on list rows; a sub-category chip row in Library under a picked type; sub-categories in the Home taste tile, falling back to tags.
+- **Backfill:** `python -m scripts.backfill_subcategories --all-users | --user u_... | --samples [--dry-run]`, one text call per account and type.
+- **No new dependencies.**
+
+Checks: 3 live reels labelled Dessert, Curry, Appetizers by the planner and kept by the video pass; 11 of 11 API checks on editing, snapping, filtering and clearing; the screens checked at 390x844; 77 unit tests, `tsc` and `eslint` pass. Steps to merge are in `docs/merge-subcategories.md`.

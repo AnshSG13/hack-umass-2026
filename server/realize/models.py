@@ -25,6 +25,10 @@ STEP_LABELS = {
     "grounding": "Checking facts against the video",
     "embed": "Filing it",
     "replan": "Updating the plan",
+    "trip_research": "Searching the web",
+    "trip_layout": "Laying out the days",
+    "trip_weather": "Checking the forecast",
+    "trip_day": "Planning the day",
     "get_save": "Opening a save",
     "list_plans": "Checking your plans",
     "propose_plans": "Drafting plans",
@@ -81,6 +85,18 @@ class CreateUserRequest(BaseModel):
     timezone: str | None = None
 
 
+class SignupRequest(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+    name: str | None = Field(default=None, max_length=NAME_MAX)
+    timezone: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+
+
 class PrefsPatch(BaseModel):
     cook_days: list[str] | None = None
     cook_time: str | None = None
@@ -121,9 +137,16 @@ class MePatch(BaseModel):
 
 
 class SavePatch(BaseModel):
-    """What a person can change on a save: where it's filed, and their own note."""
+    """What a person can change on a save: where it's filed, and their own note.
+    subcategory "" clears it."""
     type: Literal["recipe", "event", "place", "workout", "product", "tip", "other"] | None = None
+    subcategory: str | None = Field(default=None, max_length=40)
     note: str | None = Field(default=None, max_length=NOTE_MAX)
+
+
+class TripRequest(BaseModel):
+    """Build a trip plan, or move it to other dates."""
+    start_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class PlanStatusRequest(BaseModel):
@@ -253,6 +276,9 @@ PROPOSE_PLAN_SCHEMA: dict = _obj(
             {"type": "string", "description": "YYYY-MM-DDTHH:mm"}, maxItems=3
         ),
         "similar_save_id": {"type": "string", "description": "save_id of a similar save, if any"},
+        "subcategory": {"type": "string", "description": (
+            "1 to 3 words grouping this save inside its type, e.g. Dessert, Thai, Strength, Skincare. "
+            "Reuse an existing one for the same type when it fits. Never the title.")},
     },
     ["type", "title", "summary", "caption_sufficient", "actionable", "question", "why", "confidence"],
 )
@@ -275,6 +301,9 @@ ENRICH_SCHEMA: dict = _obj(
             _obj({"name": _S, "kind": {"type": "string", "enum": ENTITY_KINDS}}, ["name", "kind"])
         ),
         "tags": _arr(_S, minItems=3, maxItems=8),
+        "subcategory": {"type": "string", "description": (
+            "1 to 3 words grouping this save inside its type, e.g. Dessert, Thai, Strength, Skincare. "
+            "Reuse an existing one for the same type when it fits. Never the title.")},
     },
     ["has_speech", "music_only", "language", "transcript", "on_screen_text", "visual_summary",
      "type", "title", "summary", "fields", "entities", "tags"],

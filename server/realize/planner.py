@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from . import actions, db, gemini, jobs, planops, search, slots, thumbs
+from . import actions, db, gemini, jobs, planops, search, slots, subcats, thumbs
 from .config import get_settings
 from .models import PROPOSE_PLAN_SCHEMA, SLOT_KINDS, TYPES, clean_fields
 from .runs import Run
@@ -54,6 +54,7 @@ concrete plan that fits their week. They confirm or decline; you never act yours
    streamlined, transformative, seamless or game-changer.
 6. actionable is false for type other, for events that already happened, and when there is
    nothing a person could do with it.
+7. {SUBCATEGORY}
 Do not write reasoning in text. Use the tools."""
 
 DEFAULT_QUESTION = planops.QUESTIONS
@@ -65,7 +66,7 @@ class PlannerBusy(Exception):
 
 
 def system_prompt() -> str:
-    return SYSTEM_PROMPT.replace("Realize", get_settings().app_name)
+    return SYSTEM_PROMPT.replace("{SUBCATEGORY}", subcats.GUIDE).replace("Realize", get_settings().app_name)
 
 
 def tool_defs() -> list[dict]:
@@ -189,6 +190,7 @@ def build_message(user: dict, save: dict, now: datetime, with_enrichment: bool,
         f"creator: @{creator} | posted: {posted} | duration: {dur}",
         f'caption: """{(save.get("caption") or "")[:3000]}"""',
         f"hashtags: {tags}",
+        subcats.prompt_line(user["_id"]),
     ]
     if with_enrichment:
         if save.get("type"):
@@ -225,6 +227,11 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
     why = " ".join(str(args.get("why") or "").split())[:90]
     confidence = args.get("confidence") if args.get("confidence") in ("sure", "best_guess") else "best_guess"
     actionable = bool(args.get("actionable")) and kind != "other"
+    edited = set(save.get("user_edited") or [])
+    sub = subcats.resolve(user["_id"], kind, args.get("subcategory"))
+    if sub and "subcategory" not in edited and not (keep_save_fields and save.get("subcategory")):
+        db.saves().update_one({"_id": save["_id"]}, {"$set": {"subcategory": sub}})
+        save = {**save, "subcategory": sub}
 
     if keep_save_fields:
         fields = save.get("fields") or {}
@@ -233,7 +240,6 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
         fields = actions.fix_event_year(clean_fields(kind, args.get("fields")), save.get("posted_at"))
         update = {"type": kind, "title": title, "summary": str(args.get("summary") or "")[:400],
                   "fields": fields, "caption_sufficient": bool(args.get("caption_sufficient", True))}
-        edited = set(save.get("user_edited") or [])
         update = {k: v for k, v in update.items() if k not in edited}
         db.saves().update_one({"_id": save["_id"]}, {"$set": update})
         save = {**save, **update}

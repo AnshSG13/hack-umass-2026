@@ -31,12 +31,20 @@ def users() -> Collection:
     return get_db()["users"]
 
 
+def sessions() -> Collection:
+    return get_db()["sessions"]
+
+
 def saves() -> Collection:
     return get_db()["saves"]
 
 
 def plans() -> Collection:
     return get_db()["plans"]
+
+
+def trips() -> Collection:
+    return get_db()["trips"]
 
 
 def jobs() -> Collection:
