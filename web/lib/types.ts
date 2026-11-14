@@ -202,10 +202,13 @@ export interface Taste {
   thumbs: string[]; // up to 3 "/api/t/<id>"
   tags: { tag: string; count: number }[]; // up to 3
   subcategories: { name: string; count: number }[]; // every one for this type, largest first
+  new: number; // saved since the last visit, or since its board was last opened
 }
 export interface TastesResponse {
   total: number;
   tastes: Taste[]; // only types with at least one save, largest first
+  /** The greeting's line: "3 recipes, 4 workouts and 3 product picks". null with nothing to say. */
+  recap: { window: "new" | "week"; parts: string[]; text: string } | null;
 }
 
 // ---- GET /api/saves, /api/search, /api/plans ----

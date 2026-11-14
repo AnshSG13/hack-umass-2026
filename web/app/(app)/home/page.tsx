@@ -41,10 +41,16 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const label = taste.label || kind.label;
   const count = plural(taste.count, "save", "saves");
   const href = `/t/${taste.type}`;
+  const fresh = taste.new > 0 ? (
+    <span className="taste-new" aria-label={`${taste.new} new since last time`}>
+      {taste.new > 9 ? "9+" : taste.new}
+    </span>
+  ) : null;
 
   if (wide) {
     return (
       <Link href={href} className="taste taste-wide" style={tint(kind.color)}>
+        {fresh}
         <span className="taste-row">
           <span>
             <Icon name={kind.icon} />
@@ -77,6 +83,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   }
   return (
     <Link href={href} className="taste" style={tint(kind.color)}>
+      {fresh}
       <span className="taste-top">
         <Icon name={kind.icon} />
         <Thumbs urls={taste.thumbs} className="stack" />
@@ -126,6 +133,7 @@ export default function HomePage() {
   const ideas = chips?.chips ?? [];
   const tasteList = tastes.data?.tastes ?? [];
   const readyList = bundles.data?.ready ?? [];
+  const recap = tastes.data?.recap ?? null;
   // Still being read right now: just added in this visit, or in the list and not done.
   // The list is asked again when a new save finishes, so its status is the current one.
   const statusOf = new Map((saves.data?.items ?? []).map((t) => [t.save_id, t.processing]));
@@ -150,7 +158,12 @@ export default function HomePage() {
         <header className="home-head">
           <div style={{ minWidth: 0 }}>
             <h1 className="greet">{hello}</h1>
-            {total !== undefined && tasteCount !== undefined && total > 0 && (
+            {recap ? (
+              <p className="greet-sub recap">
+                {recap.window === "new" ? "New since last time: " : "This week: "}
+                <b>{recap.text}</b>
+              </p>
+            ) : total !== undefined && tasteCount !== undefined && total > 0 && (
               <p className="greet-sub">
                 {plural(total, "save", "saves")}
                 {/* A save that is still being read, or could not be, has no taste yet. */}
@@ -169,6 +182,42 @@ export default function HomePage() {
           </Link>
         )}
       </div>
+
+      {readyList.length > 0 && !isEmpty && (
+        <section className="blk" aria-labelledby="ready-h">
+          <div className="gutter block-head">
+            <h2 className="block-title" id="ready-h">
+              Ready for you
+              <span className="pill">{plural(readyList.length, "plan", "plans")}</span>
+            </h2>
+            <Link href="/plans" className="see-all">
+              See all
+              <Icon name="right" />
+            </Link>
+          </div>
+          <div className="rail">
+            {readyList.map((b) => (
+              <BundleCard key={b.id} bundle={b} compact />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tasteList.length > 0 && (
+        <section className="blk gutter" aria-labelledby="tastes-h">
+          <div className="block-head">
+            <h2 className="block-title" id="tastes-h">
+              Your tastes
+              <span className="pill">{tasteList.length}</span>
+            </h2>
+          </div>
+          <div className="tastes">
+            {tasteList.map((t, i) => (
+              <TasteTile key={t.type} taste={t} wide={i === 0} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {isEmpty ? (
         <div className="gutter">
@@ -235,26 +284,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {readyList.length > 0 && !isEmpty && (
-        <section className="blk" aria-labelledby="ready-h">
-          <div className="gutter block-head">
-            <h2 className="block-title" id="ready-h">
-              Ready for you
-              <span className="pill">{plural(readyList.length, "plan", "plans")}</span>
-            </h2>
-            <Link href="/plans" className="see-all">
-              See all
-              <Icon name="right" />
-            </Link>
-          </div>
-          <div className="rail">
-            {readyList.map((b) => (
-              <BundleCard key={b.id} bundle={b} compact />
-            ))}
-          </div>
-        </section>
-      )}
-
       {ideas.length > 0 && !isEmpty && (
         <section className="blk" aria-labelledby="ideas-h">
           <div className="gutter block-head">
@@ -279,21 +308,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {tasteList.length > 0 && (
-        <section className="blk gutter" aria-labelledby="tastes-h">
-          <div className="block-head">
-            <h2 className="block-title" id="tastes-h">
-              Your tastes
-              <span className="pill">{tasteList.length}</span>
-            </h2>
-          </div>
-          <div className="tastes">
-            {tasteList.map((t, i) => (
-              <TasteTile key={t.type} taste={t} wide={i === 0} />
-            ))}
-          </div>
-        </section>
-      )}
     </>
   );
 }

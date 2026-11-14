@@ -260,3 +260,13 @@ The owner renamed Plans to Actions (the route stays `/plans`) and asked for plan
 Measured on a demo account: listing 0.8 to 0.9 s, the model's words arrive within about 9 s. Start on a 2-workout bundle added both (Mon 7 am, Wed 7 am). 104 unit tests pass (3 new). Checked in headless Chrome at 390x844 with no console or network errors.
 
 Found while testing, not changed: a sample save is planned in a thread inside the API, so a dev reload (`--reload`) while one is planning leaves it in "planning" with no job to resume it. Production doesn't reload; locally, `demo.plan_sample` finishes it.
+
+## 2026-11-14: Home leads with what's ready, New chat, the orb's tap
+
+- **Home order:** Ready for you, then Your tastes, then Recently saved. People open the app for what's ready, not for the list of what they saved.
+- **New since last time.** `server/realize/visits.py` keeps `visits.last` and `visits.prev` on the user (a visit ends after 30 minutes of no activity, counted when Home loads `/api/tastes`). Each taste tile shows a badge with the saves added since the previous visit; opening that taste's board clears its badge (`visits.taste_seen`). Kept on the server so a phone and a laptop agree.
+- **The greeting says what was done for them:** "New since last time: 3 recipes, 4 workouts and 3 product picks", or "This week: ..." when nothing is new. Largest first, at most three kinds, "Just vibes" left out.
+- **Ask has New chat**, which clears the conversation (it lived only in memory, so nothing on the server changes).
+- **Tapping the orb lights it** the way holding it does (a short scale and halo), then settles; a hold still opens the voice layer.
+
+112 unit tests pass (2 new). Checked in headless Chrome at 390x844 with the account's last visit moved back 90 minutes: badges on four tastes, the recap line, the Food badge gone after opening Food, the orb's tap state, New chat emptying Ask.

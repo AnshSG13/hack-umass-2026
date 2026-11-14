@@ -755,3 +755,29 @@ def test_bundle_words_from_the_model_are_checked():
                                   "product", ids, names)["pick"] is None
     assert len(bundles.clean("x" * 200, 34)) == 34
     assert bundles.count_label("recipe", 3) == "3 dinners" and bundles.count_label("workout", 1) == "1 workout"
+
+
+# ---------- visits: what is new since last time ----------
+
+
+def test_new_line_is_the_later_of_last_visit_and_board_opened():
+    from datetime import datetime, timezone
+
+    from realize import visits
+
+    a = datetime(2026, 11, 10, tzinfo=timezone.utc)
+    b = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    assert visits.new_line(a, b) == b and visits.new_line(b, a) == b
+    assert visits.new_line(None, None) is None
+    assert visits.new_line(a, None) == a
+
+
+def test_recap_names_what_was_sorted():
+    from realize import visits
+
+    parts = visits.recap_parts({"recipe": 3, "workout": 4, "product": 3, "other": 9, "tip": 1})
+    assert parts == ["4 workouts", "3 recipes", "3 product picks"]       # largest first, at most 3, no "other"
+    assert visits.join_words(parts) == "4 workouts, 3 recipes and 3 product picks"
+    assert visits.join_words(["1 recipe"]) == "1 recipe"
+    assert visits.recap_parts({"place": 1}) == ["1 place to go"]
+    assert visits.recap_parts({}) == []
