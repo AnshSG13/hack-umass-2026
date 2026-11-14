@@ -56,11 +56,7 @@ concrete plan that fits their week. They confirm or decline; you never act yours
    nothing a person could do with it.
 Do not write reasoning in text. Use the tools."""
 
-DEFAULT_QUESTION = {
-    "recipe": "Cook this?", "workout": "Try this workout?", "place": "Go here?",
-    "event": "Go to this?", "product": "Look into this?", "tip": "Come back to this?",
-    "other": "Keep this one?",
-}
+DEFAULT_QUESTION = planops.QUESTIONS
 
 
 class PlannerBusy(Exception):

@@ -9,7 +9,7 @@ from pymongo.errors import DuplicateKeyError
 
 from ... import accounts, actions, db, demo, jobs, planner, planops, ratelimit, tickets, urls
 from ...config import get_settings
-from ...models import ConfirmRequest, SaveRequest, TYPES, failure_message
+from ...models import ConfirmRequest, SavePatch, SaveRequest, TYPES, failure_message
 from ...runs import run_view
 from ...timeutil import as_utc, month_day, now_utc, tz_of
 from ..deps import background, bad_key_message, bearer, current_user
@@ -303,9 +303,7 @@ def list_saves(type: str | None = None, limit: int = Query(default=30, ge=1, le=
             "next_before": as_utc(docs[-1]["created_at"]).isoformat() if more and docs else None}
 
 
-@router.get("/api/saves/{save_id}")
-def get_save(save_id: str, user: dict = Depends(current_user)) -> dict:
-    save = _own_save(save_id, user)
+def _detail(save: dict, user: dict) -> dict:
     plan = planops.refresh_if_stale(planops.get_for_save(save["_id"]), save, user)
     runs = list(db.agent_runs().find({"save_id": save["_id"], "user_id": user["_id"]}).sort("started_at", 1))
     return {
@@ -316,10 +314,40 @@ def get_save(save_id: str, user: dict = Depends(current_user)) -> dict:
             "on_screen_text": save.get("on_screen_text") or [], "entities": save.get("entities") or [],
             "unverified": save.get("unverified") or [], "enrich_error": save.get("enrich_error"),
             "visual_summary": save.get("visual_summary") or "", "language": save.get("language"),
-            "duration_sec": save.get("duration_sec"),
+            "duration_sec": save.get("duration_sec"), "note": save.get("note") or "",
         },
         "runs": [run_view(r) for r in runs],
     }
+
+
+@router.get("/api/saves/{save_id}")
+def get_save(save_id: str, user: dict = Depends(current_user)) -> dict:
+    return _detail(_own_save(save_id, user), user)
+
+
+@router.patch("/api/saves/{save_id}")
+def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)) -> dict:
+    """File a save under another type, or write a note on it. Returns the save detail."""
+    save = _own_save(save_id, user)
+    update: dict = {}
+    if body.note is not None:
+        update["note"] = body.note.strip()
+    retyped = body.type is not None and body.type != save.get("type")
+    if retyped:
+        if save["status"] in IN_FLIGHT:
+            raise HTTPException(status_code=409, detail="This save is still being read. Try again in a moment.")
+        update["type"] = body.type
+        # The video pass and the planner leave fields the person has set alone.
+        update["user_edited"] = sorted(set(save.get("user_edited") or []) | {"type"})
+    if update:
+        db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]}, {"$set": update})
+        save = {**save, **update}
+    if retyped:
+        plan = planops.get_for_save(save["_id"])
+        if plan and plan["status"] == "proposed":
+            # A plan nobody has answered follows the new type; an accepted one is left alone.
+            planops.retype(save, plan, user, body.type)
+    return _detail(save, user)
 
 
 @router.get("/api/agent_runs")

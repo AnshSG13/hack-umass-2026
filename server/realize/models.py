@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field, field_validator
 
 TYPES = ["recipe", "event", "place", "workout", "product", "tip", "other"]
 SLOT_KINDS = ["recipe", "workout", "place"]
+# What a type is called on Home's "Your tastes" and on a reel's category chip.
+TASTE_LABELS = {"recipe": "Food", "event": "Events", "place": "Places", "workout": "Fitness",
+                "product": "Products", "tip": "Learning", "other": "Just vibes"}
+NOTE_MAX = 500
+NAME_MAX = 40
 PROCESSING_DONE = ["planned", "enriching", "ready", "failed"]
 
 STEP_LABELS = {
@@ -112,6 +117,13 @@ class PrefsPatch(BaseModel):
 class MePatch(BaseModel):
     timezone: str | None = None
     prefs: PrefsPatch | None = None
+    name: str | None = Field(default=None, max_length=NAME_MAX)
+
+
+class SavePatch(BaseModel):
+    """What a person can change on a save: where it's filed, and their own note."""
+    type: Literal["recipe", "event", "place", "workout", "product", "tip", "other"] | None = None
+    note: str | None = Field(default=None, max_length=NOTE_MAX)
 
 
 class PlanStatusRequest(BaseModel):

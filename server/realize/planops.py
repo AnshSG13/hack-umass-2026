@@ -12,6 +12,13 @@ from .models import SLOT_KINDS
 from .timeutil import as_utc, now_utc, tz_of
 
 
+QUESTIONS = {
+    "recipe": "Cook this?", "workout": "Try this workout?", "place": "Go here?",
+    "event": "Go to this?", "product": "Look into this?", "tip": "Come back to this?",
+    "other": "Keep this one?",
+}
+
+
 class PlanError(Exception):
     """A transition the plan's current state doesn't allow. The message is user-facing."""
 
@@ -212,6 +219,21 @@ def replan_code(save: dict, plan: dict, user: dict, *, reserved: list[dict] | No
     new = _back_to_proposed(plan, extra)
     db.saves().update_one({"_id": save["_id"]}, {"$set": {"intent": None}})
     return new
+
+
+def retype(save: dict, plan: dict, user: dict, kind: str) -> dict:
+    """The person filed a still-proposed plan's save under another type: rebuild the plan
+    for that type by code. "other" has nothing to do, so it isn't actionable."""
+    built = code_options(kind, save, user)
+    type_on = (user["prefs"].get("types_on") or {}).get(kind, True)
+    actionable = kind != "other" and type_on and built["actionable"] is not False
+    why = built["why"] or "You filed this yourself."
+    return db.plans().find_one_and_update(
+        {"_id": plan["_id"], "status": "proposed"},
+        {"$set": {"kind": kind, "actionable": actionable, "question": QUESTIONS[kind], "why": why,
+                  "options": built["options"] if type_on else [],
+                  "options_prev": plan.get("options") or [], "intent": None, "updated_at": now_utc()}},
+        return_document=ReturnDocument.AFTER) or plan
 
 
 def refresh_if_stale(plan: dict | None, save: dict, user: dict) -> dict | None:

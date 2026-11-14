@@ -8,7 +8,9 @@ from fastapi.responses import Response, StreamingResponse
 
 from ... import accounts, ask, db, demo, jobs, planops, ratelimit, search, thumbs, tickets
 from ...config import get_settings
-from ...models import ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TYPES
+from ...models import (
+    ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
+)
 from ...timeutil import as_utc, valid_tz
 from ..deps import client_ip, current_user, optional_user
 
@@ -65,6 +67,7 @@ def _counts(user: dict) -> dict:
 
 def _me(user: dict) -> dict:
     return {"user_id": user["_id"], "is_demo": bool(user.get("is_demo")), "is_judge": bool(user.get("is_judge")),
+            "name": user.get("name") or "",
             "timezone": user["timezone"], "prefs": user["prefs"], "key_preview": user.get("key_preview"),
             "expires_at": as_utc(user["expires_at"]).isoformat() if user.get("expires_at") else None,
             "counts": _counts(user)}
@@ -83,6 +86,8 @@ def patch_me(body: MePatch, user: dict = Depends(current_user)) -> dict:
         if not tz:
             raise HTTPException(status_code=400, detail="That time zone isn't one we know.")
         update["timezone"] = tz
+    if body.name is not None:
+        update["name"] = " ".join(body.name.split())
     if body.prefs is not None:
         prefs = dict(user["prefs"])
         patch = body.prefs.model_dump(exclude_none=True)
@@ -101,6 +106,34 @@ def patch_me(body: MePatch, user: dict = Depends(current_user)) -> dict:
 @router.post("/api/me/key")
 def new_key(user: dict = Depends(current_user)) -> dict:
     return {"api_key": accounts.rotate_key(user)}
+
+
+@router.get("/api/tastes")
+def tastes(user: dict = Depends(current_user)) -> dict:
+    """Home's "Your tastes": one entry per type the user has saved, largest first, with
+    the three newest thumbnails and the three most used tags. Counted in code."""
+    by_type: dict[str, dict] = {}
+    total = 0
+    cursor = db.saves().find({"user_id": user["_id"]},
+                             {"type": 1, "thumb_id": 1, "tags": 1, "created_at": 1}).sort("created_at", -1)
+    for s in cursor:
+        total += 1
+        t = s.get("type") if s.get("type") in TYPES else None
+        if t is None:
+            continue  # still being read; it has no type yet
+        e = by_type.setdefault(t, {"count": 0, "thumbs": [], "tags": {}})
+        e["count"] += 1
+        if s.get("thumb_id") and len(e["thumbs"]) < 3:
+            e["thumbs"].append(f"/api/t/{s['thumb_id']}")
+        for tag in {str(x).strip().lower().lstrip("#") for x in (s.get("tags") or []) if str(x).strip()}:
+            e["tags"][tag] = e["tags"].get(tag, 0) + 1
+    out = []
+    for t in sorted(by_type, key=lambda k: (-by_type[k]["count"], TYPES.index(k))):
+        e = by_type[t]
+        top = sorted(e["tags"].items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+        out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
+                    "tags": [{"tag": k, "count": n} for k, n in top]})
+    return {"total": total, "tastes": out}
 
 
 @router.get("/api/search")
