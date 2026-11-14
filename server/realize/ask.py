@@ -29,7 +29,9 @@ Today is {today_local} ({timezone}).
   say it's ready to confirm.
 - Finish with respond: 1 to 3 short sentences, answer first. Don't list everything you found; the
   app shows cards. save_ids are the saves that answer the question, best first.
-- confidence: high if a save clearly answers it, low if one partly does, none if nothing does."""
+- confidence: high if a save clearly answers it, low if one partly does, none if nothing does.
+- follow_ups: up to 2 short next questions this person would likely ask about these saves, in
+  their words ("Plan it for Friday", "What do I need to buy?"). Leave it empty when nothing fits."""
 
 
 def tool_defs() -> list[dict]:
@@ -54,7 +56,9 @@ def tool_defs() -> list[dict]:
             "type": "object", "properties": {
                 "text": {"type": "string", "description": "1 to 3 short sentences, max 600 chars"},
                 "confidence": {"type": "string", "enum": ["high", "low", "none"]},
-                "save_ids": {"type": "array", "items": S}},
+                "save_ids": {"type": "array", "items": S},
+                "follow_ups": {"type": "array", "items": S, "maxItems": 2,
+                               "description": "Next questions to offer as buttons, each under 40 chars"}},
             "required": ["text", "confidence", "save_ids"]}),
     ]
 
@@ -64,6 +68,31 @@ def card(save: dict, user: dict, query: str = "") -> dict:
             "type": save.get("type"), "thumb_url": tickets.thumb_url(save),
             "saved_on": tickets.saved_on(save, user), "snippet": search.snippet(save, query),
             "url": save.get("url")}
+
+
+def clean_follow_ups(raw) -> list[str]:
+    """At most 2 short, distinct questions; anything long or empty is dropped."""
+    out: list[str] = []
+    for x in raw if isinstance(raw, list) else []:
+        q = " ".join(str(x).replace("\u2014", ",").split()).strip(" \"'")
+        if 3 <= len(q) <= 48 and q.lower() not in [o.lower() for o in out]:
+            out.append(q)
+    return out[:2]
+
+
+def add_moments(cards: list[dict], user: dict) -> None:
+    """Where a card's snippet is a line spoken in the video, give the card that second,
+    so the tile opens the reel's transcript there. One query for all the cards."""
+    ids = [i for i in (db.oid(c["save_id"]) for c in cards if c.get("snippet")) if i]
+    if not ids:
+        return
+    docs = {str(d["_id"]): d for d in db.saves().find(
+        {"_id": {"$in": ids}, "user_id": user["_id"]}, {"summary": 1, "transcript": 1})}
+    for c in cards:
+        d = docs.get(c["save_id"])
+        sec = search.moment(c.get("snippet") or "", d.get("summary"), d.get("transcript")) if d else None
+        if sec is not None:
+            c["at_sec"], c["at_label"] = sec, f"{sec // 60}:{sec % 60:02d}"
 
 
 def propose_plans(user: dict, save_ids: list[str]) -> list[dict]:
@@ -188,7 +217,8 @@ def _run(user: dict, message: str, history: list[dict], emit) -> None:
             with run.step("respond", args) as h:
                 conf = args.get("confidence") if args.get("confidence") in ("high", "low", "none") else "low"
                 state["answer"] = {"text": str(args.get("text") or "")[:600], "confidence": conf,
-                                   "save_ids": [str(x) for x in (args.get("save_ids") or [])][:8]}
+                                   "save_ids": [str(x) for x in (args.get("save_ids") or [])][:8],
+                                   "follow_ups": clean_follow_ups(args.get("follow_ups"))}
                 h["result"] = {"ok": True}
                 return h["result"], True
         return {"error": f"unknown tool {name}"}, False
@@ -225,9 +255,14 @@ def _run(user: dict, message: str, history: list[dict], emit) -> None:
                 closest, _ = search.hybrid_search(user["_id"], message, limit=3)
             cards = [card(d, user, state["last_query"]) for d in closest[:3]]
             ans["save_ids"] = []
+            ans["follow_ups"] = []
         else:
             ans["save_ids"] = [c["save_id"] for c in cards]
         if cards:
+            try:
+                add_moments(cards, user)
+            except Exception as e:  # noqa: BLE001 - a missing moment only loses the deep link
+                log.warning("moments failed: %s", str(e)[:120])
             emit({"type": "cards", "cards": cards})
         emit({"type": "answer", **ans})
         emit({"type": "done"})

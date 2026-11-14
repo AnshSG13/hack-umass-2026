@@ -476,3 +476,223 @@
 .said.fold[open] .said:not([open]) > summary .i {
   transform: none;
 }
+
+/* ---------- Section headings on Home and Plans: the display face, so they never read
+   as a tile's title, with an optional count pill beside them ---------- */
+.block-title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 23px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.block-head {
+  min-height: 40px;
+}
+
+/* ---------- Ask: spoken questions, moments, next questions ---------- */
+.said-wrap {
+  align-self: flex-end;
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.said-wrap .bubble {
+  max-width: 100%;
+}
+.said-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.wave.still {
+  height: 12px;
+  gap: 2px;
+}
+.wave.still span {
+  width: 2px;
+  animation: none;
+  background: var(--lavender-ink);
+}
+.wave.still span:nth-child(1) {
+  transform: scaleY(0.45);
+}
+.wave.still span:nth-child(2) {
+  transform: scaleY(1);
+}
+.wave.still span:nth-child(3) {
+  transform: scaleY(0.65);
+}
+.tile-at {
+  margin-top: 8px;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  background: var(--lavender);
+  color: var(--lavender-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tile-at .i {
+  width: 13px;
+  height: 13px;
+}
+.follow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.follow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px 8px 16px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-align: left;
+  animation: chip-in 0.4s var(--ease) both;
+  transition: background 0.2s, transform 0.2s var(--ease);
+}
+.follow-chip:nth-child(2) {
+  animation-delay: 0.07s;
+}
+.follow-chip:hover {
+  background: var(--surface);
+}
+.follow-chip:active {
+  transform: scale(0.97);
+}
+.follow-chip .i {
+  width: 15px;
+  height: 15px;
+  color: var(--ink-3);
+  transform: rotate(45deg);
+}
+
+/* ---------- Voice: hold the orb ---------- */
+.voice {
+  position: fixed;
+  inset: 0;
+  z-index: 39; /* under the bar, so the orb you are holding stays on top */
+  background: #ffffff;
+  overflow: hidden;
+  animation: voice-in 0.3s ease-out both;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.voice-glow {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-190px + var(--safe-b));
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    closest-side,
+    rgba(185, 166, 255, 0.5),
+    rgba(142, 197, 255, 0.3) 38%,
+    rgba(255, 184, 150, 0.2) 62%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: voice-breathe 2.6s ease-in-out infinite;
+}
+.voice-col {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(150px + var(--safe-b));
+  top: env(safe-area-inset-top, 0px);
+  margin-inline: auto;
+  width: 100%;
+  max-width: 440px;
+  padding: 40px var(--gutter-r) 0 var(--gutter-l);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 22px;
+  /* long dictation scrolls up and fades out at the top */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 96px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 96px);
+}
+.voice-words {
+  font-family: var(--display);
+  font-size: 34px;
+  line-height: 1.16;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.voice-words .tail {
+  color: #a9abb5;
+}
+.voice-words.is-waiting {
+  color: #a9abb5;
+}
+.voice-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+@keyframes voice-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes voice-breathe {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(-50%) scale(1.09);
+    opacity: 1;
+  }
+}
+/* While you hold, the bar is only the orb. */
+.bar:has(.orb.is-listening) {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.bar:has(.orb.is-listening) .tab {
+  opacity: 0;
+  pointer-events: none;
+}
+.bar .tab {
+  transition: color 0.2s, opacity 0.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice,
+  .voice-glow,
+  .follow-chip {
+    animation: none;
+  }
+}

@@ -113,6 +113,12 @@ export default function HomePage() {
   const isEmpty = loaded && listed.length === 0 && fresh.length === 0;
   const ideas = chips?.chips ?? [];
   const tasteList = tastes.data?.tastes ?? [];
+  // Still being read right now: just added in this visit, or in the list and not done.
+  // The list is asked again when a new save finishes, so its status is the current one.
+  const statusOf = new Map((saves.data?.items ?? []).map((t) => [t.save_id, t.processing]));
+  const saving =
+    fresh.filter((f) => inFlight(statusOf.get(f.save_id) ?? f.ticket?.processing ?? "queued")).length +
+    listed.filter((t) => inFlight(t.processing)).length;
 
   // Pull down at the top: ask the server again for everything this screen shows.
   const { mutate } = useSWRConfig();
@@ -167,6 +173,18 @@ export default function HomePage() {
           <div className="gutter block-head">
             <h2 className="block-title" id="recent-h">
               Recently saved
+              {saving > 0 ? (
+                <span className="pill" style={tint("lavender")}>
+                  <span className="dot" aria-hidden="true" />
+                  {saving} saving
+                </span>
+              ) : (
+                fresh.length > 0 && (
+                  <span className="pill" style={tint("mint")}>
+                    {fresh.length} new
+                  </span>
+                )
+              )}
             </h2>
             <button type="button" className="add" onClick={openAdd}>
               <Icon name="plus" />
@@ -233,6 +251,7 @@ export default function HomePage() {
           <div className="block-head">
             <h2 className="block-title" id="tastes-h">
               Your tastes
+              <span className="pill">{tasteList.length}</span>
             </h2>
           </div>
           <div className="tastes">

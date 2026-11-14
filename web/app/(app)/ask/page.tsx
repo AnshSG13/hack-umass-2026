@@ -11,6 +11,7 @@ import { StepLines } from "@/components/agent-activity";
 import { KindChip } from "@/components/bits";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
+import { Streamed } from "@/components/streamed";
 import { useAskStore, type AskTurn } from "@/components/shell";
 import { chatStream, fetcher } from "@/lib/api";
 import { kindOf, kindTint, tint, type KindColor } from "@/lib/kinds";
@@ -34,7 +35,7 @@ function applyEvent(turn: AskTurn, e: ChatEvent): AskTurn {
     case "plans":
       return { ...turn, tickets: e.tickets };
     case "answer":
-      return { ...turn, answer: { text: e.text, confidence: e.confidence } };
+      return { ...turn, answer: { text: e.text, confidence: e.confidence, followUps: e.follow_ups ?? [] } };
     case "error":
       return { ...turn, error: e.message || GENERIC_ERROR, done: true };
     case "done":
@@ -47,7 +48,11 @@ function applyEvent(turn: AskTurn, e: ChatEvent): AskTurn {
 function ReelCard({ card }: { card: AskCard }) {
   const kind = kindOf(card.type);
   return (
-    <Link href={`/s/${card.save_id}`} className="tile" aria-label={`Open ${card.title}`}>
+    <Link
+      href={card.at_sec !== undefined ? `/s/${card.save_id}?t=${card.at_sec}` : `/s/${card.save_id}`}
+      className="tile"
+      aria-label={card.at_label ? `Open ${card.title} at ${card.at_label}` : `Open ${card.title}`}
+    >
       <span className="tile-media">
         {card.thumb_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -64,16 +69,52 @@ function ReelCard({ card }: { card: AskCard }) {
       </span>
       <span className="tile-title">{card.title}</span>
       {card.snippet && <span className="tile-snip">{card.snippet}</span>}
+      {card.at_label && (
+        <span className="tile-at">
+          <Icon name="clock" />
+          Said at {card.at_label}
+        </span>
+      )}
     </Link>
   );
 }
 
-function Turn({ turn, onRetry }: { turn: AskTurn; onRetry: () => void }) {
+function Turn({
+  turn,
+  live,
+  onRetry,
+  onFollowUp,
+}: {
+  turn: AskTurn;
+  /** The newest turn, answered in this visit: its words arrive one by one. */
+  live: boolean;
+  onRetry: () => void;
+  /** Set on the newest turn only: older turns don't offer next questions. */
+  onFollowUp?: (text: string) => void;
+}) {
   const none = turn.answer?.confidence === "none";
   const working = !turn.done && !turn.answer;
+  const text = none
+    ? turn.cards.length > 0
+      ? "Nothing in your saves matches that. Closest ones:"
+      : "Nothing in your saves matches that."
+    : (turn.answer?.text ?? "");
+  const followUps = turn.done && !turn.error ? (turn.answer?.followUps ?? []) : [];
   return (
     <div className="turn">
-      <p className="bubble">{turn.question}</p>
+      <div className="said-wrap">
+        <p className="bubble">{turn.question}</p>
+        {turn.spoken && (
+          <span className="said-tag">
+            <span className="wave still" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            Said out loud
+          </span>
+        )}
+      </div>
 
       {working && !turn.error && (
         <StepLines
@@ -85,13 +126,17 @@ function Turn({ turn, onRetry }: { turn: AskTurn; onRetry: () => void }) {
       {turn.answer && (
         <div>
           <p className="answer">
-            {none
-              ? turn.cards.length > 0
-                ? "Nothing in your saves matches that. Closest ones:"
-                : "Nothing in your saves matches that."
-              : turn.answer.text}
+            <Streamed text={text} live={live} />
           </p>
           {turn.answer.confidence === "low" && <p className="answer-note">Best match I found.</p>}
+        </div>
+      )}
+
+      {turn.cards.length > 0 && (
+        <div className="rail">
+          {turn.cards.map((c) => (
+            <ReelCard key={c.save_id} card={c} />
+          ))}
         </div>
       )}
 
@@ -103,10 +148,13 @@ function Turn({ turn, onRetry }: { turn: AskTurn; onRetry: () => void }) {
         </div>
       )}
 
-      {turn.cards.length > 0 && (
-        <div className="rail">
-          {turn.cards.map((c) => (
-            <ReelCard key={c.save_id} card={c} />
+      {onFollowUp && followUps.length > 0 && (
+        <div className="follow">
+          {followUps.map((q) => (
+            <button key={q} type="button" className="follow-chip" onClick={() => onFollowUp(q)}>
+              {q}
+              <Icon name="send" />
+            </button>
           ))}
         </div>
       )}
@@ -135,15 +183,17 @@ export default function AskPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const handled = useRef(0);
+  // Turns answered during this visit; ones already there when the page opened don't replay.
+  const [liveIds, setLiveIds] = useState<number[]>([]);
 
   // Keep the newest message in view. A jump, not a scroll animation.
   const last = turns[turns.length - 1];
-  const marker = `${turns.length}:${last?.steps.length ?? 0}:${last?.answer ? 1 : 0}:${last?.cards.length ?? 0}:${last?.tickets.length ?? 0}:${last?.error ? 1 : 0}`;
+  const marker = `${turns.length}:${last?.steps.length ?? 0}:${last?.answer ? 1 : 0}:${last?.cards.length ?? 0}:${last?.tickets.length ?? 0}:${last?.error ? 1 : 0}:${last?.done ? 1 : 0}`;
   useEffect(() => {
     if (turns.length > 0) endRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
   }, [marker, turns.length]);
 
-  async function send(text: string, replaceId?: number) {
+  async function send(text: string, replaceId?: number, spoken?: boolean) {
     const message = text.trim();
     if (!message || sending) return;
     setSending(true);
@@ -156,8 +206,19 @@ export default function AskPage() {
       ])
       .slice(-6);
     const id = turns.reduce((m, t) => Math.max(m, t.id), 0) + 1;
-    const fresh: AskTurn = { id, question: message, steps: [], cards: [], tickets: [], answer: null, error: null, done: false };
+    const fresh: AskTurn = {
+      id,
+      question: message,
+      steps: [],
+      cards: [],
+      tickets: [],
+      answer: null,
+      error: null,
+      done: false,
+      spoken,
+    };
     setTurns([...prior, fresh]);
+    setLiveIds((ids) => [...ids, id]);
     const update = (fn: (t: AskTurn) => AskTurn) => setTurns((ts) => ts.map((t) => (t.id === id ? fn(t) : t)));
     await chatStream({ message, history }, (e) => update((t) => applyEvent(t, e)));
     // The stream ended: anything without an answer by now is an error.
@@ -177,7 +238,7 @@ export default function AskPage() {
       clearHandoff();
       // While an answer is still streaming, a new question waits in the input instead.
       if (taken.send && taken.text.trim() && !sending) {
-        void send(taken.text);
+        void send(taken.text, undefined, taken.spoken);
         return;
       }
       if (taken.text) setDraft(taken.text);
@@ -223,7 +284,13 @@ export default function AskPage() {
       ) : (
         <div className="chat">
           {turns.map((t) => (
-            <Turn key={t.id} turn={t} onRetry={() => void send(t.question, t.id)} />
+            <Turn
+              key={t.id}
+              turn={t}
+              live={liveIds.includes(t.id)}
+              onRetry={() => void send(t.question, t.id, t.spoken)}
+              onFollowUp={t.id === last?.id && !sending ? (q) => void send(q) : undefined}
+            />
           ))}
         </div>
       )}

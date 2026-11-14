@@ -640,3 +640,30 @@ def test_discussion_context_carries_the_reel_and_the_note():
     for piece in ("Title: Pad thai", "@cook", "Soak noodles", "- 20 minutes", "[11] Rinse the noodles", "less sugar"):
         assert piece in ctx
     assert "Transcript: none" in discuss.reel_context({"title": "x"}, None, {"timezone": "UTC"})
+
+
+# ---------- Ask: moments and follow-ups ----------
+
+
+def test_a_snippet_said_in_the_video_gets_its_second():
+    from realize import search
+
+    lines = [{"start_sec": 0.0, "text": "Today we make pad thai"},
+             {"start_sec": 11.4, "text": "rinse the noodles in cold water"},
+             {"start_sec": 20.0, "text": "so"}]
+    assert search.moment("Then rinse the noodles in cold water so they don't stick.", "A pad thai recipe.", lines) == 11
+    assert search.moment("A pad thai recipe.", "A pad thai recipe.", lines) is None      # from the summary
+    assert search.moment("Buy a wok on sale", "A pad thai recipe.", lines) is None        # said nowhere
+    assert search.moment("", None, lines) is None
+    assert search.moment("Today we make pad thai", None, lines) is None                   # the opening line
+    assert search.moment("rinse the noodles in cold water", None, []) is None
+
+
+def test_follow_ups_are_short_and_distinct():
+    from realize import ask
+
+    assert ask.clean_follow_ups(["Plan it for Friday", "plan it for friday", "  What do I need to buy? "]) == [
+        "Plan it for Friday", "What do I need to buy?"]
+    assert ask.clean_follow_ups(["x", "y" * 80]) == []
+    assert ask.clean_follow_ups(None) == []
+    assert ask.clean_follow_ups(["a b c", "d e f", "g h i"]) == ["a b c", "d e f"]

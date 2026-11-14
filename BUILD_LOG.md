@@ -208,3 +208,12 @@ The owner's ask: "Ask about this" sent you to the general chat, which had to fin
 - New styles go in `web/app/v2.css`, so `mock.css` stays the port of the first mockup.
 
 Measured on the poutine reel (demo account, `gemini-3.5-flash`): three questions answered in 2.0 to 3.6 s. 97 unit tests pass (3 new). Checked in headless Chrome at 390x844: new discussion, reopening a saved one, a follow-up, "Said at 0:05" opening the transcript, Escape closing the layer, no console or network errors. Not checked: a real iPhone.
+
+## 2026-11-14: Home headings, Ask's answer, and the voice layer
+
+- **Section headings** on Home and Plans use the display face, so "Recently saved" no longer reads like a tile's title. A pill beside it says "1 saving" (with a pulsing dot) while a reel is being read and "1 new" after; "Your tastes" shows its count.
+- **Ask's answer** arrives word by word (`Streamed`: pacing only, the API still answers in one piece; whole text at once under reduced motion). Order is now answer, source reels, plan cards, then up to 2 next questions as buttons. The next questions come from the model through `respond.follow_ups`, cleaned in code (`ask.clean_follow_ups`).
+- **Moments.** When a card's snippet is a line spoken in the video, the card carries its second (`search.moment`, token overlap against the transcript, never the opening line) and the tile opens `/s/{id}?t={sec}`, which shows that transcript line.
+- **Voice.** Holding the orb already dictated through the browser's speech recognition. It now opens a full layer with the words as they are heard: settled words in ink, the tail in grey while it can still change. On release the question goes to Ask marked "Said out loud". No new dependency; browsers without speech recognition still treat a hold as a tap.
+
+99 unit tests pass (2 new). Checked in headless Chrome at 390x844 with a scripted speech recogniser: hold, words appearing, release, the spoken bubble, the streamed answer, next-question buttons. Not checked: a real microphone, or iOS Safari, where dictation needs https.

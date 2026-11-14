@@ -237,13 +237,16 @@ export interface AskCard {
   saved_on: string;
   snippet: string;
   url: string;
+  /** Set when the snippet is a line spoken in the video: the tile opens the reel there. */
+  at_sec?: number;
+  at_label?: string; // "0:11"
 }
 
 export type ChatEvent =
   | { type: "step"; label: string }
   | { type: "cards"; cards: AskCard[] }
   | { type: "plans"; tickets: Ticket[] }
-  | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[] }
+  | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[]; follow_ups?: string[] }
   | { type: "done" }
   | { type: "error"; message: string };
 

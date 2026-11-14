@@ -1,15 +1,18 @@
 "use client";
 
 // The glowing button in the bottom bar. Tap: open Ask. Press and hold: dictate a question
-// with the browser's speech recognition and send it to Ask on release. Where the browser
-// has no speech recognition, a hold is a tap.
+// with the browser's speech recognition and send it to Ask on release. While you hold, a
+// full layer shows your words as they are heard: settled words in ink, the last ones in
+// grey while they can still change. Where the browser has no speech recognition, a hold
+// is a tap.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 interface SpeechResultList {
   length: number;
-  [index: number]: { 0: { transcript: string } };
+  [index: number]: { isFinal?: boolean; 0: { transcript: string } };
 }
 interface Recognition {
   lang: string;
@@ -47,6 +50,8 @@ export function Orb({
   onProblem: (message: string) => void;
 }) {
   const [listening, setListening] = useState(false);
+  // What has been heard so far: words that are settled, and the tail that may still change.
+  const [words, setWords] = useState({ settled: "", tail: "" });
   const pressed = useRef(false);
   const holdTimer = useRef<number | null>(null);
   const rec = useRef<Recognition | null>(null);
@@ -81,9 +86,14 @@ export function Orb({
       problem.current = null;
       cancelled.current = false;
       r.onresult = (e) => {
-        let text = "";
-        for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-        heard.current = text;
+        let settled = "";
+        let tail = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (e.results[i].isFinal) settled += e.results[i][0].transcript;
+          else tail += e.results[i][0].transcript;
+        }
+        heard.current = settled + tail;
+        setWords({ settled: settled.trim(), tail: tail.trim() });
       };
       r.onerror = (e) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -105,6 +115,7 @@ export function Orb({
       };
       r.start();
       rec.current = r;
+      setWords({ settled: "", tail: "" });
       return true;
     } catch {
       rec.current = null;
@@ -114,16 +125,34 @@ export function Orb({
 
   return (
     <>
-      <div className={cn("listen", listening && "is-on")} aria-hidden="true">
-        <span className="wave">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </span>
-        Listening. Release to send.
-      </div>
+      {listening &&
+        createPortal(
+          <div className="voice" aria-hidden="true">
+            <div className="voice-glow" />
+            <div className="voice-col">
+              {words.settled || words.tail ? (
+                <p className="voice-words">
+                  {words.settled}
+                  {words.settled && words.tail ? " " : ""}
+                  {words.tail && <span className="tail">{words.tail}</span>}
+                </p>
+              ) : (
+                <p className="voice-words is-waiting">Go ahead, I&apos;m listening.</p>
+              )}
+              <p className="voice-hint">
+                <span className="wave">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                Release to send
+              </p>
+            </div>
+          </div>,
+          document.body,
+        )}
       <span className="orb-slot">
         <button
           type="button"

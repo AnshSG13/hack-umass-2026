@@ -266,6 +266,31 @@ _SENT = re.compile(r"(?<=[.!?])\s+|\n+")
 _TOK = re.compile(r"[a-z0-9']+")
 
 
+MOMENT_MIN_SEC = 3
+
+
+def moment(snip: str, summary: str | None, transcript: list[dict] | None) -> int | None:
+    """The start second of the spoken line a snippet came from, or None when the snippet
+    isn't something said in the video (it is from the summary, or nothing lines up)."""
+    text = (snip or "").rstrip("…").strip()
+    if not text or (summary and text.lower() in summary.lower()):
+        return None
+    want = set(_TOK.findall(text.lower()))
+    best, best_score = None, 0.0
+    for line in transcript or []:
+        toks = set(_TOK.findall(str(line.get("text") or "").lower()))
+        if len(toks) < 2:
+            continue
+        score = len(toks & want) / len(toks)
+        if score > best_score:
+            best, best_score = line, score
+    if best is None or best_score < 0.6:
+        return None
+    sec = int(float(best.get("start_sec") or 0))
+    # The opening line is where the reel starts anyway: a link there says nothing.
+    return sec if sec >= MOMENT_MIN_SEC else None
+
+
 def snippet(save: dict, query: str, max_len: int = 140) -> str:
     """The sentence from summary, transcript or on-screen text with the most query-token overlap."""
     q = set(_TOK.findall((query or "").lower()))

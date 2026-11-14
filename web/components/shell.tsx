@@ -24,9 +24,11 @@ export interface AskTurn {
   steps: StepLine[];
   cards: AskCard[];
   tickets: Ticket[];
-  answer: { text: string; confidence: "high" | "low" | "none" } | null;
+  answer: { text: string; confidence: "high" | "low" | "none"; followUps: string[] } | null;
   error: string | null;
   done: boolean;
+  /** The question was dictated with the orb, not typed. */
+  spoken?: boolean;
 }
 
 /** A question handed to Ask from somewhere else. Held in memory only, so a reload never re-sends it. */
@@ -35,6 +37,8 @@ export interface AskHandoff {
   text: string;
   /** true: send it now. false: put it in the input and focus it. */
   send: boolean;
+  /** It was said out loud. */
+  spoken?: boolean;
 }
 
 interface AskStore {
@@ -42,7 +46,7 @@ interface AskStore {
   setTurns: React.Dispatch<React.SetStateAction<AskTurn[]>>;
   handoff: AskHandoff | null;
   /** Hand a question to Ask and go there. */
-  ask: (text: string, send: boolean) => void;
+  ask: (text: string, send: boolean, spoken?: boolean) => void;
   clearHandoff: () => void;
 }
 
@@ -126,9 +130,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const ask = useCallback(
-    (text: string, send: boolean) => {
+    (text: string, send: boolean, spoken?: boolean) => {
       handoffId.current += 1;
-      setHandoff({ id: handoffId.current, text, send });
+      setHandoff({ id: handoffId.current, text, send, spoken });
       if (!pathname.startsWith("/ask")) router.push("/ask");
     },
     [pathname, router],
@@ -210,7 +214,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Orb
             appName={appName}
             onOpen={() => ask("", false)}
-            onHeard={(text) => ask(text, true)}
+            onHeard={(text) => ask(text, true, true)}
             onProblem={(message) => toast.show(message)}
           />
           <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
