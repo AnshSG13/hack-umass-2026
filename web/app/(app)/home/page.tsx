@@ -3,11 +3,12 @@
 // Home, after the mockup: greeting, search, the rail of recent saves, ideas to ask about,
 // and the tastes grid. Everything on it comes from the API.
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
 import { Icon } from "@/components/icons";
+import { PullToRefresh } from "@/components/pull-refresh";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
 import { useApp, useAskStore } from "@/components/shell";
 import { fetcher } from "@/lib/api";
@@ -113,8 +114,19 @@ export default function HomePage() {
   const ideas = chips?.chips ?? [];
   const tasteList = tastes.data?.tastes ?? [];
 
+  // Pull down at the top: ask the server again for everything this screen shows.
+  const { mutate } = useSWRConfig();
+  const reload = useCallback(
+    () =>
+      mutate(
+        (key) => typeof key === "string" && key.startsWith("/api/") && key !== "/api/config" && key !== "/api/health",
+      ),
+    [mutate],
+  );
+
   return (
     <>
+      <PullToRefresh onRefresh={reload} />
       <div className="gutter">
         <header className="home-head">
           <div style={{ minWidth: 0 }}>
