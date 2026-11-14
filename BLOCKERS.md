@@ -17,6 +17,17 @@ Open items are at the top. Resolved items move to the bottom with how they were 
 - **Tried.** Trimmed the fields the planner writes at propose time (the video pass fills in the rest), moved the caption embedding after the status flip, removed the per-process thinking probe, and precomputed the two tool calls so one model turn is enough.
 - **Not yet verified.** The one-turn planner has not been timed over the full fixture set because of blocker 1. Rerun `python -m scripts.run_fixtures` when quota returns; it prints the median next to PROPOSAL_WAIT_SECONDS.
 
+### 3. Ask has not been seen answering with real data
+- **Why.** Every `POST /api/chat` since the quota ran out printed "Checking your saves" and then "Ask didn't answer. Try again." The first model turn sometimes got through on a fallback model; the second did not.
+- **What is verified.** The stream format, the step lines, the error state, the chips, and (from a mocked stream only) the layout of answers, cards, "Closest ones" and plan tickets. `propose_plans` is code and was exercised through the API paths it shares with replan.
+- **Not verified.** The phase 4 check "3 queries from queries.csv return the expected card in Ask", and the answer, confidence-none and propose_plans screenshots with real answers.
+- **Next.** With quota back, ask three questions from `fixtures/queries.csv` in `/ask` and retake those three screenshots.
+
+### 4. `docker compose build` was not run
+- **Why.** Docker 29.7.2 is installed, but the daemon was not running. Starting Docker Desktop from the build did not bring the engine up within several minutes (`docker info` hung), so it probably wants a click in its window.
+- **What is verified.** `docker compose config` validates; `npm run build` produces the standalone output the web image copies; the server image is the Dockerfile from SPEC section 18 unchanged.
+- **Next.** Open Docker Desktop, wait for "Engine running", then `docker compose build`.
+
 ## Resolved
 
 _None yet._

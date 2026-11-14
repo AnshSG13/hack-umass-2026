@@ -42,8 +42,12 @@ def code_options(kind: str, save: dict, user: dict, *, reserved: list[dict] | No
                 chosen.append(s)
         if not chosen:
             chosen = fresh[:2]
-    return actions.build_options(kind, save.get("title") or "Saved reel", save.get("fields"), user,
-                                 slots=chosen, now=now, accepted=accepted)
+    built = actions.build_options(kind, save.get("title") or "Saved reel", save.get("fields"), user,
+                                  slots=chosen, now=now, accepted=accepted)
+    if kind == "event" and built["why"] is None and built["options"]             and built["options"][0]["label"] == actions.CHECK_DATES:
+        # An event with no readable date gets a reminder, and the reason has to say so.
+        built["why"] = "The date isn't clear yet, so this is a reminder to check."
+    return built
 
 
 def upsert_proposal(save: dict, user: dict, *, kind: str, actionable: bool, question: str,

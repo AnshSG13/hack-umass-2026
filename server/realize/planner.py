@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from . import db, gemini, jobs, planops, search, slots, thumbs
+from . import actions, db, gemini, jobs, planops, search, slots, thumbs
 from .config import get_settings
 from .models import PROPOSE_PLAN_SCHEMA, SLOT_KINDS, TYPES, clean_fields
 from .runs import Run
@@ -232,7 +232,7 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
         fields = save.get("fields") or {}
         title = save.get("title") or title
     else:
-        fields = clean_fields(kind, args.get("fields"))
+        fields = actions.fix_event_year(clean_fields(kind, args.get("fields")), save.get("posted_at"))
         update = {"type": kind, "title": title, "summary": str(args.get("summary") or "")[:400],
                   "fields": fields, "caption_sufficient": bool(args.get("caption_sufficient", True))}
         edited = set(save.get("user_edited") or [])
@@ -251,6 +251,8 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
         options = built["options"]
         if built["actionable"] is False:
             actionable, why = False, built["why"]
+        elif built["why"] and not why:
+            why = built["why"]
     return planops.upsert_proposal(
         save, user, kind=kind, actionable=actionable, question=question, why=why,
         confidence=confidence, options=options,
@@ -272,11 +274,16 @@ def _shape_errors(args: dict) -> list[str]:
 
 
 def fallback_plan(save: dict, user: dict) -> dict:
-    """Deterministic plan when the model can't be used: the user still gets a ticket."""
+    """Deterministic plan when the model can't be used: the user still gets a ticket.
+
+    Before the video is read the type is unknown, so the plan is "other" with a
+    reminder in a week. Once enrichment has typed the save, a still-proposed plan
+    of a different kind is rebuilt by code for that type with real slots.
+    """
     existing = planops.get_for_save(save["_id"])
-    if existing:
-        return existing
     kind = save.get("type") if save.get("type") in TYPES else "other"
+    if existing and (existing["status"] != "proposed" or existing["kind"] == kind):
+        return existing
     caption = " ".join((save.get("caption") or "").split())
     title = save.get("title") or caption[:50] or "Saved reel"
     update = {"type": kind, "title": title}
@@ -284,11 +291,19 @@ def fallback_plan(save: dict, user: dict) -> dict:
         update["summary"] = ""
     db.saves().update_one({"_id": save["_id"]}, {"$set": update})
     save = {**save, **update}
-    built = planops.code_options("other", save, user)
+    if kind == "other":
+        built = planops.code_options("other", save, user)
+        return planops.upsert_proposal(
+            save, user, kind=kind, actionable=False, question="Keep this one?",
+            why="Couldn't read enough to plan it. It's saved either way.",
+            confidence="best_guess", options=built["options"])
+    type_on = (user["prefs"].get("types_on") or {}).get(kind, True)
+    built = planops.code_options(kind, save, user)
+    actionable = type_on and built["actionable"] is not False
     return planops.upsert_proposal(
-        save, user, kind=kind, actionable=False, question="Keep this one?",
-        why="Couldn't read enough to plan it. It's saved either way.",
-        confidence="best_guess", options=built["options"])
+        save, user, kind=kind, actionable=actionable, question=DEFAULT_QUESTION[kind],
+        why=built["why"] or "Planned from what the video shows.",
+        confidence="best_guess", options=built["options"] if type_on else [])
 
 
 def cached_plan_fallback(save: dict, user: dict, cached: dict | None) -> dict:
@@ -304,6 +319,8 @@ def cached_plan_fallback(save: dict, user: dict, cached: dict | None) -> dict:
     why = cached.get("why") or ""
     if built["actionable"] is False:
         actionable, why = False, built["why"]
+    elif built["why"]:
+        why = built["why"]
     if not (user["prefs"].get("types_on") or {}).get(kind, True):
         actionable, built["options"] = False, []
     return planops.upsert_proposal(
@@ -414,7 +431,12 @@ def run_planner(save: dict, user: dict, *, run_kind: str = "propose", with_enric
             run.finish("failed", str(e))
             raise PlannerBusy(str(e)[:300]) from e
         fresh = db.saves().find_one({"_id": save["_id"]}) or save
-        plan = cached_plan_fallback(fresh, user, cached_plan) if cached_plan else fallback_plan(fresh, user)
+        source = "cached plan" if cached_plan else "deterministic fallback"
+        # The plan is still drafted, by code this time; the trace says so.
+        with run.step("propose_plan", {"source": source}) as h:
+            plan = cached_plan_fallback(fresh, user, cached_plan) if cached_plan else fallback_plan(fresh, user)
+            h["result"] = {"ok": True, "source": source,
+                           "options": [o["label"] for o in plan.get("options") or []]}
         run.finish("fallback", str(e))
         return plan, "fallback"
 

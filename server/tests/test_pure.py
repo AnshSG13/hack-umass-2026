@@ -414,3 +414,34 @@ def test_snippet_picks_the_matching_sentence():
     save = {"summary": "A creamy dessert. It uses Greek yogurt instead of mascarpone.",
             "transcript_text": "Dip the ladyfingers in espresso.", "on_screen_text": ["1 cup Greek yogurt"]}
     assert search.snippet(save, "ladyfingers espresso") == "Dip the ladyfingers in espresso."
+
+
+# ---------- event date sanity, ongoing events, search relevance ----------
+
+def test_event_year_is_pulled_to_the_post_year():
+    posted = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
+    f = {"event": {"name": "Holiday Train Show", "start_local": "2023-11-14T00:00", "end_local": "2024-01-10T00:00"}}
+    actions.fix_event_year(f, posted)
+    assert f["event"]["start_local"] == "2026-11-14T00:00" and f["event"]["end_local"] == "2027-01-10T00:00"
+    ok = {"event": {"start_local": "2026-11-20T19:00"}}
+    actions.fix_event_year(ok, posted)
+    assert ok["event"]["start_local"] == "2026-11-20T19:00"
+    jan = {"event": {"start_local": "2025-01-05T19:00"}}   # posted in November, happens in January
+    actions.fix_event_year(jan, posted)
+    assert jan["event"]["start_local"] == "2027-01-05T19:00"
+
+
+def test_event_already_open_and_still_running_gets_a_reminder():
+    f = {"event": {"name": "Holiday Train Show", "start_local": "2026-11-13T10:00", "end_local": "2027-01-10T18:00",
+                   "venue": "New York Botanical Garden"}}
+    b = actions.build_options("event", "Train show", f, user(), now=NOW, accepted=[])
+    assert b["actionable"] is None and b["why"] == "It runs until Jan 10."
+    assert b["options"][0]["action"] == "reminder" and b["options"][0]["label"] == "Remind me Nov 21"
+
+
+def test_search_relevance_floor():
+    doc = {"title": "Easy Greek Yogurt Tiramisu", "summary": "A lighter tiramisu.", "tags": ["dessert"],
+           "embedding": [1.0, 0.0]}
+    assert search._relevant(dict(doc), "zebra unicycle", [0.7, 0.714])        # cosine 0.7 clears the floor
+    assert not search._relevant(dict(doc), "zebra unicycle", [0.5, 0.866])    # 0.5 and no shared word
+    assert search._relevant(dict(doc), "desserts for friday", [0.5, 0.866])   # shares "dessert"

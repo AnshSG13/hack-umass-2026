@@ -6,6 +6,8 @@ const API = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The dev-only route badge sits on top of the bottom tab bar; hide it.
+  devIndicators: false,
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API}/api/:path*` }];
   },

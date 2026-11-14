@@ -75,6 +75,38 @@ def workout_duration(fields: dict | None) -> int:
         return 45
 
 
+def fix_event_year(fields: dict | None, posted_at: datetime | None) -> dict | None:
+    """Models sometimes write an event date in a past year ("2023-11-14" for a reel posted in
+    2026). An event can't start years before its own announcement, so a start more than 60
+    days before the post is moved to the post's year (or the next, if that is still earlier).
+    The end moves by the same number of years. Returns the same fields dict."""
+    ev = (fields or {}).get("event")
+    if not isinstance(ev, dict) or not ev.get("start_local") or not posted_at:
+        return fields
+    try:
+        start = datetime.fromisoformat(str(ev["start_local"])[:16])
+    except ValueError:
+        return fields
+    post = as_utc(posted_at).replace(tzinfo=None)
+    if start >= post - timedelta(days=60):
+        return fields
+    shift = post.year - start.year
+    try:
+        if start.replace(year=start.year + shift) < post - timedelta(days=60):
+            shift += 1
+        ev["start_local"] = start.replace(year=start.year + shift).strftime("%Y-%m-%dT%H:%M")
+        if ev.get("end_local"):
+            end = datetime.fromisoformat(str(ev["end_local"])[:16])
+            ev["end_local"] = end.replace(year=end.year + shift).strftime("%Y-%m-%dT%H:%M")
+    except ValueError:
+        pass
+    return fields
+
+
+def event_has_end(fields: dict | None) -> bool:
+    return bool(_f(fields, "event").get("end_local"))
+
+
 def event_times(fields: dict | None, user: dict) -> tuple[datetime | None, datetime | None]:
     """Event start and end as aware local datetimes, or (None, None)."""
     ev = _f(fields, "event")
@@ -183,6 +215,14 @@ def build_options(
             due = local(rem("event_no_date"))
             out.append(_opt(1, "reminder", due, 15, CHECK_DATES, CHECK_DATES,
                             big_time(due, now_l), "Reminder"))
+        elif start <= now_l and event_has_end(fields) and end > now_l + timedelta(days=1):
+            # Already open and still running (a show, a market): no single start to put on the
+            # calendar, so offer a weekend reminder and say how long it runs.
+            due = local(rem("place"))
+            out.append(_opt(1, "reminder", due, 15, f"Remind me {short_day(due, now_l)}",
+                            f"Remind me {long_day(due, now_l)}", big_time(due, now_l),
+                            _clip(ev.get("venue") or "Reminder", 40)))
+            override = {"actionable": None, "why": f"It runs until {month_day(end)}."}
         elif start <= now_l:
             override = {"actionable": False, "why": f"This was on {month_day(start)}. It's passed."}
         else:
@@ -334,8 +374,10 @@ def build_device_actions(plan: dict, save: dict, option: dict, user: dict,
                               "short": "Reminder"})
         elif kind == "event":
             ev = _f(fields, "event")
-            reminders.append({"title": f"Check dates: {ev.get('name') or title}", "due_utc": start,
-                              "notes": ev.get("date_text") or "", "url": link, "short": "Reminder"})
+            verb = "Check dates" if option.get("label") == CHECK_DATES else "Go to"
+            notes = "\n".join(x for x in (ev.get("date_text"), ev.get("venue"), ev.get("ticket_url")) if x)
+            reminders.append({"title": f"{verb}: {ev.get('name') or title}", "due_utc": start,
+                              "notes": notes, "url": link, "short": "Reminder"})
         else:
             points = _f(fields, "tip").get("key_points") or []
             notes = "\n".join(f"• {p}" for p in points[:8])

@@ -22,7 +22,7 @@ import sys
 import tempfile
 from datetime import timedelta
 
-from realize import accounts, db, demo, enrich, gemini, planner, planops, search, thumbs, ytdlp
+from realize import accounts, actions, db, demo, enrich, gemini, planner, planops, search, thumbs, ytdlp
 from realize.config import REPO_ROOT
 from realize.models import TYPES
 from realize.timeutil import now_utc
@@ -84,6 +84,7 @@ def build_enrichment(url: str, reuse: bool) -> tuple[dict, dict, str | None, lis
     base = {"type": None, "title": None, "summary": "", "fields": {}, "user_edited": []}
     enr = enrich.merge_fields(base, result, grounded)
     enr["caption_sufficient"] = True
+    actions.fix_event_year(enr.get("fields"), meta.get("posted_at"))
     doc = {**meta, **enr}
     emb = gemini.embed_one(search.embedding_text(doc, full=True), "RETRIEVAL_DOCUMENT")
     return meta, enr, thumb_id, emb, "downloaded and watched"

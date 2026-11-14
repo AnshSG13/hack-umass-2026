@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 
-from . import db, gemini, planner, planops, search
+from . import actions, db, gemini, planner, planops, search
 from .config import get_settings
 from .models import ENRICH_SCHEMA, TYPES, clean_fields
 from .runs import Run
@@ -156,6 +156,9 @@ def run_enrich_job(save: dict, user: dict) -> None:
 
         with run.step("analyze_video", {"model": s.gemini_model_video}) as h:
             result, file_name = analyze_video(str(path), save.get("caption") or "")
+            used = gemini.last_model.get("video")
+            if used and used != s.gemini_model_video:
+                db.agent_runs().update_one({"_id": run.id}, {"$set": {"model": used}})
             h["result"] = {"type": result.get("type"), "title": result.get("title"),
                            "has_speech": result.get("has_speech"), "music_only": result.get("music_only"),
                            "transcript_lines": len(result.get("transcript") or []),
@@ -167,6 +170,7 @@ def run_enrich_job(save: dict, user: dict) -> None:
                            "dropped_names": grounded["dropped"][:10], "unverified": grounded["unverified"]}
 
         update = merge_fields(save, result, grounded)
+        actions.fix_event_year(update.get("fields"), save.get("posted_at"))
         if duration and not save.get("duration_sec"):
             update["duration_sec"] = duration
         db.saves().update_one({"_id": sid}, {"$set": update})

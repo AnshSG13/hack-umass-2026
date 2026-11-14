@@ -105,3 +105,35 @@ Failures and their workarounds are in BLOCKERS.md.
 - **Undo gives fresh times.** `POST /api/saves/{id}/unconfirm` recomputes the options, because the ones stored at proposal time can collide with plans accepted since.
 - **`GET /api/saves/{id}/slots`** returns up to 3 free slots for the Change sheet ("Sun 12 pm · You're free"). The spec describes the sheet but no route for its data.
 - **`fixtures/queries.csv`** was written after enrichment: 20 queries, at least one per reel.
+
+## Phase 4: web core
+
+Built by a parallel agent from DESIGN.md and SPEC section 13, then reviewed. `npm run build` passes and `npm run lint` is clean. Screenshots for every DESIGN section 9 state at 390x844 and 1440x900 are in `screenshots/phase4/` (gitignored), except the three Ask answer states, which could only be rendered from a mocked stream because `/api/chat` was out of Gemini quota (see BLOCKERS.md item 3).
+
+Decisions (one line of why each):
+- **`radix-ui` is the one added dependency**, pulled in by the shadcn sheet, switch and dropdown primitives. The `cn` npm package that `shadcn add` installed was removed; `web/lib/utils.ts` joins class names itself.
+- **Playwright lives in the root `.venv`**, not in `server/requirements.txt`: it is tooling for the webapp-testing skill, not part of the product.
+- **The landing hero ticket has no buttons**, so "Try the demo" is the only yellow button and nothing on the page is a dead control. On desktop the landing is two columns.
+- **"How it was planned" is a link on full tickets**: it selects the save in the side panel at 1100 px and opens the bottom sheet below that.
+- **A printing ticket starts with a "Saved" line**, so the stub is never empty before the first real step arrives.
+- **Follow-up-due plans on Plans render as full tickets**, so Done can tear in place.
+- **The list refresh waits 600 ms after an Add**, so the punch finishes before the ticket moves.
+- **The second "This week" heading shows only when "Waiting on you" is present**, to avoid repeating the page title.
+- **"Coming up: n more" expands in place** using `?range=upcoming`.
+- **SWR deduping is 500 ms**: the default 2 s window stretched the 700 ms poll to about 2 s.
+- **Event dates show the reel's own `date_text` first**, the normalized date only when there is none.
+- **Setup step 4 falls back to "open a reel in Instagram"** while `FIRST_SAVE_REEL_URL` is empty, and detects the first save by a new newest save id, not by clock, to avoid phone and server clock skew.
+- **Copy written where DESIGN has none:** confirm-sheet buttons ("Keep this key", "Sign out", "Stay signed in"), the side panel's empty line, "Show more", the empty type-filter line, a note for seeded samples that have no trace, and "Couldn't read this reel yet" on failed Library rows.
+- **Library keeps a "Paste a reel link" button in the header** when it isn't empty.
+- **Ticket titles on Plans and Samples link to the detail page.**
+
+Backend fixes that came out of the UI review:
+- **Search has a relevance floor.** Vector search returns its nearest neighbours even for nonsense ("zebra unicycle" returned four reels). Measured over the eval queries, the right reel scored 0.565 to 0.80 cosine and unrelated queries topped out at 0.578, so cosine alone can't separate them. A result is now kept when it shares a word with the query or has cosine of at least 0.60. `eval_recall` after the change: still 20 of 20 at rank 1; "zebra unicycle" returns nothing.
+- **Event years are sanity checked.** The Lite video model wrote "2023-11-14" for a show announced on Nov 12, 2026. A start more than 60 days before the post date is moved to the post's year (`actions.fix_event_year`).
+- **An event that has started but is still running** (the train show runs to Jan 10) gets a weekend reminder and "It runs until Jan 10." instead of "It's passed."
+- **An undated event's reason line** now says the date isn't clear, to match its "Remind me to check dates" button.
+- **A new account's saves take about 5 seconds to appear in search**, because Atlas Search indexes asynchronously. Measured on a fresh demo session.
+
+## Phase 5: demo mode (browser check)
+
+With the built-in browser at 375 px wide, logged out: landing showed the real hero ticket; "Try the demo" opened `/demo`; "Save to Realize" on the chickpea curry sample printed "Saved" and "Checking your saves", then proposed "Wed 6:30 pm" with "Add to Wednesday"; tapping it showed "Added to Wednesday", the two reminder lines and both calendar links; `/plans` listed it under Wednesday, Nov 18 next to the two seeded plans; `/ask` showed three chips built from the account's data. Tapping a chip was not verified to return cards (Gemini quota).

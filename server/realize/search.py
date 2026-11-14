@@ -23,6 +23,14 @@ RRF_K = 60
 TEXT_PATHS = ["title", "summary", "caption", "transcript_text", "on_screen_text", "tags",
               "creator.handle", "entities.name"]
 PROJECT_OUT = {"embedding": 0, "transcript": 0}
+PROJECT_FUSED = {"transcript": 0}  # the embedding stays until the relevance check, then is dropped
+# Vector search always returns its nearest neighbours, even for nonsense. Measured on the
+# sample library (scripts/eval_recall queries, gemini-embedding-001 at 768 dims): the right
+# reel scored 0.565 to 0.80 cosine, unrelated queries topped out at 0.578. A result is kept
+# when it shares a word with the query or clears this floor.
+MIN_COSINE = 0.60
+STOP = {"the", "and", "for", "with", "that", "this", "what", "which", "from", "how", "can", "did",
+        "you", "your", "should", "make", "one", "ever", "got", "are", "was", "where", "want", "reel"}
 EMBED_BUDGET = 6000
 
 _active_mode: str | None = None
@@ -99,6 +107,35 @@ def rrf_merge(ranked: dict[str, list], weights: dict[str, float] = WEIGHTS, k: i
     return sorted(scores, key=lambda i: (-scores[i], first_seen[i]))
 
 
+def _stem(w: str) -> str:
+    return w[:-1] if len(w) > 3 and w.endswith("s") else w
+
+
+def _relevant(doc: dict, query: str, qvec: list[float]) -> bool:
+    emb = doc.get("embedding")
+    if emb and len(emb) == len(qvec) and sum(a * b for a, b in zip(emb, qvec)) >= MIN_COSINE:
+        return True
+    words = {_stem(w) for w in _TOK.findall(query.lower()) if len(w) >= 3 and w not in STOP}
+    if not words:
+        return False
+    blob = " ".join(str(x) for x in (
+        doc.get("title"), doc.get("summary"), doc.get("caption"), doc.get("transcript_text"),
+        " ".join(doc.get("on_screen_text") or []), " ".join(doc.get("tags") or []),
+        (doc.get("creator") or {}).get("handle"),
+        " ".join(e.get("name", "") for e in doc.get("entities") or [] if isinstance(e, dict))) if x)
+    have = {_stem(w) for w in _TOK.findall(blob.lower())}
+    return bool(words & have)
+
+
+def _finish(docs: list[dict], query: str, qvec: list[float], limit: int) -> list[dict]:
+    out = []
+    for d in docs:
+        if _relevant(d, query, qvec):
+            d.pop("embedding", None)
+            out.append(d)
+    return out[:limit]
+
+
 def _pipelines(uid: str, query: str, qvec: list[float], t: str | None) -> tuple[list, list]:
     vfilter: dict = {"user_id": uid, "status": {"$in": SEARCHABLE}}
     if t:
@@ -120,9 +157,9 @@ def _rankfusion(uid: str, query: str, qvec: list[float], t: str | None, limit: i
     pipeline = [
         {"$rankFusion": {"input": {"pipelines": {"vector": vector, "text": text}},
                          "combination": {"weights": WEIGHTS}}},
-        {"$limit": limit}, {"$project": PROJECT_OUT},
+        {"$limit": max(limit, 20)}, {"$project": PROJECT_FUSED},
     ]
-    return list(db.saves().aggregate(pipeline))
+    return _finish(list(db.saves().aggregate(pipeline)), query, qvec, limit)
 
 
 def _manual(uid: str, query: str, qvec: list[float], t: str | None, limit: int) -> list[dict]:
@@ -132,13 +169,13 @@ def _manual(uid: str, query: str, qvec: list[float], t: str | None, limit: int) 
     for name, pipe in (("vector", vector), ("text", text)):
         ids = []
         try:
-            for d in db.saves().aggregate(pipe + [{"$project": PROJECT_OUT}]):
+            for d in db.saves().aggregate(pipe + [{"$project": PROJECT_FUSED}]):
                 docs[d["_id"]] = d
                 ids.append(d["_id"])
         except OperationFailure as e:
             log.warning("search leg %s failed: %s", name, str(e)[:160])
         ranked[name] = ids
-    return [docs[i] for i in rrf_merge(ranked)[:limit]]
+    return _finish([docs[i] for i in rrf_merge(ranked)], query, qvec, limit)
 
 
 def hybrid_search(user_id: str, query: str, type: str | None = None, limit: int = 10) -> tuple[list[dict], str]:
