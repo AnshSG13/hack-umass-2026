@@ -4,8 +4,8 @@ The intro asks how someone identifies, their age, ethnicity, interests and hobbi
 Identity and ethnicity are stored but never sent to Gemini: what gets filed where comes from
 what someone said they like, not from who they are.
 
-From interests and hobbies Gemini proposes starter sub-categories inside each type
-("Food > Weeknight dinners", "Fitness > Running"). They are stored on the profile and
+Each interest and hobby becomes a starter sub-category under the type it fits
+("Food > Baking", "Fitness > Running"). They are stored on the profile and
 offered to the model next to the labels the user already has (subcats.prompt_line), so the
 first reels land in them. When a reel fits none, the model makes a new one as before.
 """
@@ -20,7 +20,6 @@ from .config import get_settings
 log = logging.getLogger("realize.profile")
 
 STARTER_TYPES = ["recipe", "event", "place", "workout", "product", "tip"]
-STARTERS_PER_TYPE = 4
 SUGGEST_TIMEOUT_S = 12
 STARTER_TIMEOUT_S = 25
 PREFER_NOT = "Prefer not to say"
@@ -101,40 +100,43 @@ def suggest_interests(picked: list[str], age_range: str | None) -> list[str]:
 
 
 # ---------- starter sub-categories ----------
+# Each interest and hobby becomes a folder as written. Gemini only picks the kind it belongs
+# under ("Baking" -> Food, "Pickleball" -> Products); one that fits no kind is left out.
 
-STARTER_SCHEMA = {"type": "object", "properties": {
-    t: {"type": "array", "items": {"type": "string"}} for t in STARTER_TYPES}}
+STARTER_SCHEMA = {"type": "object", "properties": {"folders": {"type": "array", "items": {
+    "type": "object", "properties": {
+        "name": {"type": "string"},
+        "type": {"type": "string", "enum": [*STARTER_TYPES, "none"]}},
+    "required": ["name", "type"]}}}, "required": ["folders"]}
 
-STARTER_SYSTEM = f"""You set up an app where people save short videos (Instagram reels) and turn them into plans.
-Every save has a type and one sub-category inside that type. Types: recipe (food), event, place,
-workout (fitness), product, tip (learning). From what this person likes, propose the sub-categories
-their saves will most likely be filed into, up to {STARTERS_PER_TYPE} per type.
-{subcats.GUIDE.split(". Reuse")[0]}.
-Only fill a type when something they like points to it; leave the others empty. Names are specific
-to this person but broad enough to hold many reels ("Weeknight dinners", not "Food" and not
-"Spicy vegan ramen"). Sentence case: capitalize only the first word and proper nouns
-("Weeknight dinners", "Thai food", not "Weeknight Dinners"). No emoji, no two that overlap."""
+STARTER_SYSTEM = """You set up an app where people save short videos (Instagram reels) and turn them into plans.
+Every save has a kind: recipe (food), event, place, workout (fitness), product, tip (learning).
+Each name you are given becomes a folder. For every name, return it unchanged with the one kind
+its reels would most likely be. Use "none" only when no kind fits at all."""
 
 
 def make_starters(profile: dict) -> dict[str, list[str]]:
-    """{type: [label, ...]} from the profile, or {} without Gemini or on any error."""
-    lines = taste_lines(profile)
-    if not lines or not live():
+    """{type: [interest or hobby, ...]} from the profile, or {} without Gemini or on any error."""
+    picked: list[str] = []
+    for raw in [*(profile.get("interests") or []), *(profile.get("hobbies") or [])]:
+        name = subcats.clean(raw)
+        if name and subcats.key(name) not in {subcats.key(n) for n in picked}:
+            picked.append(name)
+    if not picked or not live():
         return {}
     try:
         out: dict[str, Any] = gemini.generate_json(
-            role="fast", input="\n".join(lines), schema=STARTER_SCHEMA,
+            role="fast", input="\n".join(picked[:30]), schema=STARTER_SCHEMA,
             system=STARTER_SYSTEM, timeout_s=STARTER_TIMEOUT_S, retries=1)
     except Exception as e:  # noqa: BLE001
         log.warning("starter sub-categories failed: %s", str(e)[:160])
         return {}
+    # Keep the person's own wording: match Gemini's answer back to what they picked.
+    by_key = {subcats.key(n): n for n in picked}
     result: dict[str, list[str]] = {}
-    for t in STARTER_TYPES:
-        names: list[str] = []
-        for raw in out.get(t) or []:
-            name = subcats.snap(subcats.clean(raw), names)
-            if name and name not in names:
-                names.append(name)
-        if names:
-            result[t] = names[:STARTERS_PER_TYPE]
+    for row in out.get("folders") or []:
+        t = row.get("type")
+        name = by_key.get(subcats.key(subcats.clean(row.get("name")) or ""))
+        if t in STARTER_TYPES and name and name not in result.get(t, []):
+            result.setdefault(t, []).append(name)
     return result

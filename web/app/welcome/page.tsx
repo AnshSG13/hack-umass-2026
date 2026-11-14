@@ -4,8 +4,8 @@
 //   1. Tell us about yourself: how you identify, age, ethnicity (all skippable)
 //   2. Choose what you like: interest chips, plus more specific ones Gemini suggests
 //   3. Your hobbies
-// Then the server asks Gemini for starter sub-categories inside each type (Food > Weeknight
-// dinners) and shows them. New reels reuse them, or get a new sub-category when none fits.
+// Then each interest and hobby becomes a folder under the kind Gemini says it fits (Food >
+// Baking) and the screen shows them. New reels reuse them, or get a new sub-category when none fits.
 // Identity and ethnicity are stored on the profile only; they are never sent to Gemini.
 
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react";

@@ -128,7 +128,7 @@ Conventions: `user_id` is a string `u_<12 hex>`. Other `_id`s are ObjectId, expo
   "created_at": ISODate, "expires_at": ISODate | absent }
 ```
 Keys: `rl_` + `secrets.token_urlsafe(24)`, shown once, stored as sha256. Indexes: `{api_key_hash:1}` unique; `{expires_at:1}` TTL.
-Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are sub-categories Gemini proposes per type from interests, hobbies and age range (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
+Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are the person's interests and hobbies themselves, each used as a sub-category under the one type Gemini says it fits; one that fits no type is left out (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
 
 ### 5.2 saves
 ```jsonc
@@ -626,7 +626,7 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | PATCH | /api/me | key | `{timezone?, prefs?}` |
 | GET | /api/onboarding/options | none | the intro's fixed choices `{identities, age_ranges, ethnicities, interests, hobbies}` |
 | POST | /api/onboarding/suggest | key, 20/10 min | `{picked, age_range?}` → `{suggestions}`: Gemini's "More for you" interest chips |
-| POST | /api/onboarding/finish | key | `{profile}` → stores it with Gemini's starter sub-categories → `{profile, starters: [{type, label, subcategories}]}` |
+| POST | /api/onboarding/finish | key | `{profile}` → stores it with each interest and hobby filed under a type as a starter sub-category → `{profile, starters: [{type, label, subcategories}]}` |
 | POST | /api/me/key | key | new key → `{api_key}`; the old one stops working |
 | POST | /api/save | key | section 6 |
 | GET | /api/saves | key | `?type&limit=30&before=<iso>` → `{items: Ticket[], next_before}` |

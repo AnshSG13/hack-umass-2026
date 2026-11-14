@@ -40,17 +40,22 @@ def test_clean_profile_drops_unknown_choices_and_near_duplicates():
     assert p["hobbies"] == []
 
 
-def test_make_starters_cleans_and_caps_each_type(monkeypatch):
-    gemini_says(monkeypatch, {
-        "recipe": ["weeknight dinners", "Weeknight dinner", "Meal prep", "Dessert", "Thai", "Brunch"],
-        "workout": ["Running"],
-        "product": [],
-        "nonsense": ["Ignored"],
-    })
+def test_make_starters_files_each_interest_and_hobby_under_its_kind(monkeypatch):
+    gemini_says(monkeypatch, {"folders": [
+        {"name": "food and cooking", "type": "recipe"},   # Gemini's casing; the user's wording wins
+        {"name": "Meal prep", "type": "recipe"},
+        {"name": "Running", "type": "workout"},
+        {"name": "Something invented", "type": "recipe"},  # never picked: ignored
+    ]})
     got = profile.make_starters(PROFILE)
-    assert got["recipe"] == ["Weeknight dinners", "Meal prep", "Dessert", "Thai"]
-    assert got["workout"] == ["Running"]
-    assert "product" not in got and "nonsense" not in got
+    assert got == {"recipe": ["Food and cooking", "Meal prep"], "workout": ["Running"]}
+
+
+def test_make_starters_leaves_out_what_fits_no_kind(monkeypatch):
+    gemini_says(monkeypatch, {"folders": [{"name": "Meal prep", "type": "recipe"},
+                                          {"name": "Running", "type": "none"},
+                                          {"name": "Food and cooking", "type": "bogus"}]})
+    assert profile.make_starters(PROFILE) == {"recipe": ["Meal prep"]}
 
 
 def test_make_starters_is_empty_when_gemini_fails(monkeypatch):
@@ -59,7 +64,7 @@ def test_make_starters_is_empty_when_gemini_fails(monkeypatch):
 
 
 def test_make_starters_is_empty_without_anything_to_go_on(monkeypatch):
-    gemini_says(monkeypatch, {"recipe": ["Dessert"]})
+    gemini_says(monkeypatch, {"folders": [{"name": "Dessert", "type": "recipe"}]})
     assert profile.make_starters({"identity": "Man"}) == {}
 
 
