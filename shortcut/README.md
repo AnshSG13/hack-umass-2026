@@ -2,13 +2,31 @@
 
 The Shortcut is optional. Realize is a web app: you can save any reel by copying its link and pasting it on the Save tab (see the main README). The Shortcut adds a one-step path from Instagram's share sheet, which a web app on iOS can't offer by itself.
 
+There are two versions. Start with the quick one.
+
+## The quick version (one action)
+
+It opens the web app's Save page with the reel's link. It needs no key, and the plan shows up as a ticket in the app. The same steps, with your own address filled in and a copy button, are on the app's setup page under "Save straight from Instagram's Share menu".
+
+1. In the Shortcuts app, tap **+**.
+2. Add the action **Open URLs**. In its URL field type your site's address followed by `/save?url=`, for example `http://10.0.0.11:3100/save?url=`.
+3. With the cursor right after the `=`, tap **Shortcut Input** in the row above the keyboard, so the reel's link follows the `=`.
+4. Tap the ⓘ button, turn on **Show in Share Sheet**, and name the Shortcut **Realize**. Under Share Sheet Types, **URLs** is enough.
+5. In Instagram, open a reel, tap **Share**, open the iOS share sheet and tap **Realize**. Safari opens the app and the reel is saved.
+
+It uses the account that is signed in to Realize in Safari, so create your account in Safari first (`/setup`). If the laptop's address changes, edit the address in step 2.
+
+Checked on 2026-11-14 in a browser by opening `/save?url=` followed by a raw Instagram link with its `?igsh=...&utm_source=...` tail: the reel saved and its ticket appeared. Not yet run from a real iPhone.
+
+## The full version (menu, Calendar and Reminders)
+
 It sends only the reel's link, shows the plan as a menu, and writes the calendar event and reminders on the phone itself. It is built by hand in the Shortcuts app; these are the steps.
 
 Nothing is added to Calendar or Reminders unless you pick an option from the menu.
 
 ## What you need
 
-- The site's address (`BASE`), for example `https://realize.example.com`. For local testing, run `cloudflared tunnel --url http://localhost:3000` and use the tunnel address.
+- The site's address (`BASE`), for example `https://realize.example.com`. For local testing on the same Wi-Fi, use the laptop's address and the production web server's port, for example `http://10.0.0.11:3100` (see "Run it locally" in the main README). If the Shortcut refuses a plain http address, use a tunnel (`cloudflared tunnel --url http://localhost:3100`) and its https address.
 - Your key (`rl_...`). Get it at `BASE/setup`, or from `python -m scripts.create_user`.
 
 ## Build it

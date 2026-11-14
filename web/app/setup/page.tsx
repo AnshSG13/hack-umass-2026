@@ -3,7 +3,7 @@
 // Setup (DESIGN.md 7.3, SPEC 13.2): make an account, carry the key to the phone with a QR
 // code, add the Shortcut, and watch for the first save.
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -19,6 +19,7 @@ import type { SavesPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const KEY_SHAPE = /^[A-Za-z0-9_\-.~]{12,128}$/;
+const noopSubscribe = () => () => {};
 
 function CopyKeyButton({ value, className }: { value: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -176,17 +177,91 @@ function Account({ accountKey }: { accountKey: string }) {
       </ol>
       {firstSaveBlock}
       {openApp}
-      {shortcutUrl && (
-        <p className="mt-2 text-[14px] text-muted">
-          Want to save straight from Instagram&apos;s Share menu?{" "}
-          <a className={linkInk} href={shortcutUrl}>
-            Add the Shortcut
-          </a>
-          . When it asks for your key, paste it.
-        </p>
-      )}
+      <ShortcutHelp appName={appName} shortcutUrl={shortcutUrl} />
       <div className="mt-6">{keyBox(true)}</div>
     </>
+  );
+}
+
+/**
+ * The optional Shortcut. A web app can't sit in Instagram's Share menu, a Shortcut can. The
+ * one built here has a single action: it opens this app's /save page with the reel's link,
+ * so it needs no key and the plan shows up as a ticket like any other save.
+ */
+function ShortcutHelp({ appName, shortcutUrl }: { appName: string; shortcutUrl: string }) {
+  const origin = useSyncExternalStore(
+    noopSubscribe,
+    () => window.location.origin,
+    () => "",
+  );
+  const [copied, setCopied] = useState(false);
+  const address = `${origin}/save?url=`;
+
+  return (
+    <details className="mt-6 rounded-[16px] border border-line bg-ticket px-4">
+      <summary className="flex min-h-12 cursor-pointer items-center text-[16px] font-medium text-ink">
+        Save straight from Instagram&apos;s Share menu
+      </summary>
+      <div className="pb-4">
+        <p className="text-[14px] text-muted">
+          Optional. A Shortcut with one action sends the reel here, so you skip the copy and paste.
+        </p>
+        <ol className="mt-4 flex flex-col gap-5">
+          <Step n={1}>
+            <p className="text-[16px] text-ink">Copy this address</p>
+            <p className="mt-2 rounded-[12px] border border-line bg-paper px-3 py-2 text-[14px] break-all text-ink">
+              {address}
+            </p>
+            <button
+              type="button"
+              className={cn(btnOutline, "mt-2")}
+              onClick={async () => {
+                if (await copyText(address)) {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 3000);
+                }
+              }}
+            >
+              <span aria-live="polite">{copied ? "Copied" : "Copy address"}</span>
+            </button>
+          </Step>
+          <Step n={2}>
+            <p className="text-[16px] text-ink">Make the Shortcut</p>
+            <p className="mt-1 text-[14px] text-muted">
+              Open the Shortcuts app and tap +. Add the action Open URLs and paste the address into it.
+            </p>
+          </Step>
+          <Step n={3}>
+            <p className="text-[16px] text-ink">Add the reel&apos;s link to the end</p>
+            <p className="mt-1 text-[14px] text-muted">
+              With the cursor right after the = sign, tap Shortcut Input in the row above the keyboard.
+            </p>
+          </Step>
+          <Step n={4}>
+            <p className="text-[16px] text-ink">Show it in the Share menu</p>
+            <p className="mt-1 text-[14px] text-muted">
+              Tap the info button, turn on Show in Share Sheet, and name the Shortcut {appName}.
+            </p>
+          </Step>
+          <Step n={5}>
+            <p className="text-[16px] text-ink">Try it</p>
+            <p className="mt-1 text-[14px] text-muted">
+              In Instagram, tap Share on a reel, open the share sheet and tap {appName}. Safari opens here and the
+              reel is saved. It uses the account you&apos;re signed in to in Safari.
+            </p>
+          </Step>
+        </ol>
+        {shortcutUrl && (
+          <p className="mt-5 text-[14px] text-muted">
+            There is also a ready-made Shortcut that shows the plan as a menu and adds it to Calendar and Reminders.{" "}
+            <a className={linkInk} href={shortcutUrl}>
+              Add that Shortcut
+            </a>
+            . When it asks for your key, paste it.
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 
