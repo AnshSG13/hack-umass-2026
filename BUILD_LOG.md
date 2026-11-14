@@ -279,6 +279,9 @@ The user asked for the chat to suggest something to export at the end, "such as 
 
 Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invite, the itinerary refused before the trip existed and made after it (five timed stops with prices, hours, forecast and the sources named), the public data opening with the token and no key, a wrong token and another account refused. 117 unit tests pass (15 new).
 
+## 2026-11-14: interests and hobbies are the folders
+- **Owner asked for it directly:** "i want each of the interest or hobbies to just be used as created categories". Starters are no longer invented by Gemini; each interest and hobby is kept as written and Gemini only picks its type. One that fits no type is left out. Checked live: Baking > Food, Travel > Places, Broadway musicals and Comedy > Events, Strength training and Pickleball > Fitness.
+
 ## 2026-11-14: intro screens and starter sub-categories
 
 The user asked for intro pages like a video app's onboarding (how you identify, age, ethnicity, hobbies, skills, interests) and for categories the model makes, with a new one whenever a saved reel fits none. Decisions:
