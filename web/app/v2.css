@@ -364,6 +364,88 @@
 .at-chip:active {
   transform: scale(0.96);
 }
+
+/* Reel chat: an answer looked up on the web, with the pages it used */
+.web-sources {
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.web-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.web-label .i {
+  width: 14px;
+  height: 14px;
+}
+.web-sources ol {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.web-sources a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.web-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* Reel chat: a recipe's nutrition */
+.macros {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.macros figcaption {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.macros dl {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 8px;
+}
+.macros dt {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.macros dd {
+  font-family: var(--display);
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.macros sup {
+  margin-left: 2px;
+  font-family: var(--ui);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
 .at-chip .i {
   width: 15px;
   height: 15px;
@@ -1295,4 +1377,429 @@
   font-size: 14.5px;
   line-height: 1.45;
   color: var(--ink-2);
+}
+
+/* ---------- Something to send: the suggestions in the reel's chat, the card, the sheet
+   on the Reel page and the public page a link opens. Flat on purpose: white, hairlines,
+   one filled button per card. ---------- */
+
+/* "Copied." has to show over the chat layer, which sits at the toast's old height. */
+.toast-wrap {
+  z-index: 61;
+}
+/* A white edge, so the ink toast still reads as its own thing over an ink button. */
+.toast {
+  box-shadow: 0 0 0 2px #ffffff, 0 14px 30px -10px rgba(30, 31, 36, 0.5);
+}
+
+/* the row under the newest answer */
+.send-row {
+  align-self: stretch;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  animation: chip-in 0.4s var(--ease) both;
+}
+.send-head {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.send-chips {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.send-chips li {
+  max-width: 100%;
+}
+.send-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 16px 6px 12px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  transition: background 0.2s, transform 0.2s var(--ease);
+}
+.send-chip:hover {
+  background: var(--surface);
+}
+.send-chip:active {
+  transform: scale(0.97);
+}
+.send-chip[aria-disabled="true"] {
+  opacity: 0.55;
+}
+.send-chip .i {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+.send-chip.is-more {
+  padding: 6px 10px 6px 16px;
+  gap: 4px;
+  color: var(--ink-2);
+}
+.send-chip-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.send-chip-text small {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+/* an itinerary waiting for its trip plan */
+.send-progress {
+  align-self: stretch;
+  padding: 4px 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+.send-progress .trip-progress {
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.send-progress .trip-progress .i {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+.send-steps {
+  padding: 2px 0 10px;
+}
+.send-note {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.rc-body .plan-error {
+  align-self: stretch;
+  margin-top: 0;
+}
+
+/* the card */
+.dcard {
+  align-self: stretch;
+  min-width: 0;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--bg);
+  scroll-margin-top: 4px;
+  animation: chip-in 0.4s var(--ease) both;
+}
+.dcard-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.dcard-label .i {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+.dcard-title {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.dcard-line {
+  margin-top: 6px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.dcard-line.is-closing {
+  margin-top: 10px;
+}
+.dcard-more {
+  margin: 2px 0 0 -12px;
+}
+.dcard-more .i {
+  transition: transform 0.3s var(--ease);
+}
+.dcard-more[aria-expanded="true"] .i {
+  transform: rotate(180deg);
+}
+.dcard-note {
+  margin-top: 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--rose-ink);
+}
+.dcard-note:empty {
+  display: none;
+}
+
+/* what it says: blocks of lines, shared by the card and the public page */
+.dblocks {
+  margin-top: 12px;
+}
+.dblock + .dblock {
+  margin-top: 14px;
+}
+.dblock-head {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.ditems li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.ditems li:last-child {
+  border-bottom: 0;
+}
+.ditems.is-numbered {
+  counter-reset: ditem;
+}
+.ditems.is-numbered li {
+  position: relative;
+  padding-left: 26px;
+  counter-increment: ditem;
+}
+.ditems.is-numbered li::before {
+  content: counter(ditem);
+  position: absolute;
+  left: 0;
+  top: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.ditem-text {
+  display: block;
+}
+.ditem-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+.ditems .trip-link {
+  margin-bottom: -8px;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.ditems .trip-link:hover {
+  text-decoration-color: currentColor;
+}
+.ditems .trip-link > span {
+  min-width: 0; /* a bare address as the link text wraps instead of running off */
+}
+
+/* the ways to send it */
+.dsend {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+.dsend .btn {
+  height: 48px;
+}
+.dsend-row {
+  display: flex;
+  gap: 8px;
+}
+.dsend-row .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  padding: 0 8px;
+  gap: 7px;
+  font-size: 14px;
+}
+.dsend-row .btn .i {
+  width: 16px;
+  height: 16px;
+}
+
+/* the Reel page: one quiet control, and its sheet */
+.send-open {
+  margin-top: 6px;
+  display: flex;
+  justify-content: center;
+}
+.send-body {
+  margin-top: 6px;
+}
+.send-opt {
+  min-height: 60px;
+  padding: 8px 0;
+}
+.send-opt .opt-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.send-opt .opt-name small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.send-opt > .i {
+  opacity: 1;
+  color: var(--ink-3);
+  stroke-width: 1.75;
+}
+.send-opt[aria-disabled="true"] {
+  opacity: 0.55;
+}
+.send-body .send-progress,
+.send-body .plan-error {
+  margin-top: 12px;
+}
+.send-back {
+  margin: 0 0 8px -12px;
+}
+
+/* the public page: /d/<id>?t=<token>, for someone with no account */
+.dpage {
+  width: 100%;
+  max-width: 600px;
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding: max(18px, env(safe-area-inset-top, 0px)) var(--gutter-r) calc(56px + var(--safe-b)) var(--gutter-l);
+}
+.dpage-brand {
+  display: block;
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--ink-2);
+}
+.dpage-reel {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.dpage-reel-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dpage-reel-from {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.dpage-reel-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.dpage-reel-by {
+  font-size: 13px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.dpage-reel .trip-link {
+  margin-bottom: -10px;
+  color: var(--ink);
+}
+.dpage-title {
+  margin-top: 28px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.dpage-line {
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.dpage .dblocks {
+  margin-top: 26px;
+}
+.dpage .dblock + .dblock {
+  margin-top: 28px;
+}
+.dpage .dblock-head {
+  font-size: 14px;
+  color: var(--ink);
+}
+.dpage .ditems {
+  margin-top: 4px;
+}
+.dpage .ditems li {
+  padding-block: 11px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.dpage .ditems.is-numbered li::before {
+  top: 13px;
+  font-size: 14px;
+}
+.dpage .ditem-sub {
+  font-size: 14.5px;
+}
+.dpage-closing {
+  margin-top: 26px;
+}
+.dpage-plain {
+  margin-top: 28px;
+  font-size: 16px;
+  color: var(--ink);
+}
+.dpage-plain + .btn {
+  margin-top: 14px;
+}
+@media (min-width: 700px) {
+  .dpage {
+    padding-top: 40px;
+  }
+  .dpage-title {
+    font-size: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .send-row,
+  .dcard {
+    animation: none;
+  }
+  .send-chip,
+  .dcard-more .i {
+    transition-duration: 0.01s;
+  }
 }

@@ -29,6 +29,8 @@ STEP_LABELS = {
     "trip_layout": "Laying out the days",
     "trip_weather": "Checking the forecast",
     "trip_day": "Planning the day",
+    "nutrition_search": "Looking up nutrition",
+    "web_search": "Searching the web",
     "get_save": "Opening a save",
     "list_plans": "Checking your plans",
     "propose_plans": "Drafting plans",
