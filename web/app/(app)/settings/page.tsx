@@ -7,7 +7,7 @@ import { Minus, Plus } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { api, ApiError, clearKey, getKey, setKey } from "@/lib/api";
+import { api, ApiError, getKey, isApiKey, setKey, signOut } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { KINDS } from "@/lib/kinds";
 import { browserTimezone, useMe } from "@/lib/hooks";
@@ -117,6 +117,10 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState(me.name ?? "");
   const [savingName, setSavingName] = useState(false);
+  // A key made here while signed in with an email: shown once, for the Shortcut.
+  const [shownKey, setShownKey] = useState<string | null>(null);
+  const [shownCopied, setShownCopied] = useState(false);
+  const signedInWithKey = isApiKey(getKey());
   const timer = useRef<number | null>(null);
   const tzId = useId();
   const nameId = useId();
@@ -164,7 +168,8 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
     setBusy(true);
     try {
       const r = await api<{ api_key: string }>("/api/me/key", { method: "POST" });
-      setKey(r.api_key);
+      if (signedInWithKey) setKey(r.api_key);
+      else setShownKey(r.api_key);
       setConfirm(null);
       toast.show("New key made. Copy it into your Shortcut.");
     } catch (e) {
@@ -185,6 +190,8 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
           Demo account. It deletes itself in 24 hours.
         </p>
       )}
+
+      {!me.is_demo && <AccountSection me={me} onSignOut={() => setConfirm("sign-out")} />}
 
       <section className="mt-6" aria-labelledby="name-heading">
         <h2 id="name-heading" className={sectionTitle}>
@@ -332,12 +339,34 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
 
       <section className="mt-8" aria-labelledby="key-heading">
         <h2 id="key-heading" className={sectionTitle}>
-          Your key
+          {me.email ? "Shortcut key" : "Your key"}
         </h2>
+        {me.email && (
+          <p className="mt-2 text-[14px] text-muted">Only the ready-made Shortcut needs this. Signing in doesn&apos;t.</p>
+        )}
         <p className="mt-2 text-[15px] text-ink">
           Key ending <span className="font-semibold">{me.key_preview}</span>
         </p>
+        {shownKey && (
+          <div className="mt-3 rounded-[16px] border border-line bg-ticket p-4">
+            <p className="text-[16px] font-medium break-all text-ink">{shownKey}</p>
+            <button
+              type="button"
+              className={cn(btnOutline, "mt-3 w-full")}
+              onClick={async () => {
+                if (await copyText(shownKey)) {
+                  setShownCopied(true);
+                  window.setTimeout(() => setShownCopied(false), 3000);
+                }
+              }}
+            >
+              <span aria-live="polite">{shownCopied ? "Copied" : "Copy key"}</span>
+            </button>
+            <p className="mt-3 text-[14px] text-muted">It&apos;s shown once. Paste it into your Shortcut now.</p>
+          </div>
+        )}
         <div className="mt-3 flex flex-col gap-2">
+          {signedInWithKey && (
           <button
             type="button"
             className={cn(btnOutline, "w-full")}
@@ -351,19 +380,26 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
           >
             <span aria-live="polite">{copied ? "Copied" : "Copy key"}</span>
           </button>
+          )}
           <button type="button" className={cn(btnOutline, "w-full")} onClick={() => setConfirm("new-key")}>
             Make a new key
           </button>
-          <button type="button" className={cn(btnTextDanger, "w-full")} onClick={() => setConfirm("sign-out")}>
-            Sign out on this device
-          </button>
+          {(!me.email || me.is_demo) && (
+            <button type="button" className={cn(btnTextDanger, "w-full")} onClick={() => setConfirm("sign-out")}>
+              Sign out on this device
+            </button>
+          )}
         </div>
       </section>
 
       <Sheet open={confirm === "new-key"} onOpenChange={(open) => !open && setConfirm(null)}>
         <SheetContent>
           <SheetTitle>Make a new key</SheetTitle>
-          <SheetDescription>Your Shortcut stops working until you paste the new key.</SheetDescription>
+          <SheetDescription>
+            {signedInWithKey
+              ? "Your Shortcut stops working until you paste the new key."
+              : "The old key stops working. Paste the new one into your Shortcut."}
+          </SheetDescription>
           <button type="button" className={cn(btnPrimary, "mt-5")} disabled={busy} onClick={() => void makeNewKey()}>
             Make a new key
           </button>
@@ -377,14 +413,16 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
         <SheetContent>
           <SheetTitle>Sign out on this device</SheetTitle>
           <SheetDescription>
-            Copy your key first. There&apos;s no password, so without it this account is gone.
+            {me.email
+              ? `Sign back in any time with ${me.email}.`
+              : "Copy your key first. There's no password, so without it this account is gone."}
           </SheetDescription>
           <button
             type="button"
             className={cn(btnDanger, "mt-5 w-full")}
             onClick={() => {
               setConfirm(null);
-              clearKey();
+              void signOut();
             }}
           >
             Sign out
@@ -395,6 +433,96 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+/** Who is signed in, or a form that gives a key-only account an email and password. */
+function AccountSection({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
+  const toast = useToast();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const emailId = useId();
+  const passwordId = useId();
+
+  if (me.email) {
+    return (
+      <section className="mt-6" aria-labelledby="account-heading">
+        <h2 id="account-heading" className={sectionTitle}>
+          Account
+        </h2>
+        <p className="mt-2 text-[15px] text-ink">
+          Signed in as <span className="font-semibold break-all">{me.email}</span>
+        </p>
+        <button type="button" className={cn(btnOutline, "mt-3 w-full")} onClick={onSignOut}>
+          Sign out
+        </button>
+      </section>
+    );
+  }
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ token: string }>("/api/auth/credentials", { body: { email, password } });
+      setKey(r.token);
+      toast.show("Saved. Sign in with your email from now on.");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "That didn't save. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6" aria-labelledby="account-heading">
+      <h2 id="account-heading" className={sectionTitle}>
+        Add an email and password
+      </h2>
+      <p className="mt-2 text-[14px] text-muted">So you can sign in anywhere without your key.</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <label htmlFor={emailId} className="mt-3 block text-[15px] text-ink">
+          Email
+        </label>
+        <input
+          id={emailId}
+          type="email"
+          required
+          autoComplete="email"
+          className={cn(inputBase, "mt-2 w-full")}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <label htmlFor={passwordId} className="mt-3 block text-[15px] text-ink">
+          Password
+        </label>
+        <input
+          id={passwordId}
+          type="password"
+          required
+          autoComplete="new-password"
+          className={cn(inputBase, "mt-2 w-full")}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <p className="mt-1 text-[13px] text-muted">At least 8 characters.</p>
+        {error && (
+          <p role="alert" className="mt-2 text-[14px] text-danger-ink">
+            {error}
+          </p>
+        )}
+        <button type="submit" className={cn(btnOutline, "mt-3 w-full")} disabled={busy}>
+          Save email and password
+        </button>
+      </form>
+    </section>
   );
 }
 

@@ -85,6 +85,18 @@ class CreateUserRequest(BaseModel):
     timezone: str | None = None
 
 
+class SignupRequest(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+    name: str | None = Field(default=None, max_length=NAME_MAX)
+    timezone: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=200)
+
+
 class PrefsPatch(BaseModel):
     cook_days: list[str] | None = None
     cook_time: str | None = None

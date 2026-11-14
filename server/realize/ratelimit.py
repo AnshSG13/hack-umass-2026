@@ -15,6 +15,8 @@ LIMITS = {
     "judge_save": (30, 3600),  # per judge key
     "users": (5, 3600),        # per IP
     "demo": (10, 3600),        # per IP
+    "login": (20, 600),        # per IP
+    "login_email": (10, 600),  # per email
 }
 
 

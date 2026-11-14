@@ -11,9 +11,9 @@ import { QRCodeSVG } from "qrcode.react";
 import { LiveTicket } from "@/components/live-ticket";
 import { PasteForm } from "@/components/paste-form";
 import { ToastViewport } from "@/components/toast";
-import { api, ApiError, fetcher, getKey, setKey } from "@/lib/api";
+import { fetcher, getKey, isApiKey, setKey } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
-import { browserTimezone, readStandalone, useConfig, useDevice, useKey, useMe, useStandalone } from "@/lib/hooks";
+import { readStandalone, useConfig, useDevice, useKey, useMe, useStandalone } from "@/lib/hooks";
 import { btnOutline, btnPrimary, inputBase, linkInk, pageTitle, sectionTitle } from "@/lib/styles";
 import type { SavesPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -65,7 +65,9 @@ function Account({ accountKey }: { accountKey: string }) {
   const newest = latest?.items[0];
   const firstSave = baseline !== undefined && newest && newest.save_id !== baseline ? newest : null;
 
-  const keyBox = (withButton: boolean) => (
+  // Accounts made with a key carry that key between devices. Email accounts just sign in.
+  const keyAccount = isApiKey(accountKey);
+  const keyBox = (withButton: boolean) => !keyAccount ? null : (
     <section className="rounded-[16px] border border-line bg-ticket p-4" aria-label="Your key">
       <p className="text-[16px] font-medium break-all text-ink">{accountKey}</p>
       {withButton && <CopyKeyButton value={accountKey} className="mt-3 w-full" />}
@@ -94,14 +96,18 @@ function Account({ accountKey }: { accountKey: string }) {
   // this page is open in Safari the key rides in the link's fragment; "Add to Home Screen"
   // keeps that link, and the installed app reads the key from it on first launch.
   useEffect(() => {
-    if (device !== "ios" || standalone !== false) return;
+    if (!keyAccount || device !== "ios" || standalone !== false) return;
     window.history.replaceState(null, "", `${window.location.pathname}#k=${encodeURIComponent(accountKey)}`);
-  }, [device, standalone, accountKey]);
+  }, [keyAccount, device, standalone, accountKey]);
 
   if (device === undefined || standalone === undefined) return null;
 
   if (device === "desktop") {
-    const qrValue = config ? `${config.public_base_url}/setup#k=${accountKey}` : null;
+    const qrValue = config
+      ? keyAccount
+        ? `${config.public_base_url}/setup#k=${accountKey}`
+        : `${config.public_base_url}/login`
+      : null;
     return (
       <>
         {keyBox(true)}
@@ -115,13 +121,17 @@ function Account({ accountKey }: { accountKey: string }) {
                 fgColor="#1B2430"
                 bgColor="#FFFFFF"
                 level="M"
-                title="QR code that opens this setup page on your phone with your key"
+                title={keyAccount ? "QR code that opens this setup page on your phone with your key" : `QR code that opens ${appName} on your phone`}
               />
             ) : (
               <span aria-hidden="true" className="block size-[200px] bg-paper" />
             )}
           </div>
-          <p className="mt-3 text-[14px] text-muted">Or copy the key and open this page on your phone.</p>
+          <p className="mt-3 text-[14px] text-muted">
+            {keyAccount
+              ? "Or copy the key and open this page on your phone."
+              : "Scan it with your iPhone camera, then sign in with the same email and password."}
+          </p>
         </section>
         {firstSaveBlock}
         {openApp}
@@ -158,7 +168,8 @@ function Account({ accountKey }: { accountKey: string }) {
           <Step n={1}>
             <p className="text-[16px] text-ink">Put {appName} on your Home Screen</p>
             <p className="mt-1 text-[14px] text-muted">
-              In Safari, tap the Share button, then Add to Home Screen. It opens signed in to this account.
+              In Safari, tap the Share button, then Add to Home Screen.{" "}
+              {keyAccount ? "It opens signed in to this account." : "Open it and sign in once with your email."}
             </p>
           </Step>
         )}
@@ -257,7 +268,7 @@ function ShortcutHelp({ appName, shortcutUrl }: { appName: string; shortcutUrl: 
             <a className={linkInk} href={shortcutUrl}>
               Add that Shortcut
             </a>
-            . When it asks for your key, paste it.
+            . When it asks for your key, make one in Settings and paste it.
           </p>
         )}
       </div>
@@ -336,8 +347,6 @@ export default function SetupPage() {
   const router = useRouter();
   const { config, appName } = useConfig();
   const { data: me } = useMe(Boolean(key));
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // The key can arrive in the link's fragment: from the laptop's QR code (SPEC 13.2), or
   // from the Home Screen icon, which keeps the link this page had when it was added.
@@ -362,21 +371,6 @@ export default function SetupPage() {
     if (valid) setKey(carried);
   }, [router]);
 
-  async function createAccount() {
-    setCreating(true);
-    setError(null);
-    try {
-      const r = await api<{ user_id: string; api_key: string }>("/api/users", {
-        body: { timezone: browserTimezone() },
-      });
-      setKey(r.api_key);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "The account wasn't created. Try again.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   const isDemo = Boolean(me?.is_demo);
   const waitingOnMe = Boolean(key) && me === undefined;
   const needsAccount = key === null || isDemo;
@@ -394,14 +388,13 @@ export default function SetupPage() {
         <div className="mt-5">
           {key === undefined || waitingOnMe ? null : needsAccount ? (
             <>
-              <button type="button" className={btnPrimary} disabled={creating} onClick={() => void createAccount()}>
-                Create my account
-              </button>
-              {error && (
-                <p role="alert" className="mt-2 text-[14px] text-danger-ink">
-                  {error}
-                </p>
-              )}
+              <p className="text-[16px] text-ink">Sign in first, so your saves go to your own account.</p>
+              <Link href="/signup" className={cn(btnPrimary, "mt-4")}>
+                Create an account
+              </Link>
+              <Link href="/login" className={cn(btnOutline, "mt-3 w-full")}>
+                Sign in
+              </Link>
               {isDemo && (
                 <p className="mt-5 text-[15px] text-ink">
                   {judgeUrl ? (

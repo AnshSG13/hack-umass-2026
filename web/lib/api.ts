@@ -24,6 +24,24 @@ export function clearKey(): void {
   window.dispatchEvent(new Event("rl-key"));
 }
 
+/** An API key (rl_...) rather than a session from signing in with an email and password. */
+export function isApiKey(value: string | null | undefined): boolean {
+  return Boolean(value && value.startsWith("rl_"));
+}
+
+/** End the session on the server (best effort), then forget it here. */
+export async function signOut(): Promise<void> {
+  const key = getKey();
+  if (key && !isApiKey(key)) {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${key}` } });
+    } catch {
+      /* signed out here either way */
+    }
+  }
+  clearKey();
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
