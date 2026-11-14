@@ -1,70 +1,113 @@
-"""Draw the web app icons (Home Screen and browser tab) from the DESIGN.md tokens.
+"""Draw the web app's icon (Home Screen and browser tab).
 
 Run from server/:
-  python -m scripts.make_icons
+  python -m scripts.make_icons                 # the icon the app uses, into web/public
+  python -m scripts.make_icons --all DIR       # every variant at 1024 px into DIR, to compare
 
-Writes web/public/apple-touch-icon.png (180), icon-192.png and icon-512.png.
-The mark is the ticket stub: a white ticket on highlighter, a tear line with two
-notches, and the stub's time as an ink bar.
+The mark is a lowercase serif "r" in the app's own heading face (Hedvig Letters Serif) with
+a butter full stop, the colour of the app's highlighter mark. iOS rounds the corners itself,
+so the image is a full square with no transparency.
+
+The font is read from the web app's build cache (web/.next), where next/font keeps it. Run
+`npm run dev` or `npm run build` in web/ once if it isn't there. Georgia is the fallback.
 """
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-INK = (27, 36, 48)
-HIGHLIGHTER = (255, 210, 63)
-TICKET = (255, 255, 255)
-LINE = (125, 135, 148)
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "web" / "public"
+SIZES = {"apple-touch-icon.png": 180, "icon-192.png": 192, "icon-512.png": 512, "icon-1024.png": 1024}
 
-OUT = Path(__file__).resolve().parents[2] / "web" / "public"
-SIZES = {"apple-touch-icon.png": 180, "icon-192.png": 192, "icon-512.png": 512}
+TEAL = (31, 78, 82)        # #1F4E52
+WHITE = (255, 255, 255)
+BUTTER = (255, 226, 138)   # a stronger butter than the page's #FFF3C4, so it holds on teal
+INK = (30, 31, 36)         # --ink
+PAPER = (248, 246, 242)    # --ticket
+HIGHLIGHT = (255, 236, 160)
+
+VARIANTS = {
+    # name: (background, letter, dot colour or None, highlight bar colour or None)
+    "teal-dot": (TEAL, WHITE, BUTTER, None),
+    "teal": (TEAL, WHITE, None, None),
+    "paper": (PAPER, INK, None, HIGHLIGHT),
+    "ink-dot": (INK, WHITE, BUTTER, None),
+}
+DEFAULT = "teal-dot"
 
 
-def draw(size: int) -> Image.Image:
-    scale = 4  # draw large, then shrink, so edges are smooth
-    s = size * scale
-    img = Image.new("RGB", (s, s), HIGHLIGHTER)
+def find_font() -> tuple[str, str]:
+    """The heading face from the web build cache, else Georgia."""
+    for f in sorted((ROOT / "web" / ".next").rglob("*.woff2")):
+        try:
+            family = ImageFont.truetype(str(f), 40).getname()[0]
+        except Exception:  # noqa: BLE001 - not a font Pillow can read
+            continue
+        if family.startswith("Hedvig Letters Serif") and ".p." in f.name:  # the latin subset
+            return str(f), family
+    for f in ("C:/Windows/Fonts/georgia.ttf", "/System/Library/Fonts/Supplemental/Georgia.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"):
+        if Path(f).exists():
+            return f, "fallback serif"
+    raise SystemExit("No serif font found. Run the web app once so web/.next holds the heading font.")
+
+
+def draw(size: int, variant: str, font_path: str) -> Image.Image:
+    bg, fg, dot, bar = VARIANTS[variant]
+    s = size * 4  # draw large, then shrink, so edges are smooth
+    img = Image.new("RGB", (s, s), bg)
     d = ImageDraw.Draw(img)
+    font = ImageFont.truetype(font_path, round(s * 0.92))
+    try:
+        font.set_variation_by_axes([144])  # the display cut: finer hairlines at this size
+    except Exception:  # noqa: BLE001 - not a variable font
+        pass
 
-    def u(v: float) -> int:
-        return round(v * s)
+    left, top, right, bottom = d.textbbox((0, 0), "r", font=font)
+    w, h = right - left, bottom - top
+    dot_r = round(s * 0.058) if dot else 0
+    gap = round(s * 0.035) if dot else 0
+    total = w + gap + 2 * dot_r
+    x = (s - total) // 2 - left
+    # An "r" has no descender and little weight low down, so it sits a touch below centre.
+    y = (s - h) // 2 - top + round(s * 0.015)
+    baseline = y + bottom
 
-    # the ticket
-    left, right, top, bottom = u(0.20), u(0.80), u(0.17), u(0.83)
-    d.rounded_rectangle([left, top, right, bottom], radius=u(0.07), fill=TICKET, outline=INK, width=u(0.028))
-
-    # tear line with a notch on each edge
-    tear = u(0.55)
-    notch = u(0.052)
-    for cx in (left, right):
-        d.ellipse([cx - notch, tear - notch, cx + notch, tear + notch], fill=HIGHLIGHTER, outline=INK, width=u(0.028))
-    # hide the half of each notch outline that falls outside the ticket
-    d.rectangle([left - notch - u(0.02), tear - notch - u(0.02), left - 1, tear + notch + u(0.02)], fill=HIGHLIGHTER)
-    d.rectangle([right + 1, tear - notch - u(0.02), right + notch + u(0.02), tear + notch + u(0.02)], fill=HIGHLIGHTER)
-    dash, gap = u(0.045), u(0.035)
-    x = left + notch + u(0.03)
-    while x + dash < right - notch - u(0.02):
-        d.rounded_rectangle([x, tear - u(0.009), x + dash, tear + u(0.009)], radius=u(0.009), fill=LINE)
-        x += dash + gap
-
-    # above the tear: the reel (two muted lines)
-    d.rounded_rectangle([u(0.29), u(0.27), u(0.63), u(0.315)], radius=u(0.02), fill=INK)
-    d.rounded_rectangle([u(0.29), u(0.37), u(0.52), u(0.405)], radius=u(0.018), fill=LINE)
-
-    # below the tear: the time, highlighted
-    d.rounded_rectangle([u(0.29), u(0.635), u(0.71), u(0.745)], radius=u(0.025), fill=HIGHLIGHTER)
-    d.rounded_rectangle([u(0.33), u(0.672), u(0.60), u(0.708)], radius=u(0.018), fill=INK)
-
+    if bar:
+        pad = round(s * 0.05)
+        d.rectangle([x + left - pad, baseline - round(h * 0.42), x + left + w + pad, baseline + round(s * 0.03)],
+                    fill=bar)
+    d.text((x, y), "r", font=font, fill=fg)
+    if dot:
+        cx = x + left + w + gap + dot_r
+        cy = baseline - dot_r
+        d.ellipse([cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r], fill=dot)
     return img.resize((size, size), Image.LANCZOS)
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")
+    p = argparse.ArgumentParser()
+    p.add_argument("--variant", default=DEFAULT, choices=sorted(VARIANTS))
+    p.add_argument("--all", metavar="DIR", help="write every variant at 1024 px into DIR and stop")
+    a = p.parse_args()
+    font_path, family = find_font()
+    print("font:", family)
+    if a.all:
+        out = Path(a.all)
+        out.mkdir(parents=True, exist_ok=True)
+        for name in VARIANTS:
+            draw(1024, name, font_path).save(out / f"icon-{name}.png", format="PNG", optimize=True)
+            print("wrote", out / f"icon-{name}.png")
+        return
     OUT.mkdir(parents=True, exist_ok=True)
     for name, size in SIZES.items():
-        draw(size).save(OUT / name, format="PNG", optimize=True)
-        print(f"wrote {OUT / name} ({size}x{size})")
+        draw(size, a.variant, font_path).save(OUT / name, format="PNG", optimize=True)
+        print(f"wrote {OUT / name} ({size}x{size}, {a.variant})")
 
 
 if __name__ == "__main__":
