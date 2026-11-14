@@ -177,3 +177,7 @@ The user's instruction: "use the mockup as the front end specifically and wire u
 - **No new dependencies.**
 
 Checked by a subagent in headless Chromium at 390x844 and 1440x900 and again by hand in the built-in browser at 375 px on a fresh demo account: Home showed 8 real saves and 6 tastes; Add with a sample link showed "Planning it" and became a card; the Reel page's plan confirmed ("Added to Wednesday") and showed both calendar links; Plans listed it under Wednesday; Ask answered "what can I make with canned chickpeas and coconut milk" with the right reel. `npx tsc --noEmit` and `npm run lint` pass. Not checked: dictation with a real microphone, Share on the grocery list (needs a phone), and any of it on a real iPhone.
+
+## 2026-11-14: landing headline
+
+The owner asked for the line "Bring back intentional scrolling" somewhere strong. It is now the landing headline, the first thing anyone sees before the demo. "Every save becomes a plan." stays as the bold lead of the paragraph under it. The word "intentional" carries the same highlighter mark as a ticket's planned time, so the promise and the plan read as one idea. Checked at 375, 800 and 1280 px wide: two lines at each, no sideways scroll.

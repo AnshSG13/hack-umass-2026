@@ -59,9 +59,19 @@ export function Landing({ hasClip }: { hasClip: boolean }) {
         )}
       >
         <div className="desk:col-start-1 desk:row-start-1 desk:self-end">
-          <h1 className="wide text-[34px] leading-[1.1] text-ink">Every save becomes a plan.</h1>
+          {/* The reason the app exists, said first. "intentional" carries the same highlighter
+              mark as a ticket's planned time, so the promise and the plan read as one idea. */}
+          <h1 className="wide text-[36px] leading-[1.14] text-ink [text-wrap:balance] desk:text-[44px]">
+            Bring back{" "}
+            <span className="relative -mx-1 inline-block px-1 whitespace-nowrap">
+              <span aria-hidden="true" className="absolute inset-x-0 top-[0.12em] bottom-[0.04em] bg-highlighter" />
+              <span className="relative">intentional</span>
+            </span>{" "}
+            scrolling.
+          </h1>
           <p className="mt-4 text-[16px] text-ink">
-            Share a reel from Instagram. {appName} reads it, checks your week, and asks before it adds anything.
+            <strong className="font-semibold">Every save becomes a plan.</strong> Share a reel from Instagram.{" "}
+            {appName} reads it, checks your week, and asks before it adds anything.
           </p>
         </div>
 
