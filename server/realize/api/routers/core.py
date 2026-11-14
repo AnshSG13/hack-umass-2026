@@ -70,7 +70,9 @@ def _me(user: dict) -> dict:
             "name": user.get("name") or "", "email": user.get("email"),
             "timezone": user["timezone"], "prefs": user["prefs"], "key_preview": user.get("key_preview"),
             "expires_at": as_utc(user["expires_at"]).isoformat() if user.get("expires_at") else None,
-            "counts": _counts(user)}
+            "counts": _counts(user),
+            "profile": user.get("profile"),
+            "onboarded": bool(user.get("onboarded_at")) or bool(user.get("is_demo"))}
 
 
 @router.get("/api/me")

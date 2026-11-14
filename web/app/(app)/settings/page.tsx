@@ -3,6 +3,7 @@
 // Settings (DESIGN.md 7.8). Every change saves itself and answers with the toast "Saved".
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Minus, Plus } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -218,6 +219,20 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
           </button>
         </form>
       </section>
+
+      {!me.is_demo && (
+        <section className="mt-8" aria-labelledby="about-heading">
+          <h2 id="about-heading" className={sectionTitle}>
+            About you
+          </h2>
+          <p className="mt-2 text-[15px] text-muted">
+            Your interests, hobbies and skills shape how your saves are sorted and planned.
+          </p>
+          <Link href="/welcome" className={cn(btnOutline, "mt-3")}>
+            Redo the intro
+          </Link>
+        </section>
+      )}
 
       <section className="mt-8" aria-labelledby="week-heading">
         <h2 id="week-heading" className={sectionTitle}>

@@ -128,6 +128,7 @@ Conventions: `user_id` is a string `u_<12 hex>`. Other `_id`s are ObjectId, expo
   "created_at": ISODate, "expires_at": ISODate | absent }
 ```
 Keys: `rl_` + `secrets.token_urlsafe(24)`, shown once, stored as sha256. Indexes: `{api_key_hash:1}` unique; `{expires_at:1}` TTL.
+Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "skills": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are sub-categories Gemini proposes per type from interests, hobbies, skills and age range (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, skills, age range) for the planner and the video pass.
 
 ### 5.2 saves
 ```jsonc
@@ -618,6 +619,9 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | POST | /api/users | none, 5/h/IP | `{timezone?}` → `{user_id, api_key}` (shown once) |
 | GET | /api/me | key | `{user_id, is_demo, is_judge, timezone, prefs, key_preview, expires_at, counts}` |
 | PATCH | /api/me | key | `{timezone?, prefs?}` |
+| GET | /api/onboarding/options | none | the intro's fixed choices `{identities, age_ranges, ethnicities, interests, hobbies, skills}` |
+| POST | /api/onboarding/suggest | key, 20/10 min | `{picked, age_range?}` → `{suggestions}`: Gemini's "More for you" interest chips |
+| POST | /api/onboarding/finish | key | `{profile}` → stores it with Gemini's starter sub-categories → `{profile, starters: [{type, label, subcategories}]}` |
 | POST | /api/me/key | key | new key → `{api_key}`; the old one stops working |
 | POST | /api/save | key | section 6 |
 | GET | /api/saves | key | `?type&limit=30&before=<iso>` → `{items: Ticket[], next_before}` |

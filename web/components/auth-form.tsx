@@ -91,7 +91,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       });
       leaving.current = true;
       setKey(r.token);
-      router.replace(signup ? "/setup" : "/home");
+      router.replace(signup ? "/welcome?next=/setup" : "/home");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "That didn't work. Try again.");
       setBusy(false);

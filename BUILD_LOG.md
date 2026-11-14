@@ -278,3 +278,16 @@ The user asked for the chat to suggest something to export at the end, "such as 
 - **No new dependencies.**
 
 Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invite, the itinerary refused before the trip existed and made after it (five timed stops with prices, hours, forecast and the sources named), the public data opening with the token and no key, a wrong token and another account refused. 117 unit tests pass (15 new).
+
+## 2026-11-14: intro screens and starter sub-categories
+
+The user asked for intro pages like a video app's onboarding (how you identify, age, ethnicity, hobbies, skills, interests) and for categories the model makes, with a new one whenever a saved reel fits none. Decisions:
+
+- **One question per screen, three sections:** "Tell us about yourself" (how you identify, age, ethnicity), "Choose what you like" (interest chips), "Hobbies and skills" (chips plus your own). A progress bar, Back and Skip on every screen; single choices move on by themselves. `web/app/welcome/page.tsx`.
+- **Gemini in two places.** While interests are picked, "More for you" adds more specific chips. At the end, Gemini proposes starter sub-categories inside each type, shown as "Your folders".
+- **Built on the existing sub-categories, not a second system.** The owner asked for type first (Food) and sub-categories under it. A first version kept its own categories collection; it was dropped for `profile.starters`, which `subcats` offers to the model next to the labels in use. So the hierarchy, the library chips, Home's taste tiles and "File under" all work unchanged.
+- **Identity and ethnicity never reach Gemini.** They are stored on the profile only, so filing follows what someone likes, not who they are.
+- **Who sees it:** new accounts after signup, then `/setup` as before; existing real accounts once, on their next visit; demo accounts never. Settings has "Redo the intro".
+- **No new dependencies.**
+
+Checked live against Atlas with a throwaway account (deleted afterwards): the intro end to end at 390 px; Gemini made sentence-case starters in 6 types; six real sample reels were filed as Food > Weeknight dinners (2) and Food > Baking (2) from the starters, and Events > Theater and Events > Holiday events as new ones. The first run returned Title Case starters; the prompt now asks for sentence case, checked on two more runs. 127 unit tests pass (10 new).

@@ -18,6 +18,7 @@ LIMITS = {
     "demo": (10, 3600),        # per IP
     "login": (20, 600),        # per IP
     "login_email": (10, 600),  # per email
+    "suggest": (20, 600),      # per key, onboarding interest suggestions
 }
 
 

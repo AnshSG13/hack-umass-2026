@@ -8,13 +8,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ..config import get_settings
-from .routers import auth, bundles, core, deliverables, discussions, plans, saves, trips
+from .routers import auth, bundles, core, deliverables, discussions, onboarding, plans, saves, trips
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title=get_settings().app_name, docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth.router)
 app.include_router(core.router)
+app.include_router(onboarding.router)
 app.include_router(saves.router)
 app.include_router(plans.router)
 app.include_router(trips.router)
