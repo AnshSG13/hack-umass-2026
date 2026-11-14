@@ -38,7 +38,7 @@ export function SaveRow({
       <span className="row-main">
         <span className="row-title">{ticketTitle(ticket)}</span>
         <span className="row-meta">
-          <KindChip type={ticket.type} />
+          <KindChip type={ticket.type} sub={ticket.subcategory} />
           <span className={cn("state", state.good && "good")}>
             <Icon name={state.icon} />
             {state.text}

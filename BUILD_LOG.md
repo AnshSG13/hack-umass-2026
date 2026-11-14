@@ -181,3 +181,13 @@ Checked by a subagent in headless Chromium at 390x844 and 1440x900 and again by 
 ## 2026-11-14: landing headline
 
 The owner asked for the line "Bring back intentional scrolling" somewhere strong. It is now the landing headline, the first thing anyone sees before the demo. "Every save becomes a plan." stays as the bold lead of the paragraph under it. The word "intentional" carries the same highlighter mark as a ticket's planned time, so the promise and the plan read as one idea. Checked at 375, 800 and 1280 px wide: two lines at each, no sideways scroll.
+
+## 2026-11-14: sub-categories
+
+- **Why:** the mockup files saves as "Food › Thai", and the owner asked for sub-categories. Until now the data had only the seven types, so the Home taste tile showed tags in its sub-category row.
+- **How:** the planner and the video pass each return a `subcategory`, shown the account's existing labels so they reuse one; no extra Gemini calls. `server/realize/subcats.py` tidies the label and snaps it onto an existing one that differs only in case, punctuation or a plural. Hand-set labels are `user_edited` and never overwritten; moving a save to another type clears its label.
+- **UI:** "Food › Dessert" on the save page chip (tap to pick, add or remove) and on list rows; a sub-category chip row in Library under a picked type; sub-categories in the Home taste tile, falling back to tags.
+- **Backfill:** `python -m scripts.backfill_subcategories --all-users | --user u_... | --samples [--dry-run]`, one text call per account and type.
+- **No new dependencies.**
+
+Checks: 3 live reels labelled Dessert, Curry, Appetizers by the planner and kept by the video pass; 11 of 11 API checks on editing, snapping, filtering and clearing; the screens checked at 390x844; 77 unit tests, `tsc` and `eslint` pass. Steps to merge are in `docs/merge-subcategories.md`.

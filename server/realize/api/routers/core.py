@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import accounts, ask, db, demo, jobs, planops, ratelimit, search, thumbs, tickets
+from ... import accounts, ask, db, demo, jobs, planops, ratelimit, search, subcats, thumbs, tickets
 from ...config import get_settings
 from ...models import (
     ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
@@ -127,22 +127,27 @@ def tastes(user: dict = Depends(current_user)) -> dict:
             e["thumbs"].append(f"/api/t/{s['thumb_id']}")
         for tag in {str(x).strip().lower().lstrip("#") for x in (s.get("tags") or []) if str(x).strip()}:
             e["tags"][tag] = e["tags"].get(tag, 0) + 1
+    subs = subcats.counts(user["_id"])
     out = []
     for t in sorted(by_type, key=lambda k: (-by_type[k]["count"], TYPES.index(k))):
         e = by_type[t]
         top = sorted(e["tags"].items(), key=lambda kv: (-kv[1], kv[0]))[:3]
         out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
-                    "tags": [{"tag": k, "count": n} for k, n in top]})
+                    "tags": [{"tag": k, "count": n} for k, n in top],
+                    "subcategories": subs.get(t, [])})
     return {"total": total, "tastes": out}
 
 
 @router.get("/api/search")
-def search_saves(q: str = "", type: str | None = None, user: dict = Depends(current_user)) -> dict:
+def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
+                 user: dict = Depends(current_user)) -> dict:
     t = type if type in TYPES else None
     if not q.strip():
         return {"items": [], "mode": search.active_mode()}
     try:
-        docs, mode = search.hybrid_search(user["_id"], q, type=t, limit=20)
+        docs, mode = search.hybrid_search(user["_id"], q, type=t, limit=40 if t and sub else 20)
+        if t and sub:
+            docs = [d for d in docs if d.get("subcategory") == sub][:20]
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=503, detail="Search didn't answer. Try again.") from e
     items = tickets.tickets_for(docs, user)

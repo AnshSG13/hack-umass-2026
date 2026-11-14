@@ -27,6 +27,8 @@ def regular_indexes() -> None:
     db.saves().create_index([("user_id", ASCENDING), ("shortcode", ASCENDING)], unique=True)
     db.saves().create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
     db.saves().create_index([("user_id", ASCENDING), ("type", ASCENDING), ("created_at", DESCENDING)])
+    db.saves().create_index([("user_id", ASCENDING), ("type", ASCENDING), ("subcategory", ASCENDING),
+                             ("created_at", DESCENDING)])
     db.saves().create_index([("expires_at", ASCENDING)], **ttl)
 
     db.plans().create_index([("user_id", ASCENDING), ("status", ASCENDING), ("scheduled_for", ASCENDING)])
