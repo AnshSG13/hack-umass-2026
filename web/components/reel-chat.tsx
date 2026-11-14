@@ -4,16 +4,24 @@
 // the reel in the prompt, so there is nothing to search and nothing to explain first.
 // Every discussion is saved with the reel and listed on its page (<Discussions />).
 
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
+import {
+  DeliverableCard,
+  deliverablesKey,
+  SendProgress,
+  SendSuggestions,
+  useDeliverables,
+  useSendMaker,
+} from "@/components/deliverables";
 import { Icon } from "@/components/icons";
 import { Streamed } from "@/components/streamed";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { plural, relativeTime } from "@/lib/format";
 import { kindTint } from "@/lib/kinds";
-import type { Discussion, DiscussionMessage, DiscussionSummary, SaveType } from "@/lib/types";
+import type { Deliverable, Discussion, DiscussionMessage, DiscussionSummary, SaveType } from "@/lib/types";
 
 const NO_ANSWER = "Ask didn't answer. Try again.";
 
@@ -123,9 +131,82 @@ function Answer({
           <Icon name="right" />
         </button>
       )}
-      {settled && message.from_reel === false && <p className="answer-note">Not from the reel.</p>}
+      {settled && message.web && message.macros && <Macros macros={message.macros} />}
+      {settled && message.web && (message.sources?.length ?? 0) > 0 && (
+        <div className="web-sources">
+          <p className="web-label">
+            <Icon name="search" />
+            From the web. The reel doesn&apos;t say.
+          </p>
+          <ol>
+            {message.sources!.map((s) => (
+              <li key={s.n}>
+                <a href={s.url} target="_blank" rel="noopener noreferrer">
+                  <span className="web-n">{s.n}</span>
+                  {s.title || new URL(s.url).hostname}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {settled && message.from_reel === false && !message.web && <p className="answer-note">Not from the reel.</p>}
     </div>
   );
+}
+
+const MACRO_ROWS: { key: keyof NonNullable<DiscussionMessage["macros"]>["values"]; label: string; unit: string }[] = [
+  { key: "calories", label: "Calories", unit: "" },
+  { key: "protein_g", label: "Protein", unit: " g" },
+  { key: "carbs_g", label: "Carbs", unit: " g" },
+  { key: "fat_g", label: "Fat", unit: " g" },
+  { key: "fiber_g", label: "Fiber", unit: " g" },
+  { key: "sugar_g", label: "Sugar", unit: " g" },
+  { key: "sodium_mg", label: "Sodium", unit: " mg" },
+];
+
+/** A recipe's nutrition from the web: only numbers the server kept with a source. */
+function Macros({ macros }: { macros: NonNullable<DiscussionMessage["macros"]> }) {
+  const rows = MACRO_ROWS.filter((r) => macros.values[r.key]);
+  if (rows.length === 0) return null;
+  const per = macros.per === "serving" ? (macros.servings ? `Per serving, serves ${macros.servings}` : "Per serving") : "Whole recipe";
+  return (
+    <figure className="macros">
+      <figcaption>
+        {per} · {macros.basis === "published" ? "published for this recipe" : "estimated from the ingredients"}
+      </figcaption>
+      <dl>
+        {rows.map((r) => {
+          const v = macros.values[r.key]!;
+          return (
+            <div key={r.key}>
+              <dt>{r.label}</dt>
+              <dd>
+                {v.value}
+                {r.unit}
+                <sup aria-label={`source ${v.source}`}>{v.source}</sup>
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </figure>
+  );
+}
+
+/** An answer from the reel alone takes a few seconds. Past that, the chat has gone to the
+ * web for it, so the line says so. */
+function WaitingLine() {
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    const a = window.setTimeout(() => setStage(1), 4500);
+    const b = window.setTimeout(() => setStage(2), 12000);
+    return () => {
+      window.clearTimeout(a);
+      window.clearTimeout(b);
+    };
+  }, []);
+  return <>{["Reading the reel", "The reel doesn't say. Searching the web", "Reading what the web says"][stage]}</>;
 }
 
 interface ChatProps {
@@ -140,6 +221,8 @@ interface ChatProps {
   onDiscussionId: (id: string | null) => void;
   /** "Said at 0:11": show that line of the transcript on the page behind. */
   onJump: (sec: number) => void;
+  /** The servings picked on the Reel page, when the person changed them. */
+  servings?: number | null;
 }
 
 export function ReelChat(props: ChatProps) {
@@ -156,7 +239,17 @@ export function ReelChat(props: ChatProps) {
 }
 
 // Mounted only while the chat is open, so each opening starts with clean state.
-function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, onDiscussionId, onJump }: ChatProps) {
+function ChatPanel({
+  onOpenChange,
+  saveId,
+  title,
+  type,
+  thumbUrl,
+  discussionId,
+  onDiscussionId,
+  onJump,
+  servings,
+}: ChatProps) {
   const { mutate } = useSWRConfig();
   const {
     data,
@@ -169,6 +262,7 @@ function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
   const [liveAt, setLiveAt] = useState<number | null>(null); // index of the answer still being written out
+  const [writing, setWriting] = useState(false); // true until that answer's last word is out
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -178,8 +272,27 @@ function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, 
   const sending = pending !== null && pending.error === null;
   const empty = messages.length === 0 && !pending && !(discussionId && isLoading);
 
+  // Something to send: what this reel can make now, offered under the newest answer, and
+  // the cards made in this sitting, each kept after the message it was made under.
+  const { data: sendable } = useDeliverables(saveId, discussionId);
+  const [cards, setCards] = useState<{ d: Deliverable; after: number }[]>([]);
+  const count = useRef(0);
+  useEffect(() => {
+    count.current = messages.length;
+  }, [messages.length]);
+  const maker = useSendMaker({
+    saveId,
+    discussionId,
+    servings,
+    // Making the same kind again updates it: the old card gives way to the new one.
+    onMade: (d) => setCards((cur) => [...cur.filter((c) => c.d.id !== d.id), { d, after: count.current }]),
+  });
+  const options = sendable?.options ?? [];
+  const last = messages.length - 1;
+  const suggest = options.length > 0 && !sending && !writing && last >= 0 && messages[last].role === "assistant";
+
   // Keep the newest message in view.
-  const marker = `${messages.length}:${pending ? (pending.error ? 2 : 1) : 0}`;
+  const marker = `${messages.length}:${pending ? (pending.error ? 2 : 1) : 0}:${maker.steps ? 1 : 0}:${maker.problem ? 1 : 0}`;
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
   }, [marker]);
@@ -201,9 +314,12 @@ function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, 
       // Seed the cache for this discussion before switching to it, so nothing flashes.
       await mutate(`/api/discussions/${d.id}`, { discussion: d }, { revalidate: false });
       setLiveAt(d.messages.length - 1);
+      setWriting(true);
       setPending(null);
       if (d.id !== discussionId) onDiscussionId(d.id);
       void mutate(discussionsKey(saveId));
+      // An answered question can add an option ("Notes from this chat").
+      void mutate(deliverablesKey(saveId, d.id));
     } catch (e) {
       setPending({
         question,
@@ -267,6 +383,11 @@ function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, 
         </div>
       )}
 
+      {/* For screen readers: "Made: Itinerary to send", and the trip being built first. */}
+      <p className="vh" role="status">
+        {maker.said}
+      </p>
+
       <div className="rc-body">
         {empty && (
           <div className="rc-empty">
@@ -309,28 +430,44 @@ function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, 
           </div>
         )}
 
-        {messages.map((m, i) =>
-          m.role === "user" ? (
-            <p key={i} className="bubble">
-              {m.text}
-            </p>
-          ) : (
-            <Answer
-              key={i}
-              message={m}
-              live={i === liveAt}
-              onShown={() =>
-                endRef.current?.scrollIntoView({
-                  block: "end",
-                  behavior: "auto",
-                })
-              }
-              onJump={(sec) => {
-                onOpenChange(false);
-                onJump(sec);
-              }}
-            />
-          ),
+        {messages.map((m, i) => (
+          <Fragment key={i}>
+            {m.role === "user" ? (
+              <p className="bubble">{m.text}</p>
+            ) : (
+              <Answer
+                message={m}
+                live={i === liveAt}
+                onShown={() => {
+                  setWriting(false);
+                  endRef.current?.scrollIntoView({
+                    block: "end",
+                    behavior: "auto",
+                  });
+                }}
+                onJump={(sec) => {
+                  onOpenChange(false);
+                  onJump(sec);
+                }}
+              />
+            )}
+            {i === last && suggest && (
+              <SendSuggestions options={options} busy={maker.busy !== null} onPick={maker.make} />
+            )}
+            {cards.map((c) =>
+              // A card whose message is gone (it shouldn't be) still shows, at the end.
+              Math.min(c.after, messages.length) === i + 1 ? (
+                <DeliverableCard key={c.d.id} deliverable={c.d} reveal />
+              ) : null,
+            )}
+          </Fragment>
+        ))}
+
+        {maker.steps && <SendProgress steps={maker.steps} />}
+        {maker.problem && (
+          <p role="alert" className="plan-error">
+            {maker.problem}
+          </p>
         )}
 
         {pending && (
@@ -343,7 +480,7 @@ function ChatPanel({ onOpenChange, saveId, title, type, thumbUrl, discussionId, 
                   <span />
                   <span />
                 </span>
-                Reading the reel
+                <WaitingLine key={pending.question} />
               </p>
             ) : (
               <div role="alert" className="ask-error">

@@ -55,6 +55,10 @@ def discussions() -> Collection:
     return get_db()["discussions"]
 
 
+def deliverables() -> Collection:
+    return get_db()["deliverables"]
+
+
 def jobs() -> Collection:
     return get_db()["jobs"]
 

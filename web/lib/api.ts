@@ -50,21 +50,25 @@ export class ApiError extends Error {
   }
 }
 
-function headers(json: boolean): HeadersInit {
+function headers(json: boolean, withKey = true): HeadersInit {
   const h: Record<string, string> = {};
-  const key = getKey();
+  const key = withKey ? getKey() : null;
   if (key) h.Authorization = `Bearer ${key}`;
   if (json) h["Content-Type"] = "application/json";
   return h;
 }
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+/** `anonymous`: leave the key out, for pages a link opens for someone with no account. */
+export async function api<T>(
+  path: string,
+  init: { method?: string; body?: unknown; anonymous?: boolean } = {},
+): Promise<T> {
   const hasBody = init.body !== undefined;
   let res: Response;
   try {
     res = await fetch(path, {
       method: init.method ?? (hasBody ? "POST" : "GET"),
-      headers: headers(hasBody),
+      headers: headers(hasBody, !init.anonymous),
       body: hasBody ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
     });
@@ -86,6 +90,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
 // SWR fetcher: the key is the path.
 export const fetcher = <T,>(path: string) => api<T>(path);
+
+// The same, without the key: public pages opened by a share link.
+export const publicFetcher = <T,>(path: string) => api<T>(path, { anonymous: true });
 
 // POST /api/chat answers with NDJSON; call onEvent for each line as it arrives.
 export async function chatStream(

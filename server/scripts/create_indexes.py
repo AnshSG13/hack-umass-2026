@@ -39,6 +39,11 @@ def regular_indexes() -> None:
     db.plans().create_index([("save_id", ASCENDING)], unique=True)
     db.plans().create_index([("expires_at", ASCENDING)], **ttl)
 
+    db.deliverables().create_index([("save_id", ASCENDING), ("kind", ASCENDING), ("discussion_id", ASCENDING)],
+                                   unique=True)
+    db.deliverables().create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
+    db.deliverables().create_index([("expires_at", ASCENDING)], **ttl)
+
     db.trips().create_index([("save_id", ASCENDING)], unique=True)
     db.trips().create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
     db.trips().create_index([("expires_at", ASCENDING)], **ttl)

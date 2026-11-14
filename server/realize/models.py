@@ -29,6 +29,8 @@ STEP_LABELS = {
     "trip_layout": "Laying out the days",
     "trip_weather": "Checking the forecast",
     "trip_day": "Planning the day",
+    "nutrition_search": "Looking up nutrition",
+    "web_search": "Searching the web",
     "get_save": "Opening a save",
     "list_plans": "Checking your plans",
     "propose_plans": "Drafting plans",
@@ -142,6 +144,14 @@ class SavePatch(BaseModel):
     type: Literal["recipe", "event", "place", "workout", "product", "tip", "other"] | None = None
     subcategory: str | None = Field(default=None, max_length=40)
     note: str | None = Field(default=None, max_length=NOTE_MAX)
+
+
+class DeliverableRequest(BaseModel):
+    """Make something to send from one reel."""
+    kind: Literal["itinerary", "invite", "grocery_list", "recipe_card", "workout_card", "shortlist",
+                  "places_list", "key_points", "chat_notes"]
+    discussion_id: str | None = None
+    servings: int | None = Field(default=None, ge=1, le=24)
 
 
 class TripRequest(BaseModel):
