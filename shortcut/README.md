@@ -2,9 +2,35 @@
 
 The Shortcut is optional. Realize is a web app: you can save any reel by copying its link and pasting it on the Save tab (see the main README). The Shortcut adds a one-step path from Instagram's share sheet, which a web app on iOS can't offer by itself.
 
-There are two versions. Start with the quick one.
+There are three versions. Start with the first: it is the one from the original prototype (`prototype/README.md`), which was tested on a real iPhone over plain http on Wi-Fi, with the address and body changed for Realize.
 
-## The quick version (one action)
+## Save only (one action, the prototype's Shortcut)
+
+It posts the reel's link and you are done. The plan waits in the app under Waiting on you.
+
+1. **Shortcuts** app, **+**, add the action **Get Contents of URL**.
+2. Tap **ⓘ**, turn on **Show in Share Sheet**. At the top, set "Receive **URLs** and **Text** from Share Sheet".
+3. In Get Contents of URL:
+
+   ```
+   URL            http://<YOUR-LAN-IP>:3100/api/save
+   Method         POST
+   Headers
+      Authorization   Bearer <your key>
+   Request Body   JSON
+      input   (Text)   → [Shortcut Input]   ← pick the blue variable, don't type it
+      source  (Text)   → shortcut
+      wait    (Number) → 0
+   ```
+4. Optional: add **Get Dictionary Value** for `message`, then **Show Notification** with it. It says "Saved. Still reading it. Your plan will be waiting in Realize."
+5. Name the Shortcut **Realize**.
+6. In Instagram, open a reel, **Share**, **Share to…** (or **More**), **Realize**. Tap **Allow** the first time iOS asks to connect.
+
+What changed from the prototype: the path is `/api/save` instead of `/share`, the body field is `input` instead of `url`, and the key goes in the `Authorization` header instead of a `token` field. Your key is on the app's `/setup` page ("Copy key"). Leave `wait` out and the Shortcut waits up to 20 seconds and gets the plan back (`prompt` and `menu`), which is what the full version below builds on.
+
+Checked on 2026-11-14 with the same request sent by curl to the laptop's Wi-Fi address: HTTP 200 in 0.2 s with the message above, and the plan was there 5 seconds later. Not yet run from a real iPhone against Realize.
+
+## Open in the app (one action)
 
 It opens the web app's Save page with the reel's link. It needs no key, and the plan shows up as a ticket in the app. The same steps, with your own address filled in and a copy button, are on the app's setup page under "Save straight from Instagram's Share menu".
 
