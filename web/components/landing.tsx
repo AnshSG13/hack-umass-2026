@@ -109,9 +109,15 @@ export function Landing({ hasClip }: { hasClip: boolean }) {
               The demo didn&apos;t start. Try again.
             </p>
           )}
-          <Link href="/setup" className={cn(demoOn ? btnOutline : btnPrimary, "mt-3 w-full")}>
+          <Link href="/signup" className={cn(demoOn ? btnOutline : btnPrimary, "mt-3 w-full")}>
             Use it for real
           </Link>
+          <p className="mt-4 text-center text-[15px] text-ink">
+            Have an account?{" "}
+            <Link href="/login" className="inline-flex min-h-11 items-center underline underline-offset-4">
+              Sign in
+            </Link>
+          </p>
         </div>
       </main>
 

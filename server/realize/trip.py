@@ -586,8 +586,8 @@ def _weather_into(trip: dict, user: dict) -> None:
 def start_build(save: dict, user: dict, start: date | None = None) -> dict:
     """Mark the trip as building and return it; the caller runs build() in the background."""
     now = now_utc()
-    doc = {"status": "building", "error": None, "updated_at": now,
-           "start_date": (start or default_start(save, user)).isoformat()}
+    first = (start or default_start(save, user)).isoformat()
+    doc = {"status": "building", "error": None, "updated_at": now, "start_date": first, "first_start": first}
     insert = {"user_id": user["_id"], "save_id": save["_id"], "created_at": now,
               "share_token": secrets.token_urlsafe(16)[:22], "days": [], "sources": []}
     if user.get("expires_at"):
@@ -773,8 +773,14 @@ def view(trip: dict | None, save: dict, user: dict) -> dict:
     n_days = len(days)
     start = date.fromisoformat(trip["start_date"])
     is_event = save.get("type") == "event"
+    # The next Saturdays, plus the dates the trip was first planned for and the ones it has
+    # now, so moving the trip can always be undone.
+    picks = set(date_options(user))
+    for iso in (trip.get("first_start"), trip.get("start_date")):
+        if iso and date.fromisoformat(iso) >= today:
+            picks.add(date.fromisoformat(iso))
     options = [] if is_event else [{"start_date": o.isoformat(), "label": span_label(o, n_days)}
-                                   for o in date_options(user)]
+                                   for o in sorted(picks)]
     dates = [date.fromisoformat(d["date"]) for d in days]
     weather_note = None
     if not forecast and dates and max(dates) >= today:

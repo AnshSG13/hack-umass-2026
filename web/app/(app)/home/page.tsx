@@ -53,14 +53,24 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
           </span>
           <Thumbs urls={taste.thumbs} className="fan" />
         </span>
-        {taste.tags.length > 0 && (
+        {(taste.subcategories ?? []).length > 0 ? (
           <span className="subs">
-            {taste.tags.map((t) => (
-              <span key={t.tag}>
-                {sentence(t.tag)} <b>{t.count}</b>
+            {(taste.subcategories ?? []).slice(0, 4).map((s) => (
+              <span key={s.name}>
+                {s.name} <b>{s.count}</b>
               </span>
             ))}
           </span>
+        ) : (
+          taste.tags.length > 0 && (
+            <span className="subs">
+              {taste.tags.map((t) => (
+                <span key={t.tag}>
+                  {sentence(t.tag)} <b>{t.count}</b>
+                </span>
+              ))}
+            </span>
+          )
         )}
       </Link>
     );

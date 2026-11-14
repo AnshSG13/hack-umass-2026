@@ -14,7 +14,7 @@ import { fetcher } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
-import type { SavesPage, SaveType, SearchResult } from "@/lib/types";
+import type { SavesPage, SaveType, SearchResult, TastesResponse } from "@/lib/types";
 
 const PAGE = 30;
 const MAX_LIMIT = 100; // the API's cap on ?limit
@@ -38,6 +38,9 @@ function SavesList() {
   const { openAdd } = useApp();
   const { data: me } = useMe();
   const type = asType(params.get("type"));
+  const sub = type ? params.get("sub") : null;
+  const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
+  const subs = type ? (tastes.data?.tastes.find((t) => t.type === type)?.subcategories ?? []) : [];
   const wantsFocus = params.get("focus") === "1";
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -55,7 +58,7 @@ function SavesList() {
   }, [wantsFocus]);
 
   const searching = debounced.length > 0;
-  const typeParam = type ? `&type=${type}` : "";
+  const typeParam = (type ? `&type=${type}` : "") + (sub ? `&sub=${encodeURIComponent(sub)}` : "");
   const list = useSWR<SavesPage>(searching ? null : `/api/saves?limit=${limit}${typeParam}`, fetcher, {
     keepPreviousData: true,
   });
@@ -74,6 +77,12 @@ function SavesList() {
   function pick(next: SaveType | null) {
     setLimit(PAGE);
     router.replace(next ? `/library?type=${next}` : "/library", { scroll: false });
+  }
+
+  function pickSub(next: string | null) {
+    if (!type) return;
+    setLimit(PAGE);
+    router.replace(`/library?type=${type}${next ? `&sub=${encodeURIComponent(next)}` : ""}`, { scroll: false });
   }
 
   const head = (
@@ -156,6 +165,27 @@ function SavesList() {
         })}
       </div>
 
+      {type && subs.length > 0 && (
+        <div className="filters" role="group" aria-label={`Filter ${KINDS[type].label} by sub-category`}>
+          <button type="button" className="fchip" aria-pressed={sub === null} onClick={() => pickSub(null)}>
+            All {KINDS[type].label}
+          </button>
+          {subs.map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              className="fchip"
+              style={tint(KINDS[type].color)}
+              aria-pressed={sub === s.name}
+              onClick={() => pickSub(s.name)}
+            >
+              {s.name}
+              <b>{s.count}</b>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="gutter" aria-live="polite">
         {active.error && !active.data ? (
           <div role="alert" className="msg">
@@ -175,7 +205,7 @@ function SavesList() {
             {searching
               ? `Nothing matches “${debounced}”. Try a word they said in the video.`
               : type
-                ? `Nothing filed under ${KINDS[type].label} yet.`
+                ? `Nothing filed under ${KINDS[type].label}${sub ? ` › ${sub}` : ""} yet.`
                 : "Nothing here yet."}
           </p>
         ) : (

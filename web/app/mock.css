@@ -157,6 +157,13 @@
   height: 16px;
 }
 
+/* Reel page: the quiet "Reanalyze and re-sort" at the very end */
+.reanalyze {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
 /* ---------- Home ---------- */
 .home-head {
   display: flex;
@@ -1265,6 +1272,481 @@ button.note {
 /* step lines while a reel is being read */
 .plan-steps {
   margin-top: 10px;
+}
+
+/* ---------- The trip plan (places and events; not in the mockup) ----------
+   Before it is built it is a .plan card. Built, it is a list: a hairline card per day,
+   a rail of stops inside, and every price, opening time and booking note followed by a
+   small link to where it came from. */
+.trip {
+  margin-top: 24px;
+  scroll-margin-top: 16px;
+}
+.trip:focus,
+.trip-day:focus {
+  outline: none; /* focused from code after a build starts, never by Tab */
+}
+.trip > .plan {
+  margin-top: 0;
+}
+.trip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 12px;
+}
+.trip-head-main {
+  min-width: 0;
+}
+.trip-city {
+  margin-top: 4px;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.trip-dates {
+  margin-top: 4px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.trip-change {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 16px 0 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  transition: background 0.2s;
+}
+.trip-change:hover {
+  background: var(--surface);
+}
+.trip-change .i {
+  width: 16px;
+  height: 16px;
+}
+.trip-meta {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+/* a link to a source: small, always next to the fact it backs */
+.trip-src {
+  padding-block: 7px; /* inline, so it widens the target without moving the lines */
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+}
+.trip-src:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+.trip-src-end {
+  white-space: nowrap;
+}
+.trip-src .i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 3px;
+  vertical-align: -1px;
+  stroke-width: 2;
+}
+
+.trip-heads {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+.trip-heads li {
+  display: grid;
+  grid-template-columns: 15px 1fr;
+  gap: 9px;
+  overflow-wrap: anywhere;
+}
+.trip-heads li > .i {
+  width: 15px;
+  height: 15px;
+  margin-top: 2.5px;
+  color: var(--butter-ink);
+}
+
+.trip-days {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trip-day {
+  padding: 18px 18px 6px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--bg);
+  scroll-margin-top: 16px;
+}
+.trip-day-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.trip-day-title {
+  display: block;
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.trip-wx {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.trip-wx.is-wet {
+  color: var(--sky-ink);
+}
+.trip-wx .i {
+  width: 15px;
+  height: 15px;
+}
+
+/* the stops of a day, on a rail: a filled dot is from the reel, a ring was added */
+.trip-stops {
+  margin-top: 18px;
+}
+.trip-stop {
+  position: relative;
+  padding-left: 24px;
+  padding-bottom: 6px;
+}
+.trip-stop::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.trip-stop.is-added::before {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1.75px var(--ink-3);
+}
+.trip-stop::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 21px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.trip-stop:last-child::after {
+  display: none;
+}
+.trip-stop-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  font-size: 13.5px;
+  line-height: 20px;
+}
+.trip-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.trip-area {
+  margin-left: auto;
+  min-width: 0;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.trip-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.trip-name a {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 4px;
+}
+.trip-name a:hover {
+  text-decoration-color: currentColor;
+}
+.trip-name .i {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+}
+.trip-origin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+.kind.trip-added {
+  background: var(--surface);
+  color: var(--ink-2);
+}
+.trip-what {
+  margin-top: 8px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.trip-facts {
+  margin-top: 5px;
+}
+.trip-facts li {
+  display: grid;
+  grid-template-columns: 15px 1fr;
+  gap: 9px;
+  padding: 5px 0;
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.trip-facts li > .i {
+  width: 15px;
+  height: 15px;
+  margin-top: 2.5px;
+  color: var(--ink-3);
+}
+.trip-facts .is-must {
+  font-weight: 600;
+}
+.trip-fact {
+  margin-right: 3px;
+}
+/* quiet links with a full-height target: add to calendar, directions, find a stay */
+.trip-link {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: left;
+}
+.trip-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.trip-link .i {
+  width: 15px;
+  height: 15px;
+}
+.trip-leg {
+  color: var(--ink-3);
+}
+
+/* a day planned in detail, under its stops */
+.trip-detail {
+  margin-top: 8px;
+  padding: 16px 0 10px;
+  border-top: 1px solid var(--line);
+}
+.trip-block + .trip-block {
+  margin-top: 20px;
+}
+.trip-sub {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.trip-points {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.trip-points li {
+  position: relative;
+  padding-left: 24px; /* the text lines up with .trip-book and .trip-facts */
+  overflow-wrap: anywhere;
+}
+.trip-points li::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.trip-eat {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+}
+.trip-eat a {
+  padding-block: 7px;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.trip-eat a:hover {
+  text-decoration-color: currentColor;
+}
+.trip-near {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.trip-text {
+  margin-top: 6px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.trip-book {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 15px 1fr;
+  gap: 9px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.trip-book > .i {
+  width: 15px;
+  height: 15px;
+  margin-top: 2.5px;
+  color: var(--ink-3);
+}
+
+.trip-foot {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.trip-foot .btn {
+  width: 100%;
+}
+.trip-foot .plan-error {
+  margin: 0 0 10px;
+}
+.trip-foot .btn + .plan-error {
+  margin: 10px 0 0;
+}
+.trip-foot .trip-link {
+  margin-top: 2px;
+}
+.trip-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.trip-pulse {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.trip-stay {
+  margin-top: 12px;
+  padding: 16px 18px 6px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+.trip-stay .card-name {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.trip-sources {
+  padding-bottom: 12px;
+}
+.trip-sources li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 14px;
+  line-height: 20px;
+}
+.trip-sources .n {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.trip-sources a {
+  display: block;
+  padding: 12px 0;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+}
+.trip-sources a:hover {
+  text-decoration-color: currentColor;
+}
+.trip-count {
+  margin-left: 2px;
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.trip-rebuild {
+  margin: 6px 0 0 -12px;
 }
 
 .sec {

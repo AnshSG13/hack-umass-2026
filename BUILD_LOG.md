@@ -196,6 +196,24 @@ The user asked for more to do with a travel reel than one visit slot: an itinera
 
 Measured live (`gemini-3.5-flash`): the Rockaway Hotel reel built in 23.7 s with 4 stops and 11 sources, its day detail in 28.8 s (8 sourced highlights, 2 places to eat); moving the dates took 0.2 s; 21 of 21 checks passed. The Carrie event built in 13.4 s and 17.2 s on two runs. Prices differed between those two runs because the search cited different pages; each number links to its page. 94 unit tests pass (21 for trips and weather).
 
+## 2026-11-14: email and password accounts
+
+- **Why:** a key with no password was easy to lose and hard to use on a second device. People now create an account with an email and password and sign in anywhere.
+- **Server:** `POST /api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, and `/api/auth/credentials` (gives a key-only account an email and password). Passwords use stdlib `hashlib.scrypt` (no new dependency). Sign-in returns a session token (`rs_...`, 30 days, stored as sha256 in a new `sessions` collection with a TTL index). `accounts.find_by_key` accepts either a session token or an API key, so every existing route and its `user_id` filter is unchanged. Unique partial index on `users.email`. Login is rate limited per IP and per email; an unknown email still runs one scrypt check so timing doesn't reveal it.
+- **Web:** `/signup` and `/login`. The landing "Use it for real" goes to `/signup`, with a "Sign in" link. `/setup` no longer makes keyless accounts; for email accounts the QR code opens `/login` and no key is shown. Settings shows "Signed in as" and Sign out (ends the session on the server); key-only accounts get an "Add an email and password" form. The Shortcut key is still made in Settings and shown once.
+- **Kept:** API keys, `POST /api/users`, demo sessions and the judge user work as before.
+
+Checks: a live script against Atlas passed 17 of 17 (signup, duplicate email, bad email and short password refused, login with a case-changed email, wrong password, user B can't list or open user A's save, logout ends only that session, key account adds credentials and its key still works, login rate limit). In the browser at 390x844: sign up, Settings, sign out, wrong password message, sign in, setup QR. 70 unit tests, `tsc` and `eslint` pass.
+
+## 2026-11-14: sub-categories
+
+- **Why:** the mockup files saves as "Food › Thai", and the owner asked for sub-categories. Until now the data had only the seven types, so the Home taste tile showed tags in its sub-category row.
+- **How:** the planner and the video pass each return a `subcategory`, shown the account's existing labels so they reuse one; no extra Gemini calls. `server/realize/subcats.py` tidies the label and snaps it onto an existing one that differs only in case, punctuation or a plural. Hand-set labels are `user_edited` and never overwritten; moving a save to another type clears its label.
+- **UI:** "Food › Dessert" on the save page chip (tap to pick, add or remove) and on list rows; a sub-category chip row in Library under a picked type; sub-categories in the Home taste tile, falling back to tags.
+- **Backfill:** `python -m scripts.backfill_subcategories --all-users | --user u_... | --samples [--dry-run]`, one text call per account and type.
+- **No new dependencies.**
+
+Checks: 3 live reels labelled Dessert, Curry, Appetizers by the planner and kept by the video pass; 11 of 11 API checks on editing, snapping, filtering and clearing; the screens checked at 390x844; 77 unit tests, `tsc` and `eslint` pass. Steps to merge are in `docs/merge-subcategories.md`.
 ## 2026-11-14: discussions on the Reel page
 
 The owner's ask: "Ask about this" sent you to the general chat, which had to find the reel again, repeated its summary back, and kept nothing. Now the Reel page has its own chat.

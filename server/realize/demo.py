@@ -13,7 +13,7 @@ log = logging.getLogger("realize.demo")
 
 ENRICH_KEYS = ["type", "title", "summary", "fields", "caption_sufficient", "transcript",
                "transcript_text", "on_screen_text", "visual_summary", "entities", "tags",
-               "unverified", "language"]
+               "unverified", "language", "subcategory"]
 DEMO_HOURS = 24
 LIVE_LIMIT = 3
 CHAT_LIMIT = 20
@@ -172,9 +172,9 @@ def hero_ticket() -> dict | None:
 
 def reset() -> dict:
     """Delete all demo users and their documents (TTL does this too)."""
-    total = {"users": 0, "saves": 0, "plans": 0, "jobs": 0, "agent_runs": 0, "trips": 0, "thumbnails": 0}
+    total: dict[str, int] = {}
     for u in list(db.users().find({"is_demo": True}, {"_id": 1})):
-        counts = accounts.delete_user_data(u["_id"])
-        for k, v in counts.items():
-            total[k] += v
+        # Whatever collections an account owns (saves, plans, trips, sessions, ...) are counted.
+        for k, v in accounts.delete_user_data(u["_id"]).items():
+            total[k] = total.get(k, 0) + v
     return total
