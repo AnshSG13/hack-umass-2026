@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     planner_mode: str = "live"  # live | fake
     proposal_wait_seconds: int = 20
     hybrid_mode: str = "auto"  # auto | rankfusion | manual
+    graph_expand: bool = True  # fill search results from the knowledge graph (graph.expand)
     worker_id: str = "laptop"
     worker_propose_threads: int = 2
     worker_enrich_threads: int = 2

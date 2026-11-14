@@ -286,6 +286,10 @@ export default function HomePage() {
               Your tastes
               <span className="pill">{tasteList.length}</span>
             </h2>
+            <Link href="/graph" className="add">
+              <Icon name="spark" />
+              See how they connect
+            </Link>
           </div>
           <div className="tastes">
             {tasteList.map((t, i) => (

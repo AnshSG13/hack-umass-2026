@@ -12,7 +12,7 @@ from datetime import timedelta
 
 from pymongo.errors import OperationFailure
 
-from . import db, gemini
+from . import db, gemini, graph
 from .actions import ingredient_line
 from .config import get_settings
 from .timeutil import now_utc
@@ -167,6 +167,13 @@ def _finish(docs: list[dict], query: str, qvec: list[float], limit: int,
             score = _cosine(f, qvec)
             at = next((i for i, d in enumerate(out) if _cosine(d, qvec) < score), len(out))
             out.insert(at, f)
+    if uid and get_settings().graph_expand and len(out) < limit:
+        # Room left: add the top hits' neighbours in the knowledge graph that are still close
+        # to the query. They go after every direct hit, so they never push one down.
+        try:
+            out += graph.expand(uid, out, qvec, t, limit - len(out))
+        except Exception as e:  # noqa: BLE001 - search answers without the graph
+            log.warning("graph expansion failed: %s", str(e)[:160])
     for d in out:
         d.pop("embedding", None)
     return out[:limit]
