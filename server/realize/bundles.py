@@ -12,7 +12,8 @@ The same split as the rest of the app:
   note per save, an order, and for products which one the reels support best. Code
   checks all of it against the saves; without the model the bundle still works.
 - Nothing is added to the week until the person taps Start. Starting accepts one plan
-  per save through the same code a single plan uses, so times never collide.
+  per save through the same code a single plan uses, so times never collide. Recipe
+  bundles are never scheduled: they open to cook and to one grocery list.
 """
 from __future__ import annotations
 
@@ -26,7 +27,11 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from . import actions, board, db, gemini, planops, slots, tickets
-from .models import AISLES, SLOT_KINDS
+from .models import AISLES
+
+# Bundles whose Start books times on the week. Recipes don't: a saved recipe is cooked
+# when the person wants to, so a dinners bundle opens with "Start now" and its grocery list.
+SCHEDULED = ("workout", "place")
 from .timeutil import as_utc, big_time, long_day, now_utc, tz_of
 
 log = logging.getLogger("realize.bundles")
@@ -47,7 +52,7 @@ PLANNED = ("accepted", "done", "skipped")
 # What a bundle is called before (or without) the model: plain and true.
 WORDS = {
     "recipe": {"one": "dinner", "many": "dinners", "title": "{n} dinners from your saves",
-               "blurb": "Each on a night you usually cook, with one grocery list for all of them.",
+               "blurb": "Ready when you are, with one grocery list for all of them.",
                "done": "{n} dinners added."},
     "workout": {"one": "workout", "many": "workouts", "title": "{n} workouts, spaced out",
                 "blurb": "Your saved workouts on the days you usually train.",
@@ -331,7 +336,7 @@ def view(bundle: dict, user: dict, *, full: bool = False) -> dict:
     now_l = now.astimezone(tz)
     t = bundle["type"]
     saves, plans = _load(bundle, user)
-    slot_kind = t in SLOT_KINDS
+    slot_kind = t in SCHEDULED
     accepted = slots.load_accepted(user["_id"]) if slot_kind else []
     reserved: list[dict] = []
     items = []
@@ -368,7 +373,7 @@ def view(bundle: dict, user: dict, *, full: bool = False) -> dict:
         "polishing": bundle.get("polish") in ("pending", "running"),
         # One main button. Slot kinds start on their first day; products only open.
         "cta": (f"Start {first_start[1]}" if slot_kind and first_start and bundle["status"] == "ready"
-                else "Compare them" if t == "product" else "Open"),
+                else "Start now" if t == "recipe" else "Compare them" if t == "product" else "Open"),
         "can_start": bool(slot_kind and bundle["status"] == "ready" and first_start),
         "first_when": big_time(first_start[0].astimezone(tz), now_l) if first_start else None,
     }
@@ -417,7 +422,7 @@ def start(bundle: dict, user: dict) -> tuple[dict, str]:
     from . import ask  # ask imports the planner; keep that out of module import time
 
     t = bundle["type"]
-    if t not in SLOT_KINDS or bundle["status"] != "ready":
+    if t not in SCHEDULED or bundle["status"] != "ready":
         return bundle, ""
     saves, _ = _load(bundle, user)
     added = 0

@@ -12,6 +12,7 @@ from . import db
 from .timeutil import as_utc, now_utc
 
 VISIT_GAP = timedelta(minutes=30)
+FIRST_LOOK = timedelta(hours=24)   # with no earlier visit or board opened, "new" means the last day
 RECAP_DAYS = 7      # with nothing new since last time, the greeting looks back this far
 
 
@@ -27,11 +28,12 @@ def touch(user: dict, *, now: datetime | None = None) -> datetime | None:
     return prev
 
 
-def new_line(prev: datetime | None, seen_at: datetime | None) -> datetime | None:
-    """Saves created after this are new for a taste: since last visit, or since its board
-    was last opened if that was later."""
+def new_line(prev: datetime | None, seen_at: datetime | None, *, now: datetime | None = None) -> datetime:
+    """Saves created after this are new for a taste: since the last visit, or since its
+    board was last opened if that was later. Before either exists (a new account, or the
+    first visit after this shipped), the last day counts as new, so the badges show."""
     marks = [as_utc(x) for x in (prev, seen_at) if x]
-    return max(marks) if marks else None
+    return max(marks) if marks else as_utc(now or now_utc()) - FIRST_LOOK
 
 
 def mark_taste_seen(user: dict, type_: str, *, now: datetime | None = None) -> None:

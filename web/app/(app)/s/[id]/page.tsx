@@ -10,7 +10,9 @@ import useSWR from "swr";
 import { AgentTrace } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
 import { Icon, type IconName } from "@/components/icons";
+import { CookCard, CookMode, NutritionPanel } from "@/components/cook";
 import { PlanCard } from "@/components/plan-card";
+import { ShopResearch } from "@/components/shop-research";
 import { AskAboutButton, Discussions, ReelChat } from "@/components/reel-chat";
 import { ReelSections } from "@/components/reel-sections";
 import { useApp } from "@/components/shell";
@@ -231,6 +233,11 @@ export default function ReelPage() {
 
   // The reel's own chat: open or not, and which saved discussion (null is a new one).
   const [chatOpen, setChatOpen] = useState(false);
+  // Cook mode: opened from the card, or straight away with ?cook=1 (from a dinners plan).
+  const [cooking, setCooking] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("cook") === "1";
+  });
   const [discussionId, setDiscussionId] = useState<string | null>(null);
 
   // A moment in the video to show: from a link (?t=11) or from an answer's "Said at 0:11".
@@ -530,7 +537,19 @@ export default function ReelPage() {
           </ul>
         )}
 
-        <PlanCard ticket={ticket} onChange={applyTicket} />
+        {/* A recipe is for cooking when you want to, not for booking a slot. One already
+            on the calendar keeps its plan card so it can be moved or marked done. */}
+        {recipe && !(ticket.plan && ["accepted", "done", "skipped"].includes(ticket.plan.status)) ? (
+          <CookCard
+            minutes={recipe.total_time_min}
+            ingredients={groceries.length}
+            steps={recipe.steps?.length ?? 0}
+            onCook={() => setCooking(true)}
+            onShop={() => setSheet("grocery")}
+          />
+        ) : (
+          <PlanCard ticket={ticket} onChange={applyTicket} />
+        )}
 
         {enriching && (
           <p className="plan-meta" style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
@@ -540,7 +559,7 @@ export default function ReelPage() {
         )}
 
         <div className="actions">
-          {groceries.length > 0 && (
+          {groceries.length > 0 && !recipe && (
             <button type="button" className="btn btn-primary" onClick={() => setSheet("grocery")}>
               <Icon name="basket" />
               Make a grocery list
@@ -554,6 +573,7 @@ export default function ReelPage() {
         </div>
 
         <TripPlan saveId={ticket.save_id} type={type} settled={!reading} />
+        {type === "product" && <ShopResearch saveId={ticket.save_id} settled={!reading} />}
 
         <Discussions saveId={ticket.save_id} onOpen={openChat} />
 
@@ -566,6 +586,8 @@ export default function ReelPage() {
           servings={shownServings}
           onServings={setServings}
         />
+
+        {recipe && (recipe.ingredients?.length ?? 0) > 0 && !reading && <NutritionPanel saveId={ticket.save_id} />}
 
         {/* How it was read and planned: there when wanted, one closed row otherwise. */}
         <details className="said fold" ref={foldRef}>
@@ -804,6 +826,17 @@ export default function ReelPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {recipe && (
+        <CookMode
+          open={cooking}
+          onOpenChange={setCooking}
+          title={title}
+          ingredients={groceries}
+          steps={recipe.steps ?? []}
+          servings={shownServings}
+        />
+      )}
 
       <ReelChat
         open={chatOpen}

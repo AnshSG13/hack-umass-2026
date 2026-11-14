@@ -768,7 +768,8 @@ def test_new_line_is_the_later_of_last_visit_and_board_opened():
     a = datetime(2026, 11, 10, tzinfo=timezone.utc)
     b = datetime(2026, 11, 12, tzinfo=timezone.utc)
     assert visits.new_line(a, b) == b and visits.new_line(b, a) == b
-    assert visits.new_line(None, None) is None
+    now = datetime(2026, 11, 14, 12, tzinfo=timezone.utc)
+    assert visits.new_line(None, None, now=now) == datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
     assert visits.new_line(a, None) == a
 
 
@@ -781,3 +782,65 @@ def test_recap_names_what_was_sorted():
     assert visits.join_words(["1 recipe"]) == "1 recipe"
     assert visits.recap_parts({"place": 1}) == ["1 place to go"]
     assert visits.recap_parts({}) == []
+
+
+# ---------- nutrition: the model estimates lines, code does the sums ----------
+
+
+def test_nutrition_sums_lines_and_divides_by_servings():
+    from realize import nutrition
+
+    line = lambda i, kcal, p, c, f, **kw: {"index": i, "kcal": kcal, "protein_g": p, "carbs_g": c, "fat_g": f,
+                                           "fiber_g": 0, "sugar_g": 0, "sodium_mg": 0, **kw}
+    out = nutrition.total([line(0, 400, 20, 40, 18), line(1, 400, 20, 40, 18, assumed=True)], 2, 2)
+    assert out["per_serving"]["kcal"] == 400 and out["per_serving"]["protein_g"] == 20
+    assert out["split_pct"] == {"protein": 20, "carbs": 40, "fat": 40} and sum(out["split_pct"].values()) == 100
+    assert out["assumed"] == 1 and out["servings"] == 2
+
+
+def test_nutrition_drops_impossible_and_made_up_lines():
+    from realize import nutrition
+
+    good = {"index": 0, "kcal": 100, "protein_g": 5, "carbs_g": 10, "fat_g": 4, "fiber_g": 1, "sugar_g": 1, "sodium_mg": 5}
+    bad = [{**good, "index": 1, "kcal": 99999}, {**good, "index": 9}, {**good, "index": 0}, {**good, "index": 2, "fat_g": -3}]
+    assert nutrition.total([good, *bad], 3, 1) is None          # 1 of 3 lines is too little to show
+    assert nutrition.total([good, {**good, "index": 1}], 3, 1)["lines_counted"] == 2
+    # Calories that disagree with the macros are recomputed from them.
+    off = nutrition.total([{**good, "kcal": 1000}], 1, 1)
+    assert off["per_serving"]["kcal"] == 4 * 5 + 4 * 10 + 9 * 4
+
+
+# ---------- shopping research: only trusted sources, only readable prices ----------
+
+
+def test_only_trusted_sources_count():
+    from realize import shop
+
+    assert shop.trusted("https://www.target.com/p/x", []) == "Target"
+    assert shop.trusted("https://www.nytimes.com/wirecutter/reviews/x", []) == "Wirecutter"
+    assert shop.trusted("https://shop.dyson.com/hair", ["Dyson"]) == "Dyson"          # the brand's own site
+    assert shop.trusted("https://cheap-dyson-deals.xyz/a", []) is None                 # not on the list, no brand
+    assert shop.trusted("https://amazon.com.evil.biz/x", []) is None                   # lookalike host
+    assert shop.trusted("not a url", []) is None
+
+
+def test_offers_keep_only_backed_readable_prices():
+    from realize import shop
+
+    sources = [{"n": 1, "url": "https://www.target.com/p/1", "title": "t"},
+               {"n": 2, "url": "https://sketchy-store.biz/x", "title": "s"}]
+    raw = [{"product": "Hulken bag", "store": "Target", "price_text": "$79.99", "source": 1, "alternative": False},
+           {"product": "Hulken bag", "store": "Target", "price_text": "$79.99", "source": 1, "alternative": False},
+           {"product": "Hulken bag", "store": "Sketchy", "price_text": "$20", "source": 2, "alternative": False},
+           {"product": "Tote", "store": "Target", "price_text": "about forty dollars", "source": 1, "alternative": True},
+           {"product": "Tote", "store": "Target", "price_text": "$1,299.00", "source": 9, "alternative": True},
+           {"product": "Costco tote", "store": "Target", "price_text": "Now $39", "source": 1, "alternative": True,
+            "note": "Alternative: half the price"}]
+    out = shop.keep_offers(raw, sources, [])
+    assert [(o["product"], o["price"]) for o in out] == [("Hulken bag", 79.99), ("Costco tote", 39.0)]
+    assert out[1]["note"] == "half the price" and out[1]["price_text"] == "$39"
+    assert shop.best_by_product(out) == [out[0]]
+    assert shop.parse_price("$1,299.50 on sale") == 1299.5 and shop.parse_price("free") is None
+    # A store's page sets the store name, even when the notes named another.
+    moved = shop.keep_offers([{"product": "X", "store": "Walmart", "price_text": "$5", "source": 1, "alternative": False}], sources, [])
+    assert moved[0]["store"] == "Target"

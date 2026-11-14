@@ -21,6 +21,8 @@ LIVE_LIMIT_MESSAGE = "That's the live limit for this demo. The samples still wor
 CHAT_LIMIT_MESSAGE = "That's the chat limit for this demo."
 TRIP_LIMIT = 3  # trip plans per demo session; each one is paid searches
 TRIP_LIMIT_MESSAGE = "That's the trip limit for this demo."
+SHOP_LIMIT = 3  # price research per demo session; each one is paid searches
+SHOP_LIMIT_MESSAGE = "That's the price research limit for this demo."
 
 
 def chats_used(user: dict) -> int:

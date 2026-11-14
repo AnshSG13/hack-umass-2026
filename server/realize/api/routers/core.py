@@ -132,7 +132,7 @@ def tastes(user: dict = Depends(current_user)) -> dict:
         e["count"] += 1
         made = as_utc(s["created_at"])
         line = visits.new_line(prev, seen.get(t))
-        if line and made > line:
+        if made > line:
             new_since[t] = new_since.get(t, 0) + 1
         if made > week_ago:
             this_week[t] = this_week.get(t, 0) + 1

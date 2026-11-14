@@ -386,3 +386,35 @@ export interface BundlesResponse {
   ready: Bundle[];
   started: Bundle[];
 }
+
+// ---- GET /api/saves/{id}/nutrition: an estimate per serving ----
+export interface Nutrition {
+  per_serving: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g: number; sugar_g: number; sodium_mg: number };
+  servings: number;
+  split_pct: { protein?: number; carbs?: number; fat?: number }; // share of calories, adds to 100
+  lines_counted: number;
+  lines_total: number;
+  assumed: number; // lines with no amount in the reel, so a typical amount was assumed
+  servings_from: "reel" | "estimate";
+}
+
+// ---- GET/POST /api/saves/{id}/shop: price research ----
+export interface ShopOffer {
+  product: string;
+  store: string;
+  price: number;
+  price_text: string; // "$79.99"
+  note: string;
+  alternative: boolean; // a cheaper option for the same use, not the reel's product
+  url: string; // the page the price came from
+  via: string; // who that page belongs to: "Target", "Wirecutter"
+}
+export interface Shop {
+  status: "building" | "ready" | "failed";
+  offers: ShopOffer[];
+  best: ShopOffer[]; // the lowest trusted price per product the reel names
+  alternatives: ShopOffer[];
+  checked_on: string | null; // "Nov 14"
+  dropped: number; // prices left out because their source wasn't a store or review site we know
+  error: string | null;
+}
