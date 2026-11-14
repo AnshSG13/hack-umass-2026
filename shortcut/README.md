@@ -26,6 +26,10 @@ It posts the reel's link and you are done. The plan waits in the app under Waiti
 5. Name the Shortcut **Realize**.
 6. In Instagram, open a reel, **Share**, **Share to…** (or **More**), **Realize**. Tap **Allow** the first time iOS asks to connect.
 
+The server reads this request loosely, because it is typed on a phone: field names and `shortcut` in any letter case (the iOS keyboard writes `Input`, `Source`, `Shortcut`), `wait` as text, the body left on Form instead of JSON, and the key with or without the word `Bearer` all work. A wrong key or a missing link still gets an error message, and the API logs one "save attempt" line per try saying which of the two was wrong.
+
+If the Shortcut seems to do nothing, add **Show Result** with **Contents of URL** as its last action to see the server's answer.
+
 What changed from the prototype: the path is `/api/save` instead of `/share`, the body field is `input` instead of `url`, and the key goes in the `Authorization` header instead of a `token` field. Your key is on the app's `/setup` page ("Copy key"). Leave `wait` out and the Shortcut waits up to 20 seconds and gets the plan back (`prompt` and `menu`), which is what the full version below builds on.
 
 Checked on 2026-11-14 with the same request sent by curl to the laptop's Wi-Fi address: HTTP 200 in 0.2 s with the message above, and the plan was there 5 seconds later. Not yet run from a real iPhone against Realize.

@@ -554,3 +554,50 @@ def test_search_puts_a_fresh_save_ahead_of_weaker_indexed_results(monkeypatch):
     out = search._finish([dict(d) for d in indexed], "zzz", [1.0, 0.0], 10, "u_test", None)
     assert [d["_id"] for d in out] == [1, 3, 2]          # 4 is under the relevance floor
     assert all("embedding" not in d for d in out)
+
+
+
+# ---------- what a hand-built Shortcut sends ----------
+
+def test_bearer_is_forgiving():
+    from realize.api.deps import bearer
+    assert bearer("Bearer rl_abc123") == "rl_abc123"
+    assert bearer("bearer   rl_abc123  ") == "rl_abc123"
+    assert bearer("rl_abc123") == "rl_abc123"           # the word Bearer left out
+    assert bearer(' "Bearer rl_abc123" ') == "rl_abc123"
+    assert bearer("Bearer: rl_abc123") == "rl_abc123"
+    assert bearer(None) is None and bearer("  ") is None
+    assert bearer("Basic abc def") is None
+
+
+def test_save_body_typed_on_a_phone():
+    from realize.api.deps import loose_fields, save_request_from
+    reel = "https://www.instagram.com/reel/DfiT7-QxmY-/?igsh=abc=="
+    # The iOS keyboard capitalises names and values, and numbers arrive as text.
+    r = save_request_from(loose_fields(b'{"Input": "%s", "Source": "Shortcut", "Wait": "0"}' % reel.encode(),
+                                       "application/json"))
+    assert r.input == reel and r.source == "shortcut" and r.wait == 0.0
+    # The web app's own body is unchanged.
+    r = save_request_from(loose_fields(b'{"input": "x", "source": "web", "wait": 0}', "application/json"))
+    assert (r.input, r.source, r.wait) == ("x", "web", 0.0)
+    # The prototype's field name, and no wait at all.
+    r = save_request_from(loose_fields(b'{"url": "%s", "token": "me"}' % reel.encode(), "application/json"))
+    assert r.input == reel and r.source == "shortcut" and r.wait is None
+    # Request Body left on Form.
+    r = save_request_from(loose_fields(b"input=https%3A%2F%2Fwww.instagram.com%2Freel%2FAbc%2F&source=shortcut&wait=0",
+                                       "application/x-www-form-urlencoded"))
+    assert r.input == "https://www.instagram.com/reel/Abc/" and r.wait == 0.0
+    body = (b'--XX\r\nContent-Disposition: form-data; name="Input"\r\n\r\n' + reel.encode()
+            + b'\r\n--XX\r\nContent-Disposition: form-data; name="wait"\r\n\r\n0\r\n--XX--\r\n')
+    r = save_request_from(loose_fields(body, "multipart/form-data; boundary=XX"))
+    assert r.input == reel and r.wait == 0.0
+    # Nothing readable is an empty request, not a crash.
+    r = save_request_from(loose_fields(b"\xff\xfe not json", "application/json"))
+    assert r.input == "" and r.source == "shortcut"
+    assert save_request_from(loose_fields(b'{"input": "x", "wait": "soon"}')).wait is None
+
+
+def test_confirm_body_typed_on_a_phone():
+    from realize.api.deps import confirm_request_from, loose_fields
+    c = confirm_request_from(loose_fields(b'{"Choice": "Cook Mon 6:30 pm + 7 groceries", "Source": "Shortcut"}'))
+    assert c.choice == "Cook Mon 6:30 pm + 7 groceries" and c.source == "shortcut" and c.start_local is None

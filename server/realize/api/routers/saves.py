@@ -1,6 +1,7 @@
 """Ingest, confirm and everything else under /api/saves (SPEC 6, 7, 15)."""
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime
 
@@ -12,9 +13,10 @@ from ...config import get_settings
 from ...models import ConfirmRequest, SavePatch, SaveRequest, TYPES, failure_message
 from ...runs import run_view
 from ...timeutil import as_utc, month_day, now_utc, tz_of
-from ..deps import background, bad_key_message, bearer, current_user
+from ..deps import background, bad_key_message, bearer, confirm_request, current_user, save_request
 
 router = APIRouter()
+log = logging.getLogger("realize.api.saves")
 
 NOT_A_LINK = "That wasn't an Instagram post link. Share a reel from Instagram, or paste its link."
 RATE_LIMITED = "Slow down a little. Try again in a minute."
@@ -76,14 +78,18 @@ def _respond(save: dict, user: dict, *, prefix: str = "") -> dict:
 
 
 @router.post("/api/save")
-def post_save(body: SaveRequest, authorization: str | None = Header(default=None)) -> dict:
+def post_save(body: SaveRequest = Depends(save_request),
+              authorization: str | None = Header(default=None)) -> dict:
     s = get_settings()
     user = accounts.find_by_key(bearer(authorization))
+    link = urls.extract(body.input)
+    # One line per attempt, so a Shortcut that "does nothing" can be diagnosed from the log.
+    log.info("save attempt: source=%s key=%s link=%s", body.source,
+             "ok" if user else ("bad" if authorization else "missing"), "ok" if link else "none")
     if not user:
         return _save_response("error", message=bad_key_message())
     if not ratelimit.allow("save", user["_id"]):
         return _save_response("error", message=RATE_LIMITED)
-    link = urls.extract(body.input)
     if not link:
         return _save_response("error", message=NOT_A_LINK)
 
@@ -177,7 +183,8 @@ def _confirm_response(status: str, plan: dict | None, save: dict | None, user: d
 
 
 @router.post("/api/saves/{save_id}/confirm")
-def confirm(save_id: str, body: ConfirmRequest, authorization: str | None = Header(default=None)) -> dict:
+def confirm(save_id: str, body: ConfirmRequest = Depends(confirm_request),
+            authorization: str | None = Header(default=None)) -> dict:
     user = accounts.find_by_key(bearer(authorization))
     if not user:
         return _confirm_response("error", None, None, None, bad_key_message())
