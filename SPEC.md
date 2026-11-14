@@ -1,1566 +1,757 @@
-# Reel Brain: Build Spec
+# Realize: build spec
 
-**Date:** 2026-11-14
-**Status:** Approved design. This document is the single source of truth for the build. It replaces `Saved Reels Second Brain — System Design.md`.
-**Visual reference:** `mockups/index.html`, a clickable mockup of Home and the Reel page (section 19.7).
-**Audience:** a coding agent that builds the whole product from this document, and the team reviewing what it builds.
+Source of truth for behavior. DESIGN.md is the source of truth for UI. CLAUDE.md has the working rules.
+Replaces docs/archive/SPEC-reel-brain.md and docs/archive/system-design-v1.md.
+The product name comes from APP_NAME, so a rename is one change.
 
-> Working name is **Reel Brain**, the iOS Shortcut is **Save to Brain**, and the in-app assistant is **Brain**. All three come from `APP_NAME` / `ASSISTANT_NAME` constants so they can be renamed in one place.
-
----
-
-## Table of contents
-
-1. Product
-2. Decisions at a glance
-3. Architecture
-4. Repository layout
-5. Data model (MongoDB Atlas)
-6. Ingestion: getting reels in
-7. Processing worker
-8. Extraction agent
-9. Card types
-10. Categories and subcategories
-11. Search
-12. Ask: the chat agent
-13. Plans
-14. Reminders and Web Push
-15. Voice input
-16. Suggestions and Rediscover
-17. API reference
-18. Frontend: screens and components
-19. Design system
-20. PWA and iPhone specifics
-21. Error handling
-22. Security and privacy
-23. Configuration and environment variables
-24. Deployment
-25. Night-one verification checklist
-26. Acceptance criteria
-27. Demo script and pitch
-28. Out of scope
-
----
+## 0. Changes from the Reel Brain spec
+- Kept: Atlas as the only shared state and the job queue (atomic leases); a Python worker that is the only component talking to Instagram and runs on Vultr or a laptop; Gemini video via the File API; 768-dim normalized Gemini embeddings; hybrid search with $rankFusion plus a manual RRF fallback; dedupe per user and shortcode; failure reasons; videos deleted after processing; thumbnails stored in Atlas.
+- Changed: every save gets a proposed plan the user confirms with one tap (was: plans only on request in chat). The Shortcut shows a menu and writes native Calendar events and Reminders (was: fire-and-forget plus Web Push). One Python backend instead of Next.js API routes plus Python. Bearer keys instead of Clerk. A no-login demo for judges. New `event` type. Ticket-stub design.
+- Cut: TikTok, voice input, subcategories and centroid routing, Web Push, Clerk, suggestions and rediscover, linked-page fetching, cook mode, unit conversion, maps of places, stored conversations.
+- No Instagram API. The Shortcut sends only the reel URL. The worker reads the public reel with yt-dlp (optionally with a throwaway account's cookies).
 
 ## 1. Product
+Problem: people save reels on autopilot and rarely act on them. The saved folder has no search, sorting or follow-up, and the platform rewards saving, not doing.
 
-**Problem.** People save hundreds of reels (recipes, fragrances, travel spots, basketball drills, workouts, lessons, motivation) and almost never find them again. Instagram's and TikTok's saved folders are unsorted, have no search, and never bring anything back. The useful information is locked inside the video: in the voiceover, on-screen text, or a caption that is often unrelated.
+Promise: every save becomes a plan. Share a reel to Realize; an agent reads it, works out what it is, checks the user's week and proposes one small, concrete plan ("Cook Thu 6:30 pm + 3 groceries"). The user confirms with one tap. Nothing is added anywhere without that tap. Later it asks whether they did it.
 
-**Promise.** *Don't save it. Send it.* Share a reel to Reel Brain and:
+Around the loop: a library of every save, searchable by what was said and shown in the video; Ask, a chat over saves that answers with cards and says when nothing matches; a demo with no login.
 
-1. **You get the useful part back.** The reel becomes a structured card: a recipe with ingredients and steps, a product with notes and price, a place with a map pin, a drill with reps and coaching cues.
-2. **It's organized automatically.** It's filed into your categories and subcategories (Food → Thai, Fragrance → Summer), which the AI grows as your tastes grow.
-3. **You can just ask.** "Bring up that pad thai recipe." "What was that crossover drill?"
-4. **It turns into action.** "Make me a 4-day training week from my saves" or "Grocery list for my Thai recipes" produces a saved plan, with reminders when the plan has dates.
-
-**Users for this build:** the 4-person team and demo iPhones only. No public launch, no App Store.
-
-**Prize targets the design is built around:** Best Gemini use, Best use of MongoDB Atlas, Best UI/UX, Best agentic hack, Best impactful AI hack, Best pitch, Vultr prize.
-
----
-
-## 2. Decisions at a glance
-
-| Area | Decision |
-|---|---|
-| Client | Next.js web app, installed to the iPhone home screen as a PWA. Mobile-first; desktop is not a target. |
-| Getting reels in | **iOS Shortcut** in the share sheet (primary), **paste link** in the app (backup), **Android Web Share Target** (bonus). |
-| Platforms | Instagram Reels and TikTok. |
-| Auth | Clerk. Each user also gets a personal API token for the Shortcut. |
-| AI | **Gemini only.** Pro model for both agents; Flash model for cheap steps; the **Gemini embedding model** (not an LLM) for vectors. |
-| Extraction | **Agentic.** A Gemini agent with tools decides whether the caption is enough, or whether to analyze the full video and/or fetch a linked page. |
-| Card types | `recipe`, `product`, `travel`, `sports_drill`, `workout_plan`, `educational`, `motivational`. |
-| Categories | AI-grown categories **and subcategories**, seeded from interests chosen at onboarding, fully editable. Category centroid embeddings drive filing and search routing. |
-| Database | MongoDB Atlas: documents, Vector Search, Atlas Search, `$rankFusion` hybrid search, Change Streams, and the job queue. |
-| Embeddings | Gemini embedding model, 768 dimensions, L2-normalized. |
-| Chat | Agent that **reads and acts**: search, open reels, create and update plans, set reminders. Streams responses. |
-| Plans | **Dynamic.** The agent composes any plan from a fixed set of renderable blocks. |
-| Reminders | **Plan-linked** Web Push only. Rediscover of old saves is an in-app section, not a push. |
-| Voice | Hold the orb to record; audio is transcribed by Gemini Flash and sent to Ask as text. |
-| Hosting | Next.js on **Vercel**. Python worker and reminder scheduler on a **Vultr** VPS. Same worker can run on a laptop as a fallback. |
-| Failure policy | If the video can't be downloaded, the reel is marked **failed** with a reason and a Retry button. No caption-only fallback. |
-| Video retention | Videos are deleted after processing. We keep text, embeddings, a small thumbnail, and the original link. |
-
----
-
-## 3. Architecture
-
+## 2. Architecture
 ```
- iPhone                                                       Vercel (Next.js, Clerk)
- ┌──────────────────────────────┐   POST /api/ingest          ┌───────────────────────────────┐
- │ Instagram / TikTok           │   Authorization: Bearer     │ PWA pages (App Router)        │
- │  → Share → "Save to Brain"   │ ──────────────────────────▶ │ /api/* route handlers         │
- │    (iOS Shortcut)            │                             │  - ingest, reels, categories  │
- └──────────────────────────────┘                             │  - search ($rankFusion)       │
- ┌──────────────────────────────┐   Clerk session             │  - ask (Gemini chat agent,    │
- │ Reel Brain PWA (home screen) │ ◀─────────────────────────▶ │    streaming, tools)          │
- │  Home · Category · Reel ·    │                             │  - voice transcribe           │
- │  Ask · Plans · Profile       │ ◀── Web Push ─────┐         │  - plans, reminders, push     │
- └──────────────────────────────┘                   │         └──────────────┬────────────────┘
-                                                    │                        │
-                                                    │                        ▼
-                                                    │         ┌───────────────────────────────┐
-                                                    │         │ MongoDB Atlas                 │
-                                                    │         │ users · reels · thumbnails ·  │
-                                                    │         │ jobs · categories · plans ·   │
-                                                    │         │ reminders · pushSubscriptions │
-                                                    │         │ · conversations               │
-                                                    │         │ Vector Search · Atlas Search  │
-                                                    │         └──────────────┬────────────────┘
-                                                    │                        │ Change Stream on jobs
-                                                    │                        ▼
-                                                    │         ┌───────────────────────────────┐
-                                                    │         │ Vultr VPS (Python, systemd)   │
-                                                    └──────── │ worker:                       │
-                                                              │  claim job → yt-dlp download  │
-                                                              │  → thumbnail → Gemini Files   │
-                                                              │  → extraction agent → embed   │
-                                                              │  → write reel, update category│
-                                                              │ scheduler (every 60 s):       │
-                                                              │  due reminders → Web Push     │
-                                                              └───────────────────────────────┘
+iPhone Shortcut ── POST /api/save (waits up to PROPOSAL_WAIT_SECONDS) ──┐
+Browser (Next.js pages) ── /api/* ─────────────────────────────────────┤
+                                                                        ▼
+                      Caddy (HTTPS, one domain)  /api/*  → api:8000 (FastAPI)
+                                                 /*      → web:3000 (Next.js)
+api ── reads/writes ──► MongoDB Atlas ◄── claims jobs ── worker (Python)
+                                                         yt-dlp → public Instagram reel
+                                                         Gemini: planner, video, embeddings
 ```
+Rules:
+1. Only the worker contacts Instagram. The API never runs yt-dlp. If Instagram blocks the Vultr IP, stop the Vultr worker and run the same worker on a laptop; nothing else changes.
+2. Atlas is the only shared state. API and worker never call each other.
+3. The LLM decides; code executes. The planner chooses type, fields and which offered slot to use. Code computes free slots, validates dates, builds labels and builds every event and reminder.
+4. Nothing is added to a calendar or reminder list without the user's choice.
+5. The demo path (sample reels) needs neither Instagram nor the worker.
 
-**Key rules**
-
-- Vercel route handlers never download video or run the extraction agent. They write to Atlas and return quickly. The only long-running Vercel route is `/api/ask` (streaming, `maxDuration = 60`).
-- The worker is the only component that talks to Instagram/TikTok.
-- Atlas is the only shared state. The worker and the web app never call each other directly.
-- The same worker code runs on Vultr and on a laptop (`python -m worker`). Several workers can run at once safely because job claiming is atomic.
-
----
-
-## 4. Repository layout
-
-Monorepo. Keep the existing `prototype/` folder untouched as a reference for the Shortcut flow.
-
+## 3. Repository layout
 ```
 /
-├─ SPEC.md                         ← this document
-├─ prototype/                      ← existing tested Shortcut prototype (reference only)
-├─ mockups/                        ← clickable Home + Reel page mockup (visual reference, section 19.7)
-├─ web/                            ← Next.js app (deployed to Vercel, root dir = web)
-│  ├─ app/
-│  │  ├─ (app)/                    ← signed-in pages, shared layout with bottom bar + orb
-│  │  │  ├─ page.tsx               ← Home dashboard
-│  │  │  ├─ c/[categoryId]/page.tsx← Category page
-│  │  │  ├─ r/[reelId]/page.tsx    ← Reel page
-│  │  │  ├─ ask/page.tsx           ← Ask (chat)
-│  │  │  ├─ plans/page.tsx         ← Plans & Reminders
-│  │  │  ├─ plans/[planId]/page.tsx← Plan page
-│  │  │  └─ profile/page.tsx       ← Profile
-│  │  ├─ onboarding/page.tsx
-│  │  ├─ sign-in/[[...sign-in]]/page.tsx
-│  │  ├─ sign-up/[[...sign-up]]/page.tsx
-│  │  ├─ share-target/page.tsx     ← Android Web Share Target landing
-│  │  ├─ api/…                     ← route handlers (section 17)
-│  │  ├─ manifest.ts               ← PWA manifest
-│  │  └─ layout.tsx
-│  ├─ components/                  ← UI components (section 18)
-│  ├─ lib/
-│  │  ├─ db.ts                     ← cached MongoClient
-│  │  ├─ auth.ts                   ← Clerk + API-token helpers
-│  │  ├─ gemini.ts                 ← @google/genai client, model names
-│  │  ├─ embeddings.ts             ← embed + normalize
-│  │  ├─ search.ts                 ← hybrid search + category routing
-│  │  ├─ agent/                    ← chat agent: prompt, tools, loop
-│  │  ├─ plans.ts, reminders.ts, push.ts
-│  │  ├─ urls.ts                   ← URL extraction + normalization (shared logic with worker)
-│  │  └─ types.ts                  ← shared TypeScript types (mirrors section 5 and 9)
-│  ├─ public/sw.js                 ← service worker (push + notificationclick)
-│  └─ public/icons/…
-├─ worker/                         ← Python worker (deployed to Vultr)
-│  ├─ worker/
-│  │  ├─ __main__.py               ← starts job loop + scheduler
-│  │  ├─ config.py
-│  │  ├─ db.py
-│  │  ├─ jobs.py                   ← claim / complete / fail / retry, change stream
-│  │  ├─ download.py               ← yt-dlp wrapper
-│  │  ├─ thumbnails.py
-│  │  ├─ gemini_client.py
-│  │  ├─ video_analysis.py         ← analyze_video tool implementation
-│  │  ├─ linked_page.py            ← fetch_linked_page tool implementation
-│  │  ├─ agent.py                  ← extraction agent loop
-│  │  ├─ cards.py                  ← pydantic card schemas + validation
-│  │  ├─ categories.py             ← similarity, filing, centroid updates
-│  │  ├─ embeddings.py
-│  │  ├─ geocode.py                ← Nominatim for travel places
-│  │  ├─ suggestions.py
-│  │  ├─ scheduler.py              ← reminders → Web Push
-│  │  └─ prompts.py
-│  ├─ scripts/
-│  │  ├─ create_indexes.py         ← creates all Mongo + Atlas Search/Vector indexes
-│  │  ├─ seed.py                   ← enqueue a list of reel URLs for a user (demo data)
-│  │  └─ gen_vapid.py              ← generate VAPID keys
-│  ├─ deploy/brain-worker.service  ← systemd unit
-│  ├─ requirements.txt
-│  └─ .env.example
-└─ shortcut/README.md               ← how to build and share the "Save to Brain" Shortcut
+├─ CLAUDE.md  SPEC.md  DESIGN.md  README.md  .env.example  .gitignore
+├─ BUILD_LOG.md  BLOCKERS.md     written by the build agent
+├─ docker-compose.yml  Caddyfile
+├─ docs/archive/                 history, do not build from
+├─ prototype/                    original Shortcut test server, reference only
+├─ fixtures/reels.csv            url,expected_type,sample,featured,why_chosen
+├─ fixtures/queries.csv          query,expected_shortcode
+├─ secrets/                      gitignored: instagram_cookies.txt (optional)
+├─ shortcut/README.md            how to build both Shortcuts (section 10)
+├─ eval/results.md               written by scripts/eval_recall.py
+├─ server/
+│  ├─ Dockerfile  requirements.txt  pyproject.toml (pytest config)
+│  ├─ realize/
+│  │  ├─ config.py    pydantic-settings; env_file = repo-root .env (Path(__file__).parents[2]); real env vars override
+│  │  ├─ db.py        MongoClient singleton, collection handles
+│  │  ├─ models.py    all pydantic models
+│  │  ├─ urls.py      extract + normalize Instagram URLs
+│  │  ├─ timeutil.py  timezone helpers, day/time labels
+│  │  ├─ slots.py     find_free_slot, reminder times
+│  │  ├─ actions.py   options, menu labels, device actions, ICS, Google Calendar links
+│  │  ├─ gemini.py    client, tool-loop helper, embed()
+│  │  ├─ ytdlp.py     metadata + download + error mapping
+│  │  ├─ thumbs.py    fetch, resize, store
+│  │  ├─ planner.py   planner agent (section 8)
+│  │  ├─ enrich.py    video extraction (section 9)
+│  │  ├─ search.py    hybrid search (section 11)
+│  │  ├─ ask.py       Ask agent (section 12)
+│  │  ├─ jobs.py      enqueue, claim, heartbeat, complete, fail
+│  │  ├─ demo.py      demo sessions, sample copy
+│  │  ├─ ratelimit.py in-memory limits
+│  │  ├─ api/main.py, api/routers/*.py
+│  │  └─ worker/__main__.py
+│  ├─ scripts/        create_indexes.py create_user.py build_samples.py simulate_shortcut.py eval_recall.py reset_demo.py check_models.py
+│  └─ tests/          unit tests for pure functions
+└─ web/               Next.js app (section 13, DESIGN.md)
+```
+Local dev (Windows, three terminals; venv at server/.venv):
+- `cd server; .\.venv\Scripts\Activate.ps1; uvicorn realize.api.main:app --reload --port 8000`
+- `cd server; .\.venv\Scripts\Activate.ps1; python -m realize.worker`
+- `cd web; npm run dev` (next.config rewrites `/api/:path*` to `${API_INTERNAL_URL ?? "http://localhost:8000"}/api/:path*`)
+Phone testing locally: `cloudflared tunnel --url http://localhost:3000` and set PUBLIC_BASE_URL to the tunnel URL.
+
+## 4. Configuration (.env at repo root; .env.example mirrors it with blanks)
+```
+APP_NAME=Realize
+PUBLIC_BASE_URL=http://localhost:3000   # prod: https://<domain>. Used in links inside reminders.
+DOMAIN=                                 # prod only, read by Caddy
+DEBUG_ENDPOINTS=false
+
+MONGODB_URI=
+MONGODB_DB=realize
+
+GEMINI_API_KEY=
+GEMINI_MODEL_FAST=gemini-3.8-flash      # planner + Ask. Verified in phase 1; fallback gemini-3.5-flash; never Lite
+GEMINI_MODEL_VIDEO=gemini-3.8-flash     # video extraction
+GEMINI_EMBED_MODEL=gemini-embedding-001
+EMBED_DIM=768
+
+INSTAGRAM_COOKIES_PATH=                 # optional. e.g. secrets/instagram_cookies.txt; relative paths resolve from repo root
+
+PLANNER_MODE=live                       # live | fake (fake: no Gemini, no Instagram; for contract tests)
+PROPOSAL_WAIT_SECONDS=20                # from the Shortcut timeout test; max 25
+HYBRID_MODE=auto                        # auto | rankfusion | manual
+WORKER_ID=laptop
+WORKER_PROPOSE_THREADS=2
+WORKER_ENRICH_THREADS=2
+DEFAULT_TIMEZONE=America/New_York
+
+SHORTCUT_URL=                           # iCloud link, real-user Shortcut
+JUDGE_SHORTCUT_URL=                     # iCloud link, judge Shortcut with key built in
+FIRST_SAVE_REEL_URL=                    # public reel used in guided setup
+DEMO_ENABLED=true
 ```
 
----
+## 5. Data model (MongoDB Atlas, db `realize`)
+Conventions: `user_id` is a string `u_<12 hex>`. Other `_id`s are ObjectId, exposed as strings. Times stored as UTC datetimes; local times computed with the user's timezone (zoneinfo + tzdata). Demo documents carry `expires_at` (TTL index, expireAfterSeconds 0) and delete themselves; real documents never have it.
 
-## 5. Data model (MongoDB Atlas)
-
-Database name: `reelbrain`. Every user-owned document has `userId` (the Clerk user ID string, e.g. `user_2abc…`), and **every query filters on `userId`.** Timestamps are BSON dates in UTC.
-
-### 5.1 `users`
-
+### 5.1 users
 ```jsonc
-{
-  "_id": "user_2abc…",               // Clerk user ID used as _id
-  "email": "…",
-  "displayName": "Ali",
-  "timezone": "America/New_York",    // from Intl.DateTimeFormat().resolvedOptions().timeZone
-  "interests": ["Food", "Fragrance", "Basketball"],
-  "onboardedAt": ISODate | null,
-  "apiTokenHash": "sha256 hex",      // Shortcut token, hashed
-  "apiTokenPreview": "rb_…k3F",      // first 3 + last 3 chars, for display
-  "createdAt": ISODate
-}
+{ "_id": "u_3f9a1c2b7d4e", "api_key_hash": "sha256 hex", "key_preview": "a1B2",
+  "label": "yougi" | "judge" | null, "is_demo": false, "is_judge": false,
+  "timezone": "America/New_York",
+  "prefs": { "cook_days": ["mon","tue","wed","thu","fri"], "cook_time": "18:30",
+             "workout_days": ["mon","wed","fri"], "workout_time": "07:00",
+             "weekend_time": "12:00", "daily_cap": 2,
+             "quiet_start": "22:00", "quiet_end": "08:00",
+             "types_on": { "recipe": true, "event": true, "place": true, "workout": true, "product": true, "tip": true } },
+  "created_at": ISODate, "expires_at": ISODate | absent }
 ```
-Indexes: `{ apiTokenHash: 1 }` unique sparse.
+Keys: `rl_` + `secrets.token_urlsafe(24)`, shown once, stored as sha256. Indexes: `{api_key_hash:1}` unique; `{expires_at:1}` TTL.
 
-### 5.2 `reels`
-
+### 5.2 saves
 ```jsonc
-{
-  "_id": ObjectId,
-  "userId": "user_…",
-  "platform": "instagram" | "tiktok",
-  "sourceUrl": "https://www.instagram.com/reel/ABC123/",   // normalized
-  "sourceId": "ABC123",              // platform media ID (from URL, then confirmed by yt-dlp)
-  "source": "shortcut" | "paste" | "share_target" | "seed",
-  "userNote": "save for saturday dinner" | null,           // note typed when sharing
-  "status": "queued" | "downloading" | "analyzing" | "ready" | "failed",
-  "stage": "Watching the video…",    // human-readable progress text for the UI
-  "failureReason": null | "unavailable" | "private" | "blocked" | "too_long" | "unsupported" | "processing_error",
-  "failureMessage": null | "Instagram blocked the download. Try again in a few minutes.",
-
-  // Raw metadata from yt-dlp
-  "caption": "…",
-  "hashtags": ["thaifood"],
-  "creator": { "handle": "chefjohn", "name": "Chef John" },
-  "durationSec": 48,
-  "postedAt": ISODate | null,
-  "hasThumbnail": true,
-
-  // Extraction results
-  "type": "recipe" | "product" | "travel" | "sports_drill" | "workout_plan" | "educational" | "motivational",
-  "title": "Weeknight Pad Thai",
-  "summary": "A 20-minute pad thai with tamarind sauce. Key trick: soak noodles in warm, not boiling, water.",
-  "card": { /* type-specific, section 9 */ },
-  "tags": ["noodles", "thai", "quick"],
-  "entities": [{ "name": "tamarind", "kind": "ingredient" }],
+{ "_id": ObjectId, "user_id": "u_…", "url": "https://www.instagram.com/reel/ABC/", "shortcode": "ABC",
+  "source": "shortcut" | "web" | "sample",
+  "status": "queued" | "reading" | "planning" | "planned" | "enriching" | "ready" | "failed",
+  "failure_reason": null | "private" | "unavailable" | "not_video" | "blocked" | "processing_error",
+  "failure_message": null | "…",
+  "caption": "…", "hashtags": ["fall"], "creator": { "handle": "chefjohn", "name": "Chef John" },
+  "posted_at": ISODate | null, "duration_sec": 48, "thumb_id": "9f2c…" | null,
+  "type": "recipe|event|place|workout|product|tip|other" | null,
+  "title": "Gochujang butter squash" | null, "summary": "…",
+  "fields": { /* exactly one key matching type, section 8.4 */ },
+  "caption_sufficient": true,
+  "transcript": [{ "start_sec": 0.0, "text": "…" }], "transcript_text": "…",
+  "on_screen_text": ["2 tbsp gochujang"], "visual_summary": "…",
+  "entities": [{ "name": "gochujang", "kind": "ingredient" }], "tags": ["squash","fall"],
+  "unverified": ["Cafe Name"],
   "language": "en",
-  "transcript": [{ "startSec": 0.0, "text": "Okay so the secret…" }],   // [] if no speech
-  "transcriptText": "Okay so the secret…",                             // flattened for search
-  "onScreenText": ["2 tbsp tamarind", "…"],
-  "visualSummary": "Close-up of a wok…",
-  "captionAssessment": { "relevant": true, "sufficient": false },
-  "extraction": {
-    "tiersUsed": ["caption", "video"],    // subset of caption, video, linked_page
-    "fieldSources": { "card.ingredients": "on_screen", "card.steps": "speech" },
-    "agentSteps": 3,
-    "linkedUrl": null | "https://…",
-    "model": "gemini-…",
-    "durationMs": 21450
-  },
-
-  // Organization
-  "categoryId": ObjectId,             // top-level category
-  "subcategoryId": ObjectId | null,
-  "userEdited": ["title", "categoryId"],   // fields the user changed by hand; never overwritten
-
-  // Search
-  "embedding": [768 floats],
-
-  // Usage
-  "savedAt": ISODate,
-  "processedAt": ISODate | null,
-  "lastViewedAt": ISODate | null,
-  "viewCount": 0
-}
+  "embedding": [768 floats], "embedding_source": "caption" | "full",
+  "intent": null | "yes" | "later" | "none", "plan_id": ObjectId | null,
+  "enrich_error": null | "private" | "…", "user_edited": [],
+  "created_at": ISODate, "planned_at": ISODate | null, "ready_at": ISODate | null, "expires_at": … }
 ```
+Status flow: queued → reading → planning → planned → enriching → ready. `failed` only when reading fails permanently. An enrichment failure keeps the save usable: status `ready`, `enrich_error` set. Sample saves: created as `planning` with metadata and enrichment copied from cache, then `ready` after planning.
+Indexes: `{user_id:1, shortcode:1}` unique; `{user_id:1, created_at:-1}`; `{user_id:1, type:1, created_at:-1}`; `{expires_at:1}` TTL.
 
-Indexes:
-- `{ userId: 1, platform: 1, sourceId: 1 }` **unique** (dedupe)
-- `{ userId: 1, savedAt: -1 }`
-- `{ userId: 1, categoryId: 1, savedAt: -1 }`
-- `{ userId: 1, subcategoryId: 1, savedAt: -1 }`
-- `{ userId: 1, status: 1 }`
-- `{ userId: 1, lastViewedAt: 1 }`
+### 5.3 plans (one per save; created at proposal time)
+```jsonc
+{ "_id": ObjectId, "user_id": "u_…", "save_id": ObjectId,
+  "kind": "recipe|event|place|workout|product|tip|other", "actionable": true,
+  "question": "Dinner Thursday?", "why": "You cook weeknights and Thursday is free.",
+  "confidence": "sure" | "best_guess",
+  "options": [Option], "options_prev": [Option],
+  "status": "proposed" | "accepted" | "declined" | "done" | "skipped",
+  "intent": null | "later",
+  "chosen": Option | null, "scheduled_for": ISODate | null, "ends_at": ISODate | null,
+  "device_actions": { "event": DeviceEvent | null, "reminders": [DeviceReminder] },
+  "confirmed_via": null | "web" | "shortcut", "followup_at": ISODate | null,
+  "share_token": "22 random url-safe chars",
+  "history": [{ "from": "proposed", "to": "accepted", "at": ISODate }],
+  "created_at": ISODate, "updated_at": ISODate, "expires_at": … }
+// Option: { id: "opt_1", action: "event"|"reminder", start_utc: ISODate, duration_min: 60,
+//           label: "Cook Thu 6:30 pm + 3 groceries", web_label: "Add to Thursday",
+//           big_time: "Thu 6:30 pm", secondary: "+3 groceries" }
+// DeviceEvent: { title, start_utc, end_utc, location, notes, url }
+// DeviceReminder: { title, due_utc, notes, url }
+```
+Transitions: proposed → accepted (option) | declined ("none") | proposed with intent "later". accepted → done | skipped | proposed (unconfirm) | accepted (different option). done or skipped → accepted (undo). declined or skipped → proposed (plan again).
+Indexes: `{user_id:1, status:1, scheduled_for:1}`; `{save_id:1}` unique; `{expires_at:1}` TTL.
 
-Atlas Vector Search index **`reels_vector`** on `reels`:
+### 5.4 jobs
+```jsonc
+{ "_id": ObjectId, "kind": "propose" | "enrich", "user_id": "u_…", "save_id": ObjectId,
+  "status": "pending" | "running" | "done" | "failed", "attempts": 0, "max_attempts": 3,
+  "run_after": ISODate, "locked_by": null, "locked_until": null, "last_error": null,
+  "created_at": ISODate, "updated_at": ISODate, "expires_at": … }
+```
+Claim atomically with find_one_and_update on `{kind, status in [pending, running], run_after <= now, locked_until null or < now}`, set running, locked_by WORKER_ID, locked_until now + 120 s, increment attempts. Heartbeat every 30 s. Each lane polls every 0.5 s when idle.
+Indexes: `{kind:1, status:1, run_after:1}`; `{save_id:1}`; `{updated_at:1}` TTL 604800 s with partialFilterExpression `{status: {$in: ["done","failed"]}}`; `{expires_at:1}` TTL.
 
+### 5.5 agent_runs
+```jsonc
+{ "_id": ObjectId, "user_id": "u_…", "save_id": ObjectId | null,
+  "kind": "propose" | "enrich" | "replan" | "ask", "model": "…",
+  "status": "running" | "done" | "failed" | "fallback",
+  "steps": [{ "key": "find_free_slot", "label": "Checking your week", "tool": "find_free_slot",
+              "args": {…}, "result": {…}, "ms": 412, "ts": ISODate }],
+  "error": null, "started_at": ISODate, "ended_at": ISODate | null, "expires_at": … }
+```
+args and result truncated to 2 KB each. Steps are appended with $push as they happen so the UI can show them live. Indexes: `{save_id:1, started_at:-1}`; `{user_id:1, started_at:-1}`; `{expires_at:1}` TTL.
+
+| step key | label |
+|---|---|
+| fetch_metadata | Reading the caption |
+| search_saves | Checking your saves |
+| find_free_slot | Checking your week |
+| propose_plan | Drafting a plan |
+| download_video | Grabbing the video |
+| analyze_video | Watching the video |
+| grounding | Checking facts against the video |
+| embed | Filing it |
+| replan | Updating the plan |
+| get_save | Opening a save |
+| list_plans | Checking your plans |
+| propose_plans | Drafting plans |
+| respond | Writing the answer |
+
+### 5.6 thumbnails
+`{ _id: "16 random hex", content_type: "image/jpeg", data: BinData, width, height, owner_user_id: "u_…" | null, expires_at? }`. Resized to 480 px wide, JPEG quality 80. `owner_user_id` null means sample-owned (never deleted with a save).
+
+### 5.7 sample_cache
+`{ _id: shortcode, url, order, featured: bool, expected_type, metadata: {caption, hashtags, creator, posted_at, duration_sec}, thumb_id, enrichment: {type, title, summary, fields, caption_sufficient, transcript, transcript_text, on_screen_text, visual_summary, entities, tags, unverified, language}, embedding, cached_plan: {type, title, summary, fields, question, why, confidence, actionable}, built_at }`. `cached_plan` holds no dates; slots are recomputed whenever it is used.
+
+### 5.8 workers
+`{ _id: WORKER_ID, last_seen: ISODate, lanes: ["propose","enrich"], host }`, updated every 10 s.
+
+### 5.9 Search indexes on `saves` (M0 allows 3; this uses 2)
+`saves_vector` (type vectorSearch):
 ```json
-{
-  "fields": [
-    { "type": "vector", "path": "embedding", "numDimensions": 768, "similarity": "cosine" },
-    { "type": "filter", "path": "userId" },
-    { "type": "filter", "path": "status" },
-    { "type": "filter", "path": "type" },
-    { "type": "filter", "path": "categoryId" },
-    { "type": "filter", "path": "subcategoryId" }
-  ]
-}
+{ "fields": [
+  { "type": "vector", "path": "embedding", "numDimensions": 768, "similarity": "cosine" },
+  { "type": "filter", "path": "user_id" },
+  { "type": "filter", "path": "status" },
+  { "type": "filter", "path": "type" } ] }
 ```
-
-Atlas Search index **`reels_text`** on `reels`:
-
+`saves_text` (type search):
 ```json
-{
-  "mappings": {
-    "dynamic": false,
-    "fields": {
-      "userId": { "type": "token" },
-      "status": { "type": "token" },
-      "title": { "type": "string" },
-      "summary": { "type": "string" },
-      "caption": { "type": "string" },
-      "transcriptText": { "type": "string" },
-      "onScreenText": { "type": "string" },
-      "tags": { "type": "string" },
-      "userNote": { "type": "string" },
-      "entities": { "type": "document", "fields": { "name": { "type": "string" } } }
-    }
-  }
-}
+{ "mappings": { "dynamic": false, "fields": {
+  "user_id": { "type": "token" }, "status": { "type": "token" }, "type": { "type": "token" },
+  "title": { "type": "string" }, "summary": { "type": "string" }, "caption": { "type": "string" },
+  "transcript_text": { "type": "string" }, "on_screen_text": { "type": "string" },
+  "tags": { "type": "string" },
+  "creator": { "type": "document", "fields": { "handle": { "type": "string" } } },
+  "entities": { "type": "document", "fields": { "name": { "type": "string" } } } } } }
 ```
+EMBED_DIM must equal numDimensions.
 
-> The free M0 tier allows only 3 Atlas Search + Vector Search indexes in total. This design uses exactly **2**. Category similarity is computed in application code (a user has under ~100 categories), so categories need no search index.
+## 6. Ingest: POST /api/save
+Request: `{ "input": "<URL or text containing one>", "source": "shortcut" | "web" | "sample", "wait": 20 }`. `wait` defaults to PROPOSAL_WAIT_SECONDS for source shortcut, else 0; max 25.
 
-### 5.3 `thumbnails`
+This endpoint and confirm (section 7) always return HTTP 200 for handled outcomes, including a bad key, rate limits and bad input, with `status: "error"` and a readable `message`, so the Shortcut can always show the message.
 
-Instagram/TikTok thumbnail URLs expire, so the worker stores a copy.
+Steps:
+1. Auth by Bearer key; rate limit (section 17).
+2. Extract the first match of `https?://(?:www\.|m\.)?instagram\.com/(?:[A-Za-z0-9_.]+/)?(reel|reels|p|tv)/([A-Za-z0-9_-]+)`. No match → `{status:"error", ask:"no", message:"That wasn't an Instagram post link. Share a reel from Instagram, or paste its link."}`.
+3. Canonical URL: `https://www.instagram.com/reel/{code}/` for reel, reels, tv; `https://www.instagram.com/p/{code}/` for p. No query string.
+4. Existing save for (user_id, shortcode):
+   - failed → reset to queued, enqueue propose, continue to step 6.
+   - not yet planned → continue to step 6 (wait on it).
+   - plan proposed → respond as a proposal with prompt prefixed "You saved this on {Mon D}. ".
+   - otherwise → `{status:"duplicate", ask:"no", message:"You saved this on {Mon D}. {state}"}` where state is "Plan: Thu 6:30 pm.", "No plan.", "Done." or "Skipped.".
+   Insert races (DuplicateKeyError) are treated as existing.
+5. Insert save. If shortcode is in sample_cache: copy metadata, enrichment, embedding and thumb_id, status `planning`, run the planner in a FastAPI BackgroundTask (section 8.6). Otherwise status `queued` and insert a propose job.
+6. Poll the save every 0.4 s until status is planned, enriching, ready or failed, or `wait` runs out.
+7. Respond with SaveResponse.
 
+SaveResponse:
 ```jsonc
-{ "_id": ObjectId /* = reelId */, "userId": "user_…", "contentType": "image/jpeg", "data": BinData, "width": 480, "height": 853 }
+{ "status": "proposed" | "pending" | "duplicate" | "failed" | "error",
+  "ask": "yes" | "no",
+  "save_id": "…",
+  "prompt": "Gochujang butter squash. Dinner Thursday?",       // "{title}. {question}", max 110 chars
+  "menu": ["Cook Thu 6:30 pm + 3 groceries", "Cook Mon 6:30 pm + 3 groceries", "Not now", "Just vibes"],
+  "message": "…",
+  "ticket": Ticket }
 ```
-Resized to 480 px wide, JPEG quality 80 (~30–60 KB). Served by `GET /api/thumbnails/:reelId`.
+- proposed, actionable: menu = option labels + "Not now" + "Just vibes".
+- proposed, not actionable: menu = option labels (may be empty) + "Just save".
+- pending: `message: "Saved. Still reading it. Your plan will be waiting in Realize."`
+- failed: message from section 16.
 
-### 5.4 `jobs` (the queue)
+## 7. Confirm
+`POST /api/saves/{id}/confirm` with `{ "choice": "<option id or exact label>", "source": "shortcut" | "web", "start_local": "YYYY-MM-DDTHH:mm" (optional, web Change) }`.
+- Matching: option id, then label (trimmed, case-insensitive) in `options`, then in `options_prev`; "later" or "Not now"; "none", "Just vibes" or "Just save". No match → status error, message "That choice expired. Open Realize to pick again."
+- Option → plan accepted, `chosen`, `scheduled_for`, `ends_at`, `followup_at`, `device_actions` built (section 8.5), `confirmed_via`, save.intent "yes".
+- start_local → must be in the future; becomes a custom option of the plan's kind, then accepted.
+- later → plan stays proposed, intent "later", save.intent "later". Message: "Okay. It's waiting in Realize."
+- none → plan declined, save.intent "none". Message: "Saved to your library."
+- Accepted messages, source shortcut: recipe or workout "Added to {long_day}.", event "Added to your calendar for {long_day}.", reminder options "Reminder set for {long_day}.". Source web: "Added to {long_day}." for all.
+- Re-confirming the same option returns the same response (idempotent).
 
+ConfirmResponse:
 ```jsonc
-{
-  "_id": ObjectId,
-  "kind": "process_reel" | "refresh_suggestions",
-  "userId": "user_…",
-  "reelId": ObjectId | null,
-  "categoryId": ObjectId | null,     // for refresh_suggestions
-  "status": "pending" | "running" | "done" | "failed",
-  "attempts": 0,
-  "maxAttempts": 3,
-  "runAfter": ISODate,               // for backoff
-  "lockedBy": "vultr-1" | null,
-  "lockedUntil": ISODate | null,     // lease; expired leases are reclaimable
-  "lastError": null | "…",
-  "createdAt": ISODate,
-  "updatedAt": ISODate
-}
+{ "status": "accepted" | "later" | "declined" | "error", "plan_id": "…", "message": "Added to Thursday.",
+  "has_event": "yes" | "no",
+  "event_title": "Cook: Gochujang butter squash",
+  "event_start_text": "Nov 19, 2026 at 6:30 PM", "event_end_text": "Nov 19, 2026 at 7:30 PM",
+  "event_start_iso": "2026-11-19T18:30:00-05:00", "event_end_iso": "…",
+  "event_location": "", "event_notes": "…\nOpen: https://<domain>/p/<id>?t=<token>",
+  "event": { …same fields as an object, for the web… } | null,
+  "reminders": [{ "title": "Groceries for Gochujang butter squash", "due_text": "Nov 19, 2026 at 12:00 PM",
+                  "due_iso": "…", "notes": "• 2 tbsp gochujang\n• 1 butternut squash", "url": "https://…/p/…?t=…" }],
+  "gcal_url": "https://calendar.google.com/calendar/render?action=TEMPLATE&…",
+  "ics_url": "/api/public/plans/<id>/ics?t=<token>",
+  "ticket": Ticket }
 ```
-Indexes: `{ status: 1, runAfter: 1 }`, `{ reelId: 1 }`, and a TTL index `{ updatedAt: 1 }` with `expireAfterSeconds: 604800` on finished jobs only (partial filter `status: { $in: ["done", "failed"] }`).
+`*_text` is formatted in the user's timezone as `MMM D, YYYY at h:mm A` (US English). The flat `event_*` fields exist so the Shortcut never reads nested dictionaries.
 
-### 5.5 `categories`
+`POST /api/saves/{id}/unconfirm` → plan back to proposed. Message for confirmed_via shortcut: "Back in Waiting on you. If it's on your phone's calendar, delete it there too." Web: "Undone."
 
-```jsonc
-{
-  "_id": ObjectId,
-  "userId": "user_…",
-  "name": "Food",
-  "parentId": null | ObjectId,       // null = top-level category; set = subcategory
-  "description": "Recipes, restaurants, cooking techniques",  // AI-written, editable
-  "icon": "food",                    // an icon key from section 19.6
-  "color": "peach",                  // one of the pastel tokens (section 19)
-  "origin": "seed" | "auto" | "user",
-  "reelCount": 12,                   // ready reels directly in this (sub)category
-  "centroid": [768 floats] | null,   // normalized mean of member reel embeddings
-  "centroidCount": 12,
-  "suggestions": [{ "label": "Grocery list for your 6 Thai recipes", "prompt": "Make a grocery list from my Thai recipes, grouped by aisle" }],
-  "suggestionsReelCount": 10,        // reelCount when suggestions were generated
-  "suggestionsUpdatedAt": ISODate | null,
-  "sortOrder": 0,
-  "createdAt": ISODate
-}
+## 8. Fast path: propose job and planner agent
+
+### 8.1 propose job (worker, propose lane)
+1. status `reading`; agent_run step fetch_metadata; yt-dlp metadata (8.2). Fill caption, hashtags, creator, posted_at, duration_sec.
+2. Fetch the thumbnail (only if its host ends with `cdninstagram.com` or `fbcdn.net`), resize, store.
+3. status `planning`; run the planner (8.4).
+4. Embed the caption-level text (11.1) → `embedding`, `embedding_source: "caption"`.
+5. status `planned`, `planned_at`; enqueue an enrich job.
+Backoff on transient failure: 2 s, then 6 s; 3 attempts. Then the save is `failed` with the mapped reason.
+
+### 8.2 yt-dlp (ytdlp.py)
+- Only canonical instagram.com URLs from section 6 reach yt-dlp.
+- Cookies are optional. If INSTAGRAM_COOKIES_PATH is blank or the file doesn't exist, call yt-dlp without cookiefile and log once: "No Instagram cookies; public access only." If the file exists, copy it to a temp file for every call and pass the copy as cookiefile (yt-dlp writes cookies back; threads must not share a file, and the original is mounted read-only in Docker).
+- Metadata: `YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True, "socket_timeout": 15, [cookiefile]}).extract_info(url, download=False)`.
+- Download (enrich): `{"format": "b[ext=mp4]/bv*+ba/b", "merge_output_format": "mp4", "outtmpl": "<tmpdir>/%(id)s.%(ext)s", "max_filesize": 100 * 1024 * 1024, ...same base options}`.
+- Map: caption = description or title; hashtags = `#\w+` from caption plus `tags`; creator.handle = uploader_id or channel; creator.name = uploader; posted_at = timestamp; duration_sec = duration; thumbnail URL = thumbnail.
+- Errors (DownloadError message, case-insensitive): "private" → private (permanent). "not available", "unavailable", "404" → unavailable (permanent). "no video" → not_video (permanent). "login required", "rate", "429", "wait a few minutes", "checkpoint" → blocked (transient). Network errors → transient. Anything else → processing_error (transient until attempts run out).
+- On blocked, log loudly. Without cookies: "Instagram wants a login. Add a throwaway account's cookies at INSTAGRAM_COOKIES_PATH." With cookies: "Instagram is blocking this worker. Refresh cookies or run the worker on another IP."
+
+### 8.3 slots.py (deterministic)
+`find_free_slot(user, kind, not_before=None, not_after=None, duration_min=None, reserved=[]) -> list[Slot]` (max 5):
+- now in the user's timezone; nb = max(not_before or now, now + 60 min); na = not_after or nb + 14 days.
+- Days and time by kind: recipe → cook_days at cook_time (60 min); workout → workout_days at workout_time (45 min); place → sat, sun at weekend_time (90 min).
+- For each date from nb to na: candidate start = date at time. Skip if outside [nb, na]; if start or end falls in quiet hours (handle windows that cross midnight); if it overlaps an accepted plan [scheduled_for, ends_at) or a reserved slot; if accepted plans on that local date plus reserved slots that date ≥ daily_cap.
+- Return `[{start_local: "YYYY-MM-DDTHH:mm", big_time, long_day}]`.
+
+Reminder times (code only; then moved out of quiet hours to quiet_end, and off days already at daily_cap to the next day):
+| case | due |
+|---|---|
+| product | today + 3 days, 18:00 |
+| tip, other, "Remind me in a week" | today + 7 days, 09:00 |
+| place reminder option | next Saturday, 10:00 |
+| event without a date ("check dates") | today + 2 days, 18:00 |
+| event ticket reminder | tomorrow 18:00, only if at least 1 day before the event |
+
+### 8.4 Planner agent (planner.py)
+Model GEMINI_MODEL_FAST with the lowest thinking setting the gemini-api-dev skill documents for it. Manual function-calling loop with automatic function calling disabled. Append each model response's content to the history unchanged (thought signatures must round-trip); answer each function call with a function_response part in the same order. Parallel calls allowed. Max 4 model turns; from turn 3, force `propose_plan` (function calling mode ANY, allowed_function_names ["propose_plan"]). Total timeout 15 s. Every tool call becomes an agent_run step. Don't override temperature unless the skill says to.
+
+System prompt:
 ```
-Indexes: `{ userId: 1, parentId: 1, name: 1 }` unique (case-insensitive collation `{ locale: "en", strength: 2 }`), `{ userId: 1, sortOrder: 1 }`.
+You are the planner inside Realize. Someone just shared a short video (an Instagram reel)
+because they might want to do something with it. Work out what it is and propose one small,
+concrete plan that fits their week. They confirm or decline; you never act yourself.
 
-A built-in top-level category **"Unsorted"** (`origin: "seed"`, color `sand`) exists for every user. Reels from deleted categories move there.
-
-### 5.6 `plans`
-
-```jsonc
-{
-  "_id": ObjectId,
-  "userId": "user_…",
-  "title": "4-Day Ball-Handling Week",
-  "kind": "training week",           // free text chosen by the agent
-  "icon": "basketball",              // an icon key from section 19.6
-  "color": "sky",
-  "sourceReelIds": [ObjectId],
-  "startDate": "2026-11-17" | null,  // local calendar dates (YYYY-MM-DD) in the user's timezone
-  "endDate": "2026-11-20" | null,
-  "blocks": [ /* section 13 */ ],
-  "createdBy": "agent" | "user",
-  "conversationId": ObjectId | null,
-  "createdAt": ISODate,
-  "updatedAt": ISODate
-}
+1. Read the caption, hashtags, creator and thumbnail. Pick the type:
+   recipe (food to cook), event (happens at a specific date and place), place (restaurant, cafe,
+   shop or destination with no fixed date), workout (exercise routine or sports drill),
+   product (something to buy or try), tip (advice, lesson, explainer, motivation),
+   other (jokes, memes, vibes, nothing to do).
+2. Extract the fields for that type using only what the caption, thumbnail, transcript or
+   on-screen text says. Never invent quantities, prices, dates, names or places. If the caption is
+   unrelated to the video ("follow for part 2", lyrics, only hashtags), set caption_sufficient
+   to false and keep fields minimal.
+3. Call search_saves with a short description to see whether they saved something similar.
+   For recipe, workout and place, call find_free_slot. You may call both in the same turn.
+4. Call propose_plan exactly once.
+   - recipe, workout, place: every option start must be one of the slots find_free_slot returned.
+     Prefer the first slot unless the content suggests otherwise (a long weekend recipe fits a
+     weekend slot better).
+   - event: use the event's own date and time. Resolve relative dates against the post date
+     ("this Friday" is the first Friday after the post date). If there is a date but no time,
+     use 19:00 and set confidence to best_guess.
+   - product, tip, other: leave option_starts_local empty; the app sets reminder times.
+5. question: a short yes/no question, max 50 characters, action first ("Dinner Thursday?").
+   why: one plain sentence, max 90 characters, naming the real reason
+   ("You cook weeknights and Thursday is free."). confidence: sure when type and timing are
+   clear, best_guess otherwise.
+6. actionable is false for type other, for events that already happened, and when there is
+   nothing a person could do with it.
+Do not write reasoning in text. Use the tools.
 ```
-Indexes: `{ userId: 1, updatedAt: -1 }`, `{ userId: 1, startDate: 1 }`.
 
-### 5.7 `reminders`
-
-```jsonc
-{
-  "_id": ObjectId,
-  "userId": "user_…",
-  "planId": ObjectId | null,
-  "reelId": ObjectId | null,
-  "title": "Ball-handling week starts tomorrow",
-  "body": "Day 1: crossover series + 2-ball dribbling. Tap to open your plan.",
-  "url": "/plans/665f…",             // opened when the notification is tapped
-  "fireAt": ISODate,                 // UTC
-  "status": "scheduled" | "sending" | "sent" | "failed" | "canceled",
-  "origin": "auto_plan" | "agent" | "user",
-  "sentAt": ISODate | null,
-  "error": null | "…",
-  "createdAt": ISODate
-}
+First user message (plain text plus the thumbnail as an inline image part):
 ```
-Indexes: `{ status: 1, fireAt: 1 }`, `{ userId: 1, fireAt: 1 }`, `{ planId: 1 }`.
-
-### 5.8 `pushSubscriptions`
-
-```jsonc
-{ "_id": ObjectId, "userId": "user_…", "endpoint": "https://web.push.apple.com/…", "keys": { "p256dh": "…", "auth": "…" }, "userAgent": "…", "createdAt": ISODate }
+NOW: Sat Nov 14 2026, 3:05 am (America/New_York)
+PREFS: cooks Mon to Fri at 6:30 pm; workouts Mon, Wed, Fri at 7:00 am; weekend plans at 12:00 pm;
+max 2 plans a day; quiet 10:00 pm to 8:00 am; types off: none
+UPCOMING (accepted, next 14 days):
+- Tue Nov 17 6:30 pm | recipe | Miso salmon bowls
+REEL:
+creator: @chefjohn | posted: Tue Nov 10 2026 | duration: 48 s
+caption: """…"""
+hashtags: #squash #fall
 ```
-Index: `{ endpoint: 1 }` unique, `{ userId: 1 }`.
+For a replan (9.5) or a sample (8.6), add `TRANSCRIPT:` (max 6,000 chars), `ON SCREEN:` and `VISUAL:` sections.
 
-### 5.9 `conversations`
-
-```jsonc
-{
-  "_id": ObjectId,
-  "userId": "user_…",
-  "title": "Thai grocery list",      // set from the first user message
-  "messages": [
-    { "role": "user", "text": "…", "at": ISODate },
-    { "role": "assistant", "text": "…", "reelIds": [ObjectId], "planIds": [ObjectId], "reminderIds": [ObjectId], "at": ISODate }
-  ],
-  "geminiHistory": [ /* raw Gemini Content[] incl. function calls/responses, for multi-turn continuity */ ],
-  "updatedAt": ISODate
-}
-```
-Index: `{ userId: 1, updatedAt: -1 }`. Cap `geminiHistory` to the last 40 entries.
-
----
-
-## 6. Ingestion: getting reels in
-
-### 6.1 Entry points
-
-| Entry point | Who | Request | Auth |
-|---|---|---|---|
-| **iOS Shortcut "Save to Brain"** | iPhone | `POST /api/ingest` JSON `{ "url": "<Shortcut Input>", "note": "<optional>" }` | `Authorization: Bearer <api token>` |
-| **Paste link** (Home "+" sheet) | any | `POST /api/reels` `{ "url", "note" }` | Clerk session |
-| **Android Web Share Target** | Android | manifest `share_target` → `GET /share-target?url=&text=&title=` page → `POST /api/reels` | Clerk session |
-| **Seed script** | team | `python -m scripts.seed --user <id> --file urls.txt` | direct DB |
-
-All four call one shared function, `ingestReel({ userId, rawInput, note, source })`.
-
-### 6.2 `ingestReel` logic
-
-1. **Extract a URL** from `rawInput`: the share sheet may pass a URL or a block of text containing one. Use the first match of `https?://\S+`.
-2. **Normalize and detect the platform:**
-   - Instagram: hosts `instagram.com`, `www.instagram.com`. Paths `/reel/{id}`, `/reels/{id}`, `/p/{id}`, `/tv/{id}`. Canonical form `https://www.instagram.com/reel/{id}/`. Drop all query params (e.g. `igsh`).
-   - TikTok: `www.tiktok.com/@{handle}/video/{id}` gives canonical `https://www.tiktok.com/@{handle}/video/{id}`. Short links `vm.tiktok.com/…` and `vt.tiktok.com/…` are kept as-is and get `sourceId = null`; the worker fills in the real ID from yt-dlp.
-   - Anything else returns `400 { error: "unsupported_url" }`.
-3. **Dedupe:** if a reel with the same `(userId, platform, sourceId)` exists (or the same `sourceUrl` when `sourceId` is null):
-   - If it's `failed`, reset it to `queued` and enqueue a new job.
-   - If a `note` was given, append it to `userNote` (newline-separated).
-   - Return the existing reel with `duplicate: true`.
-4. **Insert** the reel with `status: "queued"`, `stage: "In line…"`, `savedAt: now`.
-5. **Insert** a `process_reel` job with `status: "pending"`, `runAfter: now`.
-6. **Respond** `201 { reelId, status: "queued", duplicate: false }`. The Shortcut shows "Saved ✓".
-
-The worker may later find that a short-link reel duplicates an existing one (same resolved `sourceId`). In that case it merges: it keeps the older reel, appends the note, deletes the newer reel and its job.
-
-### 6.3 iOS Shortcut "Save to Brain"
-
-This builds on the tested flow in `prototype/README.md`. Document the steps in `shortcut/README.md` and show them in the app's Profile → "Set up sharing" sheet.
-
-1. Shortcuts → **+** → name it **Save to Brain**, icon: brain glyph.
-2. **ⓘ** → turn on **Show in Share Sheet**. Receive **URLs** and **Text**. If there's no input: **Stop and respond**.
-3. Action **Ask for Input** (Text). Prompt: "Add a note? (optional)". Default answer: empty.
-4. Action **Get Contents of URL**:
-   - URL: `https://<vercel-domain>/api/ingest`
-   - Method: `POST`
-   - Headers: `Authorization` = `Bearer ` + **Import Question** value "Paste your token from Reel Brain → Profile"
-   - Request Body: JSON. `url` (Text) = **Shortcut Input** (the blue variable). `note` (Text) = **Provided Input**.
-5. Action **Show Notification**: "Saved to Reel Brain ✓".
-6. Shortcut details → **Setup** → add an **Import Question** on the Authorization header value, so anyone installing from the iCloud link is asked for their token.
-7. Share → **Copy iCloud Link** and set it as `NEXT_PUBLIC_SHORTCUT_URL`.
-
-The first time it runs, iOS asks "Allow Save to Brain to connect to …?". Tap **Always Allow**.
-
-### 6.4 API tokens
-
-- Format: `rb_` + 32 random bytes in base64url.
-- Generated on first visit to Profile, or when the user taps **Regenerate token**. The plaintext is shown **once**, with a Copy button.
-- Stored as `sha256(token)` in `users.apiTokenHash`. `/api/ingest` hashes the bearer value and looks it up.
-
----
-
-## 7. Processing worker
-
-Python 3.12. Single process with two concurrent parts: the **job loop** (a thread pool, `WORKER_CONCURRENCY`, default 3) and the **reminder scheduler** (section 14).
-
-### 7.1 Job claiming
-
-- **Wake-up:** open a Change Stream on `jobs` for inserts with `status: "pending"`. Also poll every 5 s as a safety net, in case the change stream drops or the job's `runAfter` is in the future.
-- **Claim atomically:**
-  ```python
-  jobs.find_one_and_update(
-      {"status": {"$in": ["pending", "running"]},
-       "runAfter": {"$lte": now},
-       "$or": [{"lockedUntil": None}, {"lockedUntil": {"$lt": now}}]},
-      {"$set": {"status": "running", "lockedBy": WORKER_ID, "lockedUntil": now + 120s, "updatedAt": now},
-       "$inc": {"attempts": 1}},
-      sort=[("runAfter", 1)], return_document=AFTER)
-  ```
-- **Heartbeat:** extend `lockedUntil` by 120 s every 30 s while working.
-- **Success:** `status: "done"`.
-- **Transient failure** (network error, Gemini 429/5xx, Mongo timeout) with `attempts < maxAttempts`: `status: "pending"`, `runAfter = now + [10 s, 30 s, 90 s][attempts-1]`, clear the lock, record `lastError`.
-- **Permanent failure** (or attempts used up): job `status: "failed"`, and the reel gets `status: "failed"` plus `failureReason` and `failureMessage`.
-
-### 7.2 `process_reel` steps
-
-At each step, update `reels.status` and `reels.stage` so the app can show progress.
-
-| # | Reel status / stage | What happens |
+Tools:
+| tool | parameters | returns |
 |---|---|---|
-| 1 | `downloading` / "Grabbing the reel…" | **yt-dlp** (Python API) downloads to a temp dir. Options: `format: "best[ext=mp4]/best"`, `outtmpl: "{tmp}/%(id)s.%(ext)s"`, `max_filesize: 150MB`, `noplaylist: True`, `quiet: True`, `socket_timeout: 20`. For Instagram, also `cookiefile: INSTAGRAM_COOKIES_PATH`. Read `info`: `id`, `description`, `title`, `uploader`, `uploader_id`, `channel`, `duration`, `timestamp`, `thumbnail`, `tags`. Fill in `sourceId`, `caption` (`description`, falling back to `title`), `hashtags` (parsed from the caption plus `tags`), `creator`, `durationSec`, `postedAt`. Then dedupe for short links (section 6.2). |
-| 1a | | **Error mapping:** "Private video", "login required" → `private`. "Video unavailable", 404 → `unavailable`. "rate-limit", "Please wait a few minutes", HTTP 429 → `blocked` (**transient**, retried). `durationSec > 600` → `too_long`. |
-| 2 | `analyzing` / "Reading the caption…" | Download the thumbnail (`info.thumbnail`), resize with Pillow, upsert into `thumbnails`. If it's missing, take the video's first frame with `ffmpeg -ss 0.5 -frames:v 1` (ffmpeg is installed on the VPS). |
-| 3 | `analyzing` / (set by tools) | Run the **extraction agent** (section 8). Tools update `stage` themselves: "Watching the video…", "Checking the linked page…". |
-| 4 | `analyzing` / "Filing it away…" | Validate the card (pydantic). Resolve or create the category and subcategory (section 10). Geocode `travel` places (section 7.4). |
-| 5 | | **Embed** (section 11.1). |
-| 6 | `ready` | Write all results to the reel. Set `processedAt`. Respect `userEdited` (never overwrite those fields on reprocessing). Update category counts and centroids. If a category's `reelCount - suggestionsReelCount >= 3`, or it has no suggestions yet, enqueue `refresh_suggestions`. |
-| 7 | | **Cleanup:** delete the temp dir and the uploaded Gemini file (`client.files.delete`). This runs in a `finally` block. |
+| search_saves | query: string, limit?: int ≤ 5 | `[{save_id, title, type, saved_on, plan_status}]` (hybrid search, section 11) |
+| find_free_slot | kind: recipe\|workout\|place, not_before_local?, not_after_local?, duration_min? | `[{start_local, big_time, long_day}]` |
+| propose_plan | see below | `{ok: true}` or `{ok: false, errors: [...]}` |
 
-### 7.3 yt-dlp operational notes
-
-- Install `yt-dlp[default,curl-cffi]` so TikTok's browser impersonation works. Without it, yt-dlp warns about impersonation and TikTok downloads can fail.
-- Pin a recent version, but run `pip install -U "yt-dlp[default,curl-cffi]"` at the start of the event, because Instagram changes often break the extractor.
-- Instagram cookies come from a **throwaway** Instagram account, exported in Netscape format (e.g. with the "Get cookies.txt LOCALLY" browser extension). The file is copied to the VPS at `INSTAGRAM_COOKIES_PATH` with mode `600` and never committed.
-- TikTok needs no cookies.
-
-### 7.4 Geocoding (travel only)
-
-For each `travel.places[]` item without coordinates:
-- Query Nominatim `https://nominatim.openstreetmap.org/search?q={name}, {city}, {country}&format=json&limit=1` with header `User-Agent: ReelBrain-Hackathon/1.0`.
-- Rate limit: 1 request per second, globally across the worker.
-- Store `lat`/`lng` if found. Otherwise leave them null; the map block skips places without coordinates.
-
----
-
-## 8. Extraction agent
-
-Runs in the worker. It uses the Gemini **Pro** model (`GEMINI_PRO_MODEL`) with function calling via the `google-genai` Python SDK, in a **manual tool loop** (automatic function calling disabled) so every step can be logged and limited.
-
-### 8.1 Inputs in the first message
-
-- **Caption**, hashtags, creator handle, platform, duration.
-- **The user's note**, marked as a focus instruction: "The user said: '…'. Prioritize what they asked for."
-- **Thumbnail** as an inline image part.
-- **The user's category tree**, compact: `Food (id …) > [Thai, Baking]; Fragrance (id …) > [Summer]; …`, with each category's description.
-- **The card schemas** (the section 9 field lists in compact form).
-- **The icon keys** a new category may use (section 19.6).
-
-### 8.2 Tools
-
-| Tool | Parameters | What it does / returns |
-|---|---|---|
-| `analyze_video` | `focus: string` (what to pay attention to, e.g. "exact ingredient amounts", "the drill sequence at 0:30") | Uploads the downloaded MP4 to the Gemini Files API, if it isn't uploaded yet for this job. Polls `files.get` until `state == ACTIVE` (max 90 s). Calls the **Flash** model (`GEMINI_FLASH_MODEL`) with the video plus a structured-output schema (8.4). Returns `{ hasSpeech, musicOnly, language, transcript[{startSec,text}], onScreenText[], visualSummary, keyMoments[{startSec,description}] }`. Called at most **once** per reel (a second call returns the cached result). |
-| `fetch_linked_page` | `url: string` | Only allowed for URLs that appear in the caption, or that `analyze_video` reported in on-screen text. Uses httpx with a 10 s timeout and the same User-Agent. If the page has `application/ld+json` `Recipe` or `Product` schema, returns it as JSON. Otherwise returns the readable text (BeautifulSoup, scripts and styles stripped), truncated to 15,000 characters. |
-| `find_similar_categories` | `text: string` | Embeds `text` (RETRIEVAL_QUERY) and returns the top 5 categories/subcategories by cosine similarity to their `centroid`: `[{id, path: "Food > Thai", similarity, reelCount}]`. Categories without a centroid are skipped. |
-| `finalize_card` | the full result (8.3) | Validates against the pydantic schemas. If invalid, returns `{ ok: false, errors: [...] }` so the agent can fix it. If valid, returns `{ ok: true }` and the loop ends. |
-
-### 8.3 `finalize_card` parameters
-
+propose_plan parameters (keep the schema Gemini-compatible: no unions besides optional fields, no free-form dicts):
 ```jsonc
-{
-  "type": "recipe | product | travel | sports_drill | workout_plan | educational | motivational",
-  "title": "≤ 60 chars, specific and human (\"Weeknight Pad Thai\", not \"Recipe video\")",
-  "summary": "2 sentences max: what it is + the single most useful takeaway",
-  "card": { "recipe": {…} | "product": {…} | … },   // exactly one key, matching type
-  "tags": ["3–8 lowercase tags"],
-  "entities": [{ "name": "…", "kind": "ingredient|product|brand|place|person|exercise|skill|topic" }],
-  "language": "en",
-  "captionAssessment": { "relevant": true, "sufficient": false },
-  "fieldSources": { "card.ingredients": "caption|speech|on_screen|visual|linked_page" },
-  "category": {
-    "existingCategoryId": "…" | null,
-    "newCategory": { "name": "…", "icon": "…", "description": "…" } | null,
-    "existingSubcategoryId": "…" | null,
-    "newSubcategory": { "name": "…", "description": "…" } | null
-  }
-}
+{ "type": "recipe|event|place|workout|product|tip|other",
+  "title": "max 60 chars, specific: 'Gochujang butter squash', not 'Recipe video'",
+  "summary": "max 2 sentences",
+  "caption_sufficient": true, "actionable": true,
+  "fields": {
+    "recipe":  { "servings": 2, "total_time_min": 40,
+                 "ingredients": [{ "qty": 2, "unit": "tbsp", "item": "gochujang",
+                   "aisle": "Produce|Meat & Seafood|Dairy & Eggs|Bakery|Pantry|International|Spices|Frozen|Beverages|Other" }],
+                 "steps": ["…"], "tips": ["…"] },
+    "event":   { "name": "…", "start_local": "YYYY-MM-DDTHH:mm", "end_local": "…", "date_text": "this Friday 8pm",
+                 "venue": "…", "city": "…", "ticket_url": "…", "price_hint": "…" },
+    "place":   { "places": [{ "name": "…", "kind": "food|sight|shop|activity|nightlife|stay", "city": "…", "why": "…", "tip": "…" }] },
+    "workout": { "goal": "…", "duration_min": 30, "equipment": ["…"],
+                 "exercises": [{ "name": "…", "sets": 3, "reps": "10", "duration_sec": 30, "rest_sec": 60, "cues": ["…"] }] },
+    "product": { "items": [{ "name": "…", "brand": "…", "price_hint": "…", "why": "…", "where_to_buy": "…", "url": "…" }] },
+    "tip":     { "topic": "…", "key_points": ["…"], "takeaway": "…" } },
+  "question": "…", "why": "…", "confidence": "sure|best_guess",
+  "option_starts_local": ["YYYY-MM-DDTHH:mm"],
+  "similar_save_id": null }
 ```
-Exactly one of `existingCategoryId` / `newCategory` must be set. At most one of `existingSubcategoryId` / `newSubcategory` may be set. `newCategory.icon` must be one of the icon keys in section 19.6 (the list is included in the agent's first message); any other value is stored as `other`.
+Only the `fields` key matching `type` is filled. option_starts_local has 0 to 3 items.
 
-For Gemini's function-declaration schema, declare `card` as an object whose properties are the seven type keys, all optional. Pydantic enforces "exactly one, matching `type`".
+Code validation after propose_plan:
+- Truncate title to 60 chars, question to 50, why to 90.
+- If the type is switched off in prefs: actionable false.
+- recipe, workout, place: drop any start that isn't a slot from this run's find_free_slot results (or a fresh call); if none remain, use the first two free slots.
+- event: parse start_local. Missing → a single reminder option "Remind me to check dates". In the past → actionable false, why "This was on {Mon D}. It's passed.", no options.
+- product, tip, other: options come from code (8.3).
+- Build options and labels (8.5). Insert or update the plan doc; link it on the save.
+- Invalid arguments twice, an exception or a timeout → deterministic fallback: type other, title = first 50 chars of the caption or "Saved reel", actionable false, option "Remind me in a week". Run status `fallback`.
 
-### 8.4 `analyze_video` output schema (pydantic, passed as `response_schema`)
+PLANNER_MODE=fake: skip yt-dlp and Gemini. Caption = the URL, type recipe, title "Test recipe", 3 fake ingredients, options from the real slot finder, run model "fake".
 
-```python
-class TranscriptSegment(BaseModel): startSec: float; text: str
-class KeyMoment(BaseModel): startSec: float; description: str
-class VideoAnalysis(BaseModel):
-    hasSpeech: bool
-    musicOnly: bool
-    language: str
-    transcript: list[TranscriptSegment]   # verbatim speech, in the original language
-    onScreenText: list[str]               # every distinct overlay/caption text, in order
-    visualSummary: str                    # what is shown, step by step, ≤ 120 words
-    keyMoments: list[KeyMoment]           # ≤ 8
-```
+### 8.5 Options, labels and device actions (actions.py)
+Formatting (user timezone): short_day = "Today", "Tomorrow", "Mon".."Sun" within 6 days, else "Nov 26". long_day = "today", "tomorrow", "Monday".."Sunday", else "Nov 26". time = "6:30 pm", "12 pm", "7 am". big_time = "{short_day} {time}", with a comma after dates: "Nov 26, 6:30 pm".
 
-Prompt for this call: *"Transcribe all speech verbatim with timestamps. List every on-screen text overlay exactly as written, including quantities and units. Describe what is physically shown, step by step. Pay special attention to: {focus}. If there is no speech, return an empty transcript and set hasSpeech=false. If audio is only music, set musicOnly=true."*
+| kind | options | label (Shortcut) | web_label | big_time / secondary |
+|---|---|---|---|---|
+| recipe | first 2 slots | "Cook {short_day} {time}" + " + {n} groceries" if n > 0 | "Add to {long_day}" | slot / "+{n} groceries" |
+| workout | first 2 slots | "Train {short_day} {time}" | "Add to {long_day}" | slot / "{duration} min" |
+| place | opt_1 weekend slot (event), opt_2 reminder | "Visit {short_day} {time}" / "Remind me {short_day}" | "Add to {long_day}" / "Remind me {long_day}" | slot / place name |
+| event (future, dated) | 1 | "Add {big_time}" | "Add to calendar" | event start / venue |
+| event (no date) | 1 reminder | "Remind me to check dates" | same | due / "Reminder" |
+| product | 1 reminder | "Remind me {short_day}" | "Remind me {long_day}" | due / "Reminder" |
+| tip, other | 1 reminder | "Remind me in a week" | same | due / "Reminder" |
+Labels max 38 chars and unique within a menu.
 
-### 8.5 System prompt (extraction agent)
+Device actions on accept (max 1 event and 2 reminders):
+- recipe: event "Cook: {title}" at the slot, duration = total_time_min clamped to 30..120, else 60; notes = ingredients and steps (max 1,500 chars) + "Open: {link}". Reminder "Groceries for {title}" (only if ingredients exist): due 12:00 the same day if the slot starts at or after 15:00, else 18:00 the day before; if that's past, now + 15 min; notes = one "• qty unit item" line per ingredient. Follow-up reminder "Did you make {title}?" due at ends_at + 2 h (moved out of quiet hours), url = link.
+- workout: event "Workout: {title}" (duration_min or 45); notes = exercises; follow-up "Did you do {title}?".
+- place event: "Visit {place name}" 90 min, location = name + city; follow-up "Did you go to {place name}?". Place reminder: "Try {place name}" with notes why + tip.
+- event: event "{name}" at start, end = end or start + 2 h, location = venue + city, notes = price_hint, ticket_url and the link; reminder "Get tickets: {name}" only when ticket_url exists and the 8.3 rule allows. No follow-up.
+- product: reminder "Look at {item name}" with notes price_hint, where_to_buy, url.
+- tip, other: reminder "Revisit: {title}" with notes key points.
+- link = `{PUBLIC_BASE_URL}/p/{plan_id}?t={share_token}`. followup_at = the follow-up reminder's due time.
+- gcal_url: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=…&dates=YYYYMMDDTHHMMSSZ/YYYYMMDDTHHMMSSZ&details=…&location=…` (UTC). Reminder-only plans: a 15-minute event at the due time.
+- ICS (`/api/public/plans/{id}/ics?t=`): one VEVENT (UTC); each reminder becomes a VALARM with an absolute trigger (`TRIGGER;VALUE=DATE-TIME:…Z`). Reminder-only plans: a 15-minute VEVENT with one VALARM. CRLF line endings, `Content-Type: text/calendar`.
 
-```
-You turn a short-form video (Instagram Reel or TikTok) into one structured, genuinely useful card
-for the person who saved it. Be accurate: never invent quantities, names, prices or steps.
+### 8.6 Sample planning (API process)
+For sample saves: a BackgroundTask runs the same planner with the cached metadata and enrichment as context (like a replan with transcript), timeout 10 s. On any error or timeout, use `cached_plan` with options recomputed by code (run status `fallback`). Then status `ready`. Nothing here needs Instagram or the worker.
 
-How to work (tiers, cheapest first):
-1. Read the caption, hashtags and thumbnail. Decide two things and record them in captionAssessment:
-   - relevant: is the caption actually about this video? Captions are often unrelated
-     ("follow for more", song lyrics, jokes, hashtag spam).
-   - sufficient: does the caption alone contain everything needed for a complete card of the
-     right type (e.g. a recipe caption that lists ingredients AND steps)?
-2. If the caption is relevant AND sufficient, you may finalize without analyzing the video.
-   Otherwise call analyze_video with a focus describing exactly what's missing.
-3. If the caption or the on-screen text points to a link with the full content
-   ("full recipe at the link", a URL), and important fields are still missing, call fetch_linked_page.
-4. Call find_similar_categories with a short description of the reel before choosing a category.
-5. Call finalize_card exactly once with the complete result.
+## 9. Slow path: enrich job (worker, enrich lane)
+1. status `enriching`. Step download_video: yt-dlp download to a temp dir (8.2).
+2. Step analyze_video: upload with `client.files.upload`, poll `client.files.get` until ACTIVE (max 120 s), then one `generate_content` on GEMINI_MODEL_VIDEO with structured output. Prompt:
+   ```
+   Transcribe all speech verbatim with timestamps. List every on-screen text overlay exactly as
+   written, including quantities and units. Describe what is physically shown, step by step,
+   in at most 120 words. Then fill type, title, summary, fields, entities and tags using only what
+   appears in the video or the caption below. When they disagree, trust speech and on-screen text
+   over the caption. Write card text in English; if the video is in another language, translate
+   and set language to the original language code. If there is no speech, return an empty
+   transcript and has_speech=false; if the audio is only music, set music_only=true.
+   CAPTION: """…"""
+   ```
+   Schema: `{has_speech, music_only, language, transcript: [{start_sec, text}], on_screen_text: [str], visual_summary, type, title, summary, fields (same model as 8.4), entities: [{name, kind: ingredient|product|brand|place|person|exercise|topic|event}], tags: [str] (3 to 8, lowercase)}`.
+3. Step grounding: corpus = caption + transcript_text + on_screen_text (not visual_summary, which is model output). Normalize to lowercase, strip punctuation, drop a trailing "s". Keep an entity if its name is a substring of the corpus or all its non-stopword tokens appear in it; drop the rest. Place names and product item names not found are kept but listed in `unverified`. The step result records kept and dropped counts.
+4. Merge into the save, never overwriting fields in `user_edited`.
+5. Replan (step replan, run kind replan): if the plan is still proposed and (caption_sufficient was false, or the new type differs from plan.kind), run the planner again with transcript context. Move the old options to `options_prev`; update options, question, why and kind. Accepted, declined, done and skipped plans are never changed.
+6. Step embed: full embedding text (11.1), `embedding_source: "full"`.
+7. status `ready`, `ready_at`.
+8. In a finally block: delete the temp dir and the Gemini file.
+Video longer than 600 s: skip the download, enrich_error "too_long", status ready. Permanent download failure: enrich_error = reason, status ready. Backoff 10 s, 30 s, 90 s.
 
-Source priority when sources disagree: speech and on-screen text in the video > linked page >
-caption. Ignore the caption entirely if it is not relevant. Record where each important field
-came from in fieldSources.
+## 10. iOS Shortcut (document in shortcut/README.md; built by hand)
+Details: name "Realize", Show in Share Sheet on, Share Sheet types URLs and Text only. It appears in the share sheet's action list (scroll down; Edit Actions to favorite it).
 
-Choosing the type: pick the single best of recipe, product, travel, sports_drill, workout_plan,
-educational, motivational. A basketball skills video is sports_drill; a gym routine is workout_plan;
-a fragrance review is product; a restaurant or destination is travel; a lesson, explainer, tip or
-how-to (including gaming strategy) is educational; quotes, speeches and mindset content is motivational.
-
-Choosing the category: strongly prefer an existing category or subcategory when it fits
-(similarity from find_similar_categories helps). Create a new top-level category only when the
-reel clearly belongs to a new interest; create a new subcategory when a category has a clear,
-recurring theme the reel fits (e.g. Food > Thai). Names are short, Title Case, 1–2 words.
-
-If the user left a note, it tells you what they care about. Make sure the card captures it.
-
-Write all card text in English. If the video is in another language, translate, and set language
-to the original language code.
-```
-
-### 8.6 Loop limits and fallback
-
-- **Max 6 model turns.** On turn 5, if `finalize_card` hasn't been called yet, set `tool_config.function_calling_config = { mode: "ANY", allowed_function_names: ["finalize_card"] }` to force it.
-- If `finalize_card` fails validation 2 times in a row, or the loop ends without a valid card: **deterministic fallback.**
-  1. Call `analyze_video` (if it hasn't run).
-  2. Make one Gemini Pro call with `response_mime_type: "application/json"` and the pydantic `FinalizeCard` schema, using the caption, the video analysis, and the category tree.
-  3. If that fails too, the reel becomes `failed` / `processing_error`.
-- Log every turn (tool name, arguments truncated, latency) to stdout. Store `agentSteps`, `tiersUsed` and `durationMs` on the reel. These numbers are also the demo's "agentic" evidence.
-
----
-
-## 9. Card types
-
-Every card field is optional unless marked required (`*`). Arrays default to `[]`. Free-text fields stay short and scannable.
-
-### 9.1 `recipe`
-```jsonc
-{ "servings": 2, "totalTimeMin": 20, "difficulty": "easy|medium|hard",
-  "cuisine": "Thai",
-  "ingredients*": [{ "qty": 2, "unit": "tbsp", "item": "tamarind paste", "note": "or lime juice", "aisle": "International" }],
-  "steps*": ["Soak noodles in warm water 10 min.", "…"],
-  "tips": ["Don't overcrowd the wok."],
-  "equipment": ["wok"] }
-```
-`aisle` is one of: Produce, Meat & Seafood, Dairy & Eggs, Bakery, Pantry, International, Spices, Frozen, Beverages, Other.
-
-**UI:** a servings stepper that scales `qty`, a metric/imperial toggle (only for convertible units), an ingredient checklist, numbered steps, tips. Actions: **Make a grocery list** (Ask prefilled), **Cook mode** (full-screen steps, screen kept awake with the Wake Lock API where supported).
-
-### 9.2 `product`
-```jsonc
-{ "productCategory*": "fragrance",           // fragrance, skincare, tech, clothing, …
-  "items*": [{ "name*": "Bleu de Chanel EDP", "brand": "Chanel", "priceHint": "$$$ (~$150)",
-               "notes": { "top": ["citrus"], "middle": ["ginger"], "base": ["sandalwood"] },   // fragrance only
-               "keySpecs": ["long-lasting", "office-safe"],
-               "verdict": "Best all-rounder for fall",
-               "whereToBuy": "Sephora", "url": null }],
-  "comparison": "…" }
-```
-**UI:** item cards. Fragrances show a notes pyramid (top/middle/base chips). Action: **Compare with my other saves** (Ask prefilled).
-
-### 9.3 `travel`
-```jsonc
-{ "destination": "Lisbon, Portugal",
-  "places*": [{ "name*": "Time Out Market", "kind": "food|sight|stay|activity|nightlife|shop",
-                "city": "Lisbon", "country": "Portugal", "why": "Best spot to try 10 vendors at once",
-                "tip": "Go before 12pm", "priceHint": "$$", "lat": 38.707, "lng": -9.146 }],
-  "bestTime": "Spring or early fall" }
-```
-**UI:** a map (react-leaflet with OpenStreetMap tiles) with pins, plus a place list. Action: **Plan a trip with this** (Ask prefilled).
-
-### 9.4 `sports_drill`
-```jsonc
-{ "sport*": "basketball", "skill*": "ball handling", "level": "beginner|intermediate|advanced",
-  "equipment": ["1 ball", "cones"],
-  "drills*": [{ "name*": "Pound crossover", "reps": "3×30s", "durationSec": 30,
-                "cues": ["Stay low", "Eyes up"], "startSec": 12 }],
-  "focusPoints": ["Keep the ball below the knee"] }
-```
-**UI:** drill list with reps and cue chips. `startSec` shows as a "jump to 0:12" pill that opens the original link. Action: **Add to a training week** (Ask prefilled).
-
-### 9.5 `workout_plan`
-```jsonc
-{ "goal*": "hypertrophy", "split": "push", "durationMin": 45, "level": "intermediate",
-  "equipment": ["dumbbells"],
-  "exercises*": [{ "name*": "Incline DB press", "sets": 4, "reps": "8–10", "durationSec": null, "restSec": 90, "notes": "2s eccentric" }] }
-```
-**UI:** exercise table (name, sets × reps, rest). Action: **Build a weekly plan** (Ask prefilled).
-
-### 9.6 `educational`
-```jsonc
-{ "topic*": "Pokémon VGC: Tailwind teams", "format": "tip|explainer|how_to|strategy|story",
-  "keyPoints*": ["Lead with Tornadus to set Tailwind turn 1", "…"],
-  "steps": ["…"],                              // for how-tos
-  "takeaway*": "Speed control wins most games",
-  "resources": [{ "label": "…", "url": "…" }] }
-```
-**UI:** key-points list, optional steps, a highlighted takeaway.
-
-### 9.7 `motivational`
-```jsonc
-{ "coreMessage*": "Discipline is choosing what you want most over what you want now.",
-  "quotes": [{ "text": "…", "speaker": "Kobe Bryant" }],
-  "speaker": "Kobe Bryant", "theme": "discipline",
-  "actionPrompt": "Write down one thing you'll do today even if you don't feel like it." }
-```
-**UI:** a large serif quote card on a pastel gradient, with the speaker and action prompt.
-
-### 9.8 Shared Reel page parts (all types)
-
-- Hero thumbnail with platform badge.
-- Title, and a category pill ("Food › Thai · Change").
-- Summary.
-- The **type card** above.
-- **Your note**, editable.
-- **What's in the video**, a collapsible section with the transcript (timestamps open the original link) and on-screen text.
-- "Open in Instagram/TikTok" button.
-- "How Brain read this": small print listing `tiersUsed` and `fieldSources` as chips, e.g. "from the caption", "from the video's speech", "from on-screen text".
-- Overflow menu: edit title, move category, reprocess, delete.
-
----
-
-## 10. Categories and subcategories
-
-### 10.1 Seeding (onboarding)
-
-"What do you save?" offers multi-select chips:
-
-| Chip | Icon key | Color |
-|---|---|---|
-| Food | `food` | peach |
-| Fragrance | `fragrance` | rose |
-| Travel | `travel` | sky |
-| Basketball | `basketball` | butter |
-| Fitness | `fitness` | mint |
-| Learning | `learning` | lavender |
-| Motivation | `motivation` | sage |
-| Style | `style` | sand |
-| Gaming | `gaming` | lavender |
-| Home | `home` | sage |
-
-There's also a "+ Add your own" text chip. Each selected chip becomes a top-level category (`origin: "seed"`) with an AI-free default description. "Unsorted" is always created.
-
-### 10.2 Filing a reel
-
-The agent chooses existing or new (section 8). Then the worker applies these safeguards:
-
-1. **Near-duplicate guard:** if the agent proposes a **new** category/subcategory but an existing sibling has centroid similarity ≥ `NEW_CATEGORY_DUP_THRESHOLD` (default 0.86) to the reel embedding, **or** a case-insensitive name match, use the existing one instead.
-2. **Cap:** at most 12 top-level categories and 8 subcategories per category. Beyond that, the agent's new-category proposal falls back to the closest existing one.
-3. New categories get the next unused pastel color, the agent's icon key (or `other`), and `origin: "auto"`.
-
-### 10.3 Centroids
-
-After a reel becomes ready (or moves category), update the centroid of its category **and** subcategory:
-
-```
-new = normalize((centroid * count + embedding) / (count + 1)); count += 1
-```
-
-When a reel leaves a category (move or delete), recompute that category's centroid from its member reels. This is cheap at this scale.
-
-### 10.4 User edits (Profile → Categories)
-
-- Rename, change icon or color, reorder (drag), delete. Deleting moves reels to "Unsorted", and a deleted subcategory's reels go to its parent.
-- **Merge A into B:** move all reels and subcategories from A to B, recompute B's centroid, delete A.
-- **Promote a subcategory** to top-level, or **demote** a top-level category under another.
-- Moving a reel adds `categoryId` / `subcategoryId` to its `userEdited` list.
-
----
+Actions, in order:
+1. Text `https://<domain>` → Set Variable BASE.
+2. Text `<key>` → Set Variable KEY. (Setup tab: add an Import Question on this Text: "Paste your Realize key".)
+3. If Shortcut Input has any value → Set Variable INPUT = Shortcut Input. Otherwise → Get Clipboard → Set Variable INPUT. End If.
+4. Get Contents of URL: `BASE/api/save`, Method POST, Header `Authorization` = `Bearer KEY`, Request Body JSON: `input` (Text) = INPUT, `source` (Text) = `shortcut`. → Set Variable RESP.
+5. Get Dictionary Value `ask` from RESP. If it is `yes`:
+   1. Get Dictionary Value `prompt` from RESP → Set Variable PROMPT.
+   2. Get Dictionary Value `menu` from RESP → Choose from List (Prompt = PROMPT) → Set Variable CHOICE.
+   3. Get Dictionary Value `save_id` from RESP → Set Variable SAVE_ID.
+   4. Get Contents of URL: `BASE/api/saves/SAVE_ID/confirm`, POST, same header, JSON: `choice` = CHOICE, `source` = `shortcut`. → Set Variable CONF.
+   5. Get Dictionary Value `has_event` from CONF. If it is `yes`: Get Dates from Input on `event_start_text` → START; on `event_end_text` → END; Add New Event (Title `event_title`, Start START, End END, Location `event_location`, Notes `event_notes`). End If.
+   6. Get Dictionary Value `reminders` from CONF → Repeat with Each: Get Dates from Input on Repeat Item `due_text` → Add New Reminder (Title = Repeat Item `title`, alert at that date, Notes = Repeat Item `notes`, URL = Repeat Item `url` if the field exists). End Repeat.
+   7. Show Notification: CONF `message`.
+   Otherwise: Show Notification: RESP `message`. End If.
+Judge version: duplicate it, put the judge key in step 2, remove the Import Question, share its iCloud link as JUDGE_SHORTCUT_URL.
+If Get Dates misreads `*_text`, use the `*_iso` fields instead.
 
 ## 11. Search
-
 ### 11.1 Embeddings
-
-- Model: `GEMINI_EMBED_MODEL` (default `gemini-embedding-001`), `output_dimensionality: 768`.
-- Task types: `RETRIEVAL_DOCUMENT` for reels, `RETRIEVAL_QUERY` for searches and `find_similar_categories`.
-- **L2-normalize** every vector after it's returned (reduced-dimension Gemini embeddings are not normalized).
-- Reel embedding text (keep under ~7,000 characters, because the model's input limit is ~2,048 tokens):
-  ```
-  {title}
-  Type: {type}. Category: {category} > {subcategory}.
-  {summary}
-  {card rendered as compact plain text: ingredients, items, places, drills, key points, quote…}
-  Note: {userNote}
-  Tags: {tags}
-  On screen: {onScreenText joined, ≤ 1,000 chars}
-  Said: {transcriptText, truncated to fill the remaining budget}
-  ```
-- The web app and the worker share the same embedding helper behavior (TypeScript `@google/genai` in `web/lib/embeddings.ts`, Python `google-genai` in `worker/embeddings.py`).
-
-### 11.2 Category routing (the "hierarchy" in retrieval)
-
-Given a query embedding `q` and all of the user's categories with centroids:
-
-1. Compute the cosine similarity of `q` against every category and subcategory centroid, in application code.
-2. Let `top` and `second` be the two best scores.
-3. If `top.score ≥ ROUTE_MIN_SIM` (default 0.55) **and** `top.score − second.score ≥ ROUTE_MARGIN` (default 0.06), use `top` as a **filter** (`categoryId`, or `subcategoryId` if the match is a subcategory).
-4. Run the hybrid search (11.3). **If the filtered search returns fewer than 3 results, run it again unfiltered** and append the new results after the filtered ones.
-5. An explicit filter from the UI (on a Category page) or from the agent always wins over routing.
-
-The default thresholds are starting points. Tune them on the seeded demo data (section 25).
-
-### 11.3 Hybrid query
-
-```js
-db.reels.aggregate([
-  { $rankFusion: {
-      input: { pipelines: {
-        vector: [
-          { $vectorSearch: {
-              index: "reels_vector", path: "embedding", queryVector: q,
-              numCandidates: 200, limit: 40,
-              filter: { userId: uid, status: "ready", /* + categoryId | subcategoryId | type */ } } }
-        ],
-        text: [
-          { $search: {
-              index: "reels_text",
-              compound: {
-                must: [{ text: { query: queryText,
-                                 path: ["title","summary","caption","transcriptText","onScreenText","tags","userNote","entities.name"],
-                                 fuzzy: { maxEdits: 1 } } }],
-                filter: [{ equals: { path: "userId", value: uid } },
-                         { equals: { path: "status", value: "ready" } }] } } },
-          { $limit: 40 }
-        ]
-      } },
-      combination: { weights: { vector: 0.65, text: 0.35 } }
-  } },
-  { $limit: 20 },
-  { $project: { embedding: 0, transcript: 0 } }
-])
+`client.models.embed_content(model=GEMINI_EMBED_MODEL, contents=[…], config=EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY", output_dimensionality=EMBED_DIM))`, then L2-normalize with numpy.
+Embedding text (max 6,000 chars total):
 ```
-
-The text pipeline can't filter on `categoryId` (it isn't in the text index). When a category filter applies, add a `$match` on `categoryId`/`subcategoryId` after `$rankFusion`.
-
-**Fallback:** if `$rankFusion` is unavailable on the cluster (check on night one), run both pipelines separately and merge them in code with reciprocal rank fusion: `score = Σ w / (60 + rank)`, using the same weights.
-
-**Result item:** `{ reelId, title, type, categoryPath, summary, thumbnailUrl, snippet }`. `snippet` is the best matching sentence from the summary/transcript (pick the sentence with the most query-term overlap).
-
----
-
-## 12. Ask: the chat agent
-
-### 12.1 Runtime
-
-- `POST /api/ask` (Vercel route handler, Node runtime, `export const maxDuration = 60`).
-- Body: `{ conversationId?: string, message: string, context?: { reelId?: string, categoryId?: string } }`.
-- Model: `GEMINI_PRO_MODEL` via `@google/genai`, with `functionDeclarations` for the tools below. Manual loop, **max 8 tool calls per user turn**.
-- **Response:** a stream of newline-delimited JSON events:
-  ```
-  {"type":"status","text":"Searching your saves…"}
-  {"type":"reels","reels":[{reelId,title,type,thumbnailUrl,categoryPath}]}
-  {"type":"text","delta":"Here's your grocery list…"}
-  {"type":"plan","plan":{planId,title,kind,icon,color}}
-  {"type":"reminder","reminder":{reminderId,title,fireAt}}
-  {"type":"done","conversationId":"…"}
-  {"type":"error","message":"…"}
-  ```
-- The conversation (user text, assistant text, created object IDs, and the raw Gemini history) is saved to `conversations` after each turn.
-
-### 12.2 Tools
-
-Every tool is scoped to the authenticated `userId` on the server. The model never supplies `userId`.
-
-| Tool | Parameters | Returns |
-|---|---|---|
-| `search_saves` | `query: string`, `category?: string` (name or path, e.g. "Food > Thai"), `type?: CardType`, `limit?: number` (default 8, max 20) | `[{ reelId, title, type, categoryPath, summary, savedAt }]` via section 11 |
-| `get_reel` | `reelId: string` | Full reel: title, summary, card, userNote, tags, onScreenText, transcriptText (truncated to 4,000 chars), sourceUrl |
-| `list_categories` | none | Tree with names, ids, reel counts |
-| `get_category_reels` | `category: string`, `limit?: number` (default 20) | `[{ reelId, title, type, summary }]`, most recent first |
-| `create_plan` | `title`, `kind`, `icon` (a key from section 19.6), `sourceReelIds[]`, `blocks[]` (section 13), `startDate?`, `endDate?` | `{ planId }`. Also creates auto reminders (section 14.2) |
-| `update_plan` | `planId`, plus any of the `create_plan` fields, plus `appendBlocks?` | `{ planId }` |
-| `create_reminder` | `title`, `body`, `fireAt` (ISO local datetime, interpreted in the user's timezone), `planId?`, `reelId?` | `{ reminderId, fireAtUtc }` |
-| `list_plans` | `limit?` | `[{ planId, title, kind, startDate, endDate }]` |
-
-### 12.3 System prompt (chat agent)
-
+{title}
+Type: {type}. Creator: @{handle}.
+{summary}
+{fields as compact text: ingredients; event name, date and venue; places; exercises; items; key points}
+Tags: {tags}
+On screen: {on_screen_text joined, max 1,000 chars}
+Said: {transcript_text, fills the remaining budget}
+Caption: {caption, max 1,000 chars}
 ```
-You are Brain, the user's friendly second brain for everything they've saved from Instagram and
-TikTok. You are warm, concise and practical, like a friend who remembers everything they sent you.
+The caption-level version (propose stage) omits On screen and Said.
 
-Today is {date} ({weekday}); the user's timezone is {timezone}. Their categories: {category tree}.
-{If context.reelId: The user is currently looking at reel {id}: {title}. Questions likely refer to it.}
-{If context.categoryId: The user is currently in the {category path} category.}
-
-Rules:
-- Ground every answer in the user's saves. Use search_saves / get_category_reels / get_reel before
-  answering questions about their content. Never invent details that aren't in their saves; if
-  something isn't there, say so and offer to help anyway with general knowledge, clearly labeled.
-- When you mention a saved reel, cite it inline as [[reel:<reelId>]] so the app can show it as a card.
-- When the user wants something they can act on (a plan, routine, list, itinerary, comparison,
-  schedule, summary), build it with create_plan using the block types available, then reply with a
-  one- or two-sentence summary. Do not repeat the whole plan in text.
-- If the plan has dates, include startDate/endDate. Ask for dates only if they truly matter and
-  weren't given; otherwise make a sensible assumption and say what you assumed.
-- When the user asks to be reminded, use create_reminder. Confirm the time in their timezone.
-- Keep text replies short: lead with the answer, use short lists, no filler.
+### 11.2 Hybrid query (search.py)
+SEARCHABLE = ["planned", "enriching", "ready"].
+```python
+vector = [{"$vectorSearch": {"index": "saves_vector", "path": "embedding", "queryVector": q,
+           "numCandidates": 150, "limit": 20,
+           "filter": {"user_id": uid, "status": {"$in": SEARCHABLE}, **({"type": t} if t else {})}}}]
+text = [{"$search": {"index": "saves_text", "compound": {
+           "must": [{"text": {"query": query, "path": ["title", "summary", "caption", "transcript_text",
+                     "on_screen_text", "tags", "creator.handle", "entities.name"], "fuzzy": {"maxEdits": 1}}}],
+           "filter": [{"equals": {"path": "user_id", "value": uid}},
+                      {"in": {"path": "status", "value": SEARCHABLE}}]
+                     + ([{"equals": {"path": "type", "value": t}}] if t else [])}}},
+        {"$limit": 20}]
+pipeline = [{"$rankFusion": {"input": {"pipelines": {"vector": vector, "text": text}},
+                             "combination": {"weights": {"vector": 0.6, "text": 0.4}}}},
+            {"$limit": limit}, {"$project": {"embedding": 0, "transcript": 0}}]
 ```
+Manual mode: run both legs, score = Σ weight / (60 + rank), ranks starting at 1. HYBRID_MODE auto: try $rankFusion; on OperationFailure switch to manual for the process lifetime and log it. /api/health reports the active mode.
+Snippet: the sentence from summary, transcript_text or on_screen_text with the most query-token overlap, max 140 chars.
 
-### 12.4 Rendering
-
-- Assistant text is rendered as Markdown (react-markdown).
-- `[[reel:ID]]` tokens become inline **ReelChips** (thumbnail, title, tap opens the Reel page).
-- `plan` events render as a **PlanCard** (icon, title, kind, "Open plan").
-- `reminder` events render as a small **ReminderPill** ("🔔 Sun 6:00 PM").
-- `status` events show as a subtle animated line above the typing indicator.
-
-### 12.5 Entry points with context
-
-- Reel page action buttons open `/ask?reel=<id>&q=<prefill>`, which sends `context.reelId`.
-- Category page suggestion chips open `/ask?category=<id>&q=<prompt>` and send immediately.
-- The orb opens `/ask` (tap) or records voice (hold), section 15.
-
----
-
-## 13. Plans
-
-### 13.1 Block schema
-
-Every plan is an ordered list of blocks. Each block and each list item has a stable `id` (nanoid), which lets checklist toggles and edits target them.
-
-```ts
-type Block =
-  | { id; type: "heading"; text: string }
-  | { id; type: "text"; markdown: string }
-  | { id; type: "checklist"; title?: string;
-      groups: { name?: string; items: { id; text: string; checked: boolean; reelId?: string }[] }[] }
-  | { id; type: "steps"; title?: string; steps: { id; text: string; reelId?: string }[] }
-  | { id; type: "table"; title?: string; columns: string[]; rows: string[][]; reelIds?: (string|null)[] }
-  | { id; type: "schedule"; title?: string;
-      days: { id; label: string; date?: "YYYY-MM-DD";
-              items: { id; time?: "HH:mm"; text: string; detail?: string; reelId?: string; done: boolean }[] }[] }
-  | { id; type: "map"; title?: string;
-      places: { id; name: string; lat?: number; lng?: number; note?: string; reelId?: string }[] }
-  | { id; type: "reels"; title?: string; reelIds: string[] }
-  | { id; type: "callout"; tone: "tip" | "warning" | "info"; text: string };
+## 12. Ask (POST /api/chat)
+Request `{ "message": "…", "history": [{ "role": "user" | "assistant", "text": "…" }] }` (client keeps the last 6). Response: `application/x-ndjson` stream, one JSON per line:
 ```
-
-The agent produces blocks without ids. The server assigns ids, validates with zod, and drops invalid blocks while logging them. For `map` blocks, places missing coordinates are geocoded on the server (Nominatim, same rules as 7.4) before saving.
-
-### 13.2 Typical compositions (guidance in the agent's tool description)
-
-| Request | Blocks |
-|---|---|
-| Grocery list from recipes | `checklist` grouped by aisle (items merged and summed when units match), `reels` |
-| Trip itinerary | `schedule` (one day per date, items with times), `map`, `callout` tips |
-| Training week | `schedule` (days with drills/exercises, `detail` = sets × reps), `table` summary |
-| Compare products | `table` (columns: name, notes, price, verdict), `text` recommendation |
-| Study summary | `heading`, `steps` or `checklist`, `callout` takeaway |
-
-### 13.3 Plan page
-
-- Header: icon, title, kind, date range, and source reel thumbnails.
-- Blocks render in order. Checklist items and schedule items are tappable to check/uncheck (`PATCH`, optimistic update).
-- Actions: **Ask about this plan** (opens Ask with plan context in the prefill), **Edit dates**, **Delete**.
-
----
-
-## 14. Reminders and Web Push
-
-### 14.1 Permission and subscription
-
-- Push only works when the app is opened from the home screen (iOS 16.4+). Profile → Notifications shows:
-  - "Add to Home Screen first" if `navigator.standalone !== true`.
-  - Otherwise an **Enable notifications** button. It must be a user gesture: `Notification.requestPermission()` → `registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: VAPID_PUBLIC_KEY })` → `POST /api/push/subscribe`.
-- Onboarding also offers this step, which can be skipped.
-
-### 14.2 Auto reminders for plans (plan-linked)
-
-When a plan is created or its dates change, delete its `scheduled` reminders with `origin: "auto_plan"` and create new ones:
-
-- **Day before start,** 18:00 local: "{title} starts tomorrow". Body: the first schedule day's first 2 items.
-- **Each dated schedule day,** 08:00 local (max 7): "Today: {day label}". Body: that day's first 3 items.
-- Skip any reminder whose `fireAt` is already in the past.
-
-The agent can also create one-off reminders (`origin: "agent"`).
-
-### 14.3 Scheduler (worker)
-
-Every 60 s:
-1. Claim due reminders one at a time: `find_one_and_update({ status: "scheduled", fireAt: { $lte: now } }, { $set: { status: "sending" } })`.
-2. Send a payload to every subscription of that user with `pywebpush`: `{ "title", "body", "url", "tag": "reminder-<id>" }`. VAPID claims: `{ "sub": VAPID_SUBJECT }`.
-3. A 404 or 410 response deletes that subscription. If at least one send succeeds, mark the reminder `sent`; otherwise mark it `failed` with the error.
-
-### 14.4 Service worker (`public/sw.js`)
-
-- `push` event → `self.registration.showNotification(title, { body, tag, data: { url }, icon: "/icons/icon-192.png", badge: "/icons/badge-72.png" })`.
-- `notificationclick` event → focus an existing client and navigate it to `data.url`, or open a new window.
-- No offline caching beyond what Next.js does by default.
-
----
-
-## 15. Voice input
-
-- The **orb** (center of the bottom bar) uses pointer events:
-  - `pointerdown` starts a 250 ms timer.
-  - **Released before 250 ms (tap):** navigate to `/ask`.
-  - **Held 250 ms or longer:** start recording via `MediaRecorder` (request the mic on first use). The orb grows and pulses, and a live level ring follows the audio volume (AnalyserNode).
-  - **Release:** stop recording, show "Transcribing…", `POST /api/voice/transcribe` (multipart, field `audio`). Then navigate to `/ask?q=<text>&send=1`.
-  - **Slide off the orb and release:** cancel.
-  - Max recording 60 s.
-- The orb CSS needs `touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;` so iOS doesn't show the long-press menu.
-- **Recorder format:** use `MediaRecorder.isTypeSupported` to pick the first of `audio/mp4`, `audio/webm;codecs=opus`, `audio/webm` (iOS Safari produces `audio/mp4`).
-- **`/api/voice/transcribe`:** send the audio inline (base64) to `GEMINI_FLASH_MODEL` with the prompt: *"Transcribe this voice message exactly. Return only the transcript text."* Pass the recorder's MIME type. If Gemini rejects `audio/mp4`, retry with `audio/aac`.
-- **Fallback (night-one check):** if server transcription fails on iPhone, use the browser's `webkitSpeechRecognition` when available. Otherwise show the text field with an error toast.
-
----
-
-## 16. Suggestions and Rediscover
-
-### 16.1 Category suggestions (Plan it chips)
-
-- **`refresh_suggestions` job (worker):** send `GEMINI_FLASH_MODEL` the category path and its ready reels' `title` + `type` + one-line summary (max 40). Ask for **3 suggestions**, each `{ label ≤ 45 chars, prompt }`, that turn several saves into something actionable: plans, lists, comparisons, routines, summaries. Each must reference real counts/themes from the list (e.g. "Grocery list for your 6 Thai recipes"). Use structured output. Store them on the category with `suggestionsReelCount = reelCount`.
-- **Home** shows up to 3 chips: one from each of the 3 categories with the most recent `savedAt`.
-- Tapping a chip opens `/ask?category=<id>&q=<prompt>&send=1`.
-
-### 16.2 Rediscover (in-app only)
-
-`GET /api/rediscover` returns up to 5 ready reels where `savedAt < now − 14 days` **and** (`lastViewedAt` is null **or** `lastViewedAt < now − 30 days`). They're randomly ordered with a seed of `userId + today's date`, so the list stays stable for the day. It's shown on the Plans & Reminders page as "From your archive", with a "Why you saved it" line (the summary).
-
-`POST /api/reels/:id/viewed` sets `lastViewedAt` and increments `viewCount` whenever a Reel page is opened.
-
----
-
-## 17. API reference
-
-All routes are under `web/app/api`. Unless noted, they require a Clerk session (`auth()` → `userId`) and return JSON. Errors use the shape `{ error: "<code>", message: "<human text>" }` with the appropriate HTTP status.
-
-| Method & path | Auth | Purpose |
-|---|---|---|
-| `POST /api/ingest` | **Bearer API token** | Shortcut ingest `{ url, note? }` → `201 { reelId, status, duplicate }`. `401 invalid_token`, `400 unsupported_url`. |
-| `POST /api/reels` | session | Paste/share-target ingest `{ url, note? }` (same response) |
-| `GET /api/reels` | session | `?categoryId&subcategoryId&type&status&cursor&limit=24` → `{ items, nextCursor }` (cursor = last `savedAt` + `_id`) |
-| `GET /api/reels/recent` | session | The 10 most recent reels in any status, for the "Recently saved" row |
-| `GET /api/reels/:id` | session | Full reel (without embedding) |
-| `PATCH /api/reels/:id` | session | `{ title?, userNote?, categoryId?, subcategoryId?, card? }`, adds edited fields to `userEdited`, updates centroids/counts on move |
-| `DELETE /api/reels/:id` | session | Delete the reel and its thumbnail, update counts and centroid |
-| `POST /api/reels/:id/retry` | session | For `failed` reels: reset to `queued`, enqueue a job |
-| `POST /api/reels/:id/reprocess` | session | Re-run extraction (keeps `userEdited` fields) |
-| `POST /api/reels/:id/viewed` | session | Update `lastViewedAt`, `viewCount` |
-| `GET /api/thumbnails/:reelId` | session | Image bytes, `Cache-Control: private, max-age=86400` |
-| `GET /api/categories` | session | Tree: `[{ id, name, icon, color, reelCount, totalCount, subcategories: [...] }]` (`totalCount` includes subcategories) |
-| `POST /api/categories` | session | `{ name, parentId?, icon?, color? }` |
-| `PATCH /api/categories/:id` | session | `{ name?, icon?, color?, description?, parentId?, sortOrder? }` |
-| `POST /api/categories/:id/merge` | session | `{ intoId }` |
-| `DELETE /api/categories/:id` | session | Moves reels to the parent or "Unsorted" |
-| `GET /api/categories/:id/suggestions` | session | Cached suggestions |
-| `GET /api/suggestions` | session | Home suggestions (16.1) |
-| `GET /api/search` | session | `?q&categoryId?&type?` → `{ items, routedTo?: { id, path } }` |
-| `POST /api/ask` | session | Streaming chat agent (section 12) |
-| `GET /api/conversations` | session | Recent conversations `[{ id, title, updatedAt }]` |
-| `GET /api/conversations/:id` | session | Messages for display |
-| `POST /api/voice/transcribe` | session | multipart `audio` → `{ text }` |
-| `GET /api/plans` | session | `[{ id, title, kind, icon, color, startDate, endDate, updatedAt }]` |
-| `GET /api/plans/:id` | session | Full plan |
-| `PATCH /api/plans/:id` | session | `{ title?, startDate?, endDate?, blocks? }` (regenerates auto reminders when dates change) |
-| `PATCH /api/plans/:id/items/:itemId` | session | `{ checked }` or `{ done }`, toggles a checklist/schedule item |
-| `DELETE /api/plans/:id` | session | Also cancels its reminders |
-| `GET /api/reminders` | session | `?status=scheduled` → upcoming reminders, sorted by `fireAt` |
-| `PATCH /api/reminders/:id` | session | `{ status: "canceled" }` or `{ fireAt }` (snooze) |
-| `POST /api/push/subscribe` | session | Save a subscription (upsert by endpoint) |
-| `DELETE /api/push/subscribe` | session | `{ endpoint }` |
-| `GET /api/me` | session | Creates the user document on first call (lazy, from the Clerk profile). Returns the profile, `hasToken`, `apiTokenPreview`, `onboarded` |
-| `PATCH /api/me` | session | `{ displayName?, timezone?, interests? }` |
-| `POST /api/me/onboard` | session | `{ interests[] }`: seeds categories, sets `onboardedAt` |
-| `POST /api/me/token` | session | Create or regenerate the API token → `{ token }` (shown once) |
-| `GET /api/rediscover` | session | Section 16.2 |
-
-**Clerk middleware** protects everything except `/sign-in`, `/sign-up`, `/api/ingest`, `/manifest.webmanifest`, `/sw.js`, and `/icons/*`. Signed-in users without `onboardedAt` are redirected to `/onboarding`.
-
----
-
-## 18. Frontend: screens and components
-
-**Stack:** Next.js (App Router, TypeScript), Tailwind CSS, shadcn/ui (Radix primitives), **vaul** for bottom sheets, **framer-motion** for motion, **lucide-react** icons, **react-leaflet** + OpenStreetMap tiles for maps, **react-markdown**, **SWR** for data fetching, **zod** for validation, **nanoid**.
-
-### 18.1 App shell (signed-in layout)
-
-- **Top area:** page title in the display serif. On Home, a greeting plus an avatar button (→ Profile).
-- **Bottom bar,** fixed and floating: inset 20 px from each side and 14 px from the bottom (plus `env(safe-area-inset-bottom)`), 66 px tall, radius 33 px. White at 84% opacity with `backdrop-filter: blur(22px) saturate(1.6)`, a hairline ring, and a soft drop shadow.
-  - Left: **Home** (house icon + 11 px label). The current tab is `--ink`; the other is `--ink-3`.
-  - Center: **the Orb**, 70 px, raised 30 px above the bar, with a 5 px white ring and a lavender-tinted shadow. Its fill is a conic gradient of the six orb tones (section 19.1), blurred 9 px and rotating once every 16 s, under a white highlight at the top-left. It breathes (scale 1 → 1.035, 4.5 s). Accessible label: "Ask Brain. Hold to speak." Tap and hold behavior is in section 15.
-  - While recording: the orb scales to 1.2 with a soft lavender halo, its gradient spins faster, and a dark pill appears above the bar with a 5-bar waveform and "Listening. Release to send."
-  - Right: **Plans** (calendar-check icon + label). A small dot appears when a reminder fires within 24 h.
-- Bottom bar hidden on: Ask (it has its own composer), onboarding, sign-in.
-
-### 18.2 Home (dashboard of your tastes)
-
-Built to match `mockups/index.html`. In the interface, categories are called **tastes**.
-
-Top to bottom:
-1. **Greeting:** "Good evening, Ali" in the display serif at 32 px, with the subline "{n} saves across {m} tastes" (14 px, `--ink-3`). A 44 px round avatar button (lavender, the user's initial) sits top-right and opens Profile.
-2. **Search field:** 52 px tall, radius 18, `--surface` fill, search icon, placeholder "Search your saves". As you type (debounced 250 ms), an overlay sheet shows results from `/api/search` as ReelRows, plus a final row **"Ask Brain: '{query}' →"** that sends the query to Ask.
-3. **Recently saved:** a header row with the title (16 px, weight 600) and an **Add** pill button (36 px, hairline border, plus icon) that opens the Add sheet. Below it, a horizontal rail of **ReelTiles**, 148 px wide with a 12 px gap and scroll snapping, bleeding to the screen edges.
-   - Each tile: thumbnail (3:4, radius 20), then a meta row (type pill + relative time), then the title (14.5 px, weight 600, clamped to 2 lines). The meta row comes before the title so tiles stay aligned whatever the title length.
-   - Type pill: 22 px tall, in the card type's pastel pair (section 19.1). Labels: Recipe, Product, Travel, Drill, Workout, Lesson, Motivation.
-   - **Processing tile:** the thumbnail area shows a slow-drifting pastel gradient (lavender → sky → peach) with the live `stage` text and four step dashes that fill as stages complete; the text area shows two skeleton bars. Poll every 3 s while any reel is not `ready`/`failed`. When the reel becomes ready, the thumbnail fades in from blurred and slightly enlarged (about 0.8 s), the text is filled in, the counts on the page update, and a toast says "{title} filed under {category path}".
-   - Failed tiles show a muted card with "Couldn't grab this reel · Retry".
-4. **Make something of it:** up to 3 suggestion chips (section 16.1) in a horizontal rail. Each is a 44 px pill in its category's pastel pair with a sparkle icon.
-5. **Your tastes:** a 2-column grid with a 12 px gap.
-   - The taste with the most saves gets a **wide tile** spanning both columns: icon, name (display serif, 30 px), "{n} saves", a fan of three portrait thumbnails (62 × 82 px, radius 16, rotated −8°, 0° and 8°), and chips for its top 3 subcategories (name + count, on white at 62% opacity).
-   - Every other taste gets a **standard tile:** minimum height 156 px, radius 24, padding 16, pastel background. Icon (22 px) top-left; a stack of three overlapping 40 px thumbnails (radius 13, bordered in the tile's pastel) top-right; name (display serif, 23 px, `--ink`) and "{n} saves" (13 px, the pastel's deep color) at the bottom.
-   - The last tile is **New taste:** a dashed outline with a plus icon.
-6. **Add sheet** ("Add a reel"): a link field with a **Save** button (plus an optional note field), then "Or send it straight from the app" with three numbered steps: tap Share on any reel, choose Save to Brain, it shows up here in under a minute. If the Shortcut isn't set up yet, the steps link to Profile → Sharing. Pasting a link that's already saved shows "Already in your saves".
-
-**Empty state (no reels):** a composition of pastel shapes and the orb, "Your saved reels will live here", and two buttons: **Set up sharing** and **Paste a link**.
-
-### 18.3 Category page (`/c/[categoryId]`)
-
-- **Header:** a full-width pastel band in the category color with the icon, name, description (one line, muted) and count. Overflow menu: rename, change color/icon, merge, delete.
-- **Subcategory chips** (horizontal): "All", then each subcategory with its count. Selecting one filters the grid. Long-press a chip to rename it.
-- **Plan it row:** that category's 3 suggestion chips.
-- **Reel grid:** 2 columns of ReelCards (thumbnail, title, 1-line summary, type icon). Infinite scroll.
-- **Empty:** "Nothing here yet. Share a reel and Brain will file it."
-
-### 18.4 Reel page (`/r/[reelId]`)
-
-Built to match `mockups/index.html`, which shows the recipe card. The other card types use the same skeleton and swap the facts row, the primary action and the type card body (section 9). Where this order differs from section 9.8, this section wins.
-
-- **Hero:** the thumbnail, full-bleed, 318 px tall, with no gradient or badge on it. Two round white 44 px buttons sit 16 px from the top: **Back** (left) and **More** (right; edit title, reprocess, delete).
-- **Panel:** a white sheet with 30 px top corners that overlaps the hero by 30 px. Inside, top to bottom:
-  1. A row with the **category pill** (36 px, the category's pastel pair, icon + "Food › Thai" + a small chevron) and "Saved {relative time}" on the right.
-  2. **Title** in the display serif at 34 px.
-  3. **Byline:** "@{handle} on {Platform} · {duration}" (13.5 px, `--ink-3`).
-  4. **Summary** (16 px, `--ink-2`).
-  5. **Facts row:** icon + text items. Recipe: total time, "Serves {n}", difficulty.
-  6. **Actions:** a full-width primary button (52 px, `--ink`, fully rounded) for the type's main action, then two secondary buttons side by side: **Ask about this** and **Open original**. The row is not sticky.
-  7. **Your note:** a butter-pastel block (radius 20) with the label "Your note" and the note text. Tap to edit.
-  8. **The type card.** Section titles use the display serif at 24 px. For a recipe:
-     - **Ingredients**, with a servings stepper on the right (minus, "{n} servings", plus; range 1–8). Changing it rescales every amount: grams round to the nearest 5 g, other amounts to the nearest quarter shown with fraction glyphs (¼ ½ ¾), and count nouns switch between singular and plural. It also updates "Serves {n}" in the facts row.
-     - Each ingredient is a checklist row (minimum 52 px tall, hairline divider) with a round tick. Checked rows fill the tick in peach-deep and strike through the text.
-     - **Steps:** numbered, each number in a 34 px peach circle set in the display serif.
-     - **Tip:** a mint circle with a lightbulb icon, then the tip with its first phrase in bold.
-  9. **How Brain read this:** a `--surface` block (radius 22) with one row per source: the source name, then what was taken from it. A source that was ignored is struck through and says why (e.g. "Caption: Skipped. It was about a giveaway, not the recipe."). Rows come from `captionAssessment`, `extraction.tiersUsed` and `extraction.fieldSources`.
-  10. **What's said in the video:** a collapsible row that expands to the transcript, with timestamps in lavender-deep tabular numerals. Tapping a timestamp opens the original link.
-- **File under sheet:** opened by the category pill. One 54 px row per destination: a 34 px rounded icon square in the category's pastel, "Category › Subcategory", and a check on the current one, ending with "+ New subcategory". Choosing a row moves the reel, updates the pill's color, icon and label, and shows the toast "Moved to {path}".
-- **Processing state:** if not ready, show the live stage with step dots (Grabbing → Reading → Watching → Filing).
-- **Failed state:** reason, message, **Retry**.
-
-### 18.5 Ask (`/ask`)
-
-- Full-screen chat. **Header:** back, "Brain" with a small orb avatar, and a "New chat" button.
-- **Empty state:** the large orb in the middle, "Ask anything about your saves", and 4 starter chips built from the user's top categories (e.g. "What did I save about fragrances?", "Make a training week from my drills").
-- **Messages:** user bubbles in ink-on-pastel; assistant messages on white, without bubble chrome, with the small orb avatar. ReelChips, PlanCards and ReminderPills render inline (12.4).
-- **Composer** (bottom, safe-area aware): a text field, a **mic button** (same hold-to-speak behavior as the orb), and Send.
-- **Query params:** `q` prefills the composer; `send=1` sends automatically; `reel`/`category` set the context, shown as a removable chip above the composer ("About: Weeknight Pad Thai ✕").
-- A conversation list is available from the header ("History" sheet).
-
-### 18.6 Plans & Reminders (`/plans`)
-
-Three sections:
-1. **Coming up:** the next 5 scheduled reminders (time, title, plan icon). Swipe to cancel.
-2. **Your plans:** PlanCards in a single column (icon, title, kind, date range, source thumbnails), sorted by `updatedAt`.
-3. **From your archive:** Rediscover reels (16.2) as a horizontal row.
-
-Empty state: "Ask Brain to turn your saves into a plan", with a button that opens Ask with a suggestion.
-
-### 18.7 Plan page (`/plans/[planId]`)
-
-Per section 13.3. Block components: `HeadingBlock`, `TextBlock`, `ChecklistBlock`, `StepsBlock`, `TableBlock` (horizontal scroll on narrow screens), `ScheduleBlock` (day cards with time chips), `MapBlock`, `ReelsBlock`, `CalloutBlock`.
-
-### 18.8 Profile (`/profile`)
-
-Sections, as grouped rounded lists:
-1. **You:** name, timezone (auto-detected, editable).
-2. **Your tastes:** category manager. Drag to reorder; tap a category to edit name, icon, color (pastel swatches), and description, and to manage its subcategories (rename, promote, merge, delete). "Merge into…" and "Delete" open confirmation sheets.
-3. **Interests:** the onboarding chips, editable. Adding a chip creates a category.
-4. **Sharing:** shows the token state ("Token ending …k3F"), **Copy token / Regenerate**, an **Install "Save to Brain"** button (opens `NEXT_PUBLIC_SHORTCUT_URL`), and a step-by-step guide with small illustrations.
-5. **Notifications:** status and the Enable button (14.1).
-6. **Account:** Clerk `<UserButton>` / sign out.
-
-### 18.9 Onboarding (`/onboarding`)
-
-Four short steps with a progress dot row:
-1. **Welcome:** the orb, "Don't save it. Send it.", and one line about what Brain does.
-2. **What do you save?** Interest chips (10.1).
-3. **Connect sharing:** generate the token (shown with Copy), the **Install Shortcut** button, and "I'll do it later".
-4. **Try it:** "Share any reel to Save to Brain now." The page polls `/api/reels/recent`. When a reel appears, show its live processing tile and then the finished card. Also offers **Paste a link instead** and **Skip**. Optional: enable notifications.
-
-### 18.10 Shared components
-
-`Orb`, `BottomBar`, `CategoryTile`, `ReelTile`, `ReelCard`, `ReelRow`, `ReelChip`, `TypeBadge`, `CategoryPill`, `SuggestionChip`, `PlanCard`, `ReminderPill`, `ProcessingShimmer`, `StageDots`, `BottomSheet` (vaul), `EmptyState`, `Toast` (sonner), the per-type card components (`RecipeCard`, `ProductCard`, `TravelCard`, `SportsDrillCard`, `WorkoutPlanCard`, `EducationalCard`, `MotivationalCard`), and the plan block components.
-
----
-
-## 19. Design system
-
-**Feel:** bright, friendly, calm. White space, soft pastels, elegant serif headings, and tactile motion. Built for a phone held in one hand. `mockups/index.html` shows it applied (section 19.7).
-
-### 19.1 Color tokens (CSS variables, Tailwind theme)
-
-| Token | Value | Use |
-|---|---|---|
-| `--bg` | `#FFFFFF` | page |
-| `--surface` | `#F8F6F2` | search field, inputs, grouped blocks |
-| `--line` | `#ECE9E3` | hairlines, secondary button borders |
-| `--ink` | `#1E1F24` | primary text, primary buttons |
-| `--ink-2` | `#4A4D58` | secondary text |
-| `--ink-3` | `#6E717C` | placeholder, meta |
-| `--focus` | `#6A58E6` | focus rings, text caret |
-
-Pastel pairs for categories, badges and tinted blocks. The pastel is always a background; text and icons on it use its deep color or `--ink`. Every deep color is dark enough to pass WCAG AA (4.5:1) on its pastel.
-
-| Name | Pastel | Deep |
-|---|---|---|
-| peach | `#FFE3D3` | `#8F3D18` |
-| butter | `#FFF3C4` | `#735700` |
-| mint | `#D6F2E2` | `#1A6B43` |
-| sky | `#D8EBFF` | `#1F5FA8` |
-| lavender | `#E7E0FF` | `#5B48C2` |
-| rose | `#FFDDE7` | `#A2305A` |
-| sage | `#E3ECD6` | `#4D6B2E` |
-| sand | `#F2E8DA` | `#7A5B34` |
-
-Card type colors: recipe = peach, product = rose, travel = sky, sports_drill = butter, workout_plan = mint, educational = lavender, motivational = sage.
-
-Orb tones (brighter than the pastels, used only in the orb's gradient and the listening waveform): `#FFB896`, `#B9A6FF`, `#8EC5FF`, `#9BE3BE`, `#FFE38A`, `#FFA6C1`.
-
-Primary button: `--ink` background, white text, fully rounded, 52 px tall. Secondary: white with a `--line` border. Destructive: rose-deep text.
-
-Text selection uses the lavender pastel. Toasts are `--ink` with white text, radius 18.
-
-**Light theme only.** The design is intentionally white. Set `color-scheme: light`, and set `theme-color` to `#FFFFFF`.
-
-### 19.2 Typography
-
-- Display: **Hedvig Letters Serif** (Google Fonts; one weight, 400; optical size axis 12–24). Used for the greeting, page and reel titles, taste names, section titles on the Reel page, sheet titles, step numerals, and quotes. Letter-spacing −0.01em to −0.015em, line-height 1.08–1.15. Fallbacks: `"Iowan Old Style", "Palatino Linotype", Georgia, serif`.
-- UI and body: **Figtree** (400, 500, 600, 700). Fallbacks: `"Avenir Next", "Segoe UI", system-ui, sans-serif`.
-- Display sizes (px): 34 reel title · 32 greeting · 30 wide taste name · 24 section and sheet titles · 23 taste names.
-- UI sizes (px): 16 block titles and summary · 15.5 list rows and step text · 15 body · 14.5 tile titles and buttons · 13.5 pills and byline · 12.5 meta · 11 tab labels. Line-height 1.5 for body, 1.3 for tile titles.
-- Use tabular numerals for amounts, timestamps and the servings count.
-- Load both with `next/font/google`.
-
-### 19.3 Shape, depth, spacing
-
-- Radii (px): 18 (search field, inputs, toasts) · 20 (reel thumbnails, note block) · 22–24 (taste tiles, grouped blocks) · 30 (sheets and the Reel page panel) · 33 (bottom bar) · full (buttons, pills, chips, the orb).
-- Shadows are soft and always offset downward. Floating bar: `0 0 0 1px rgba(30,31,36,.06), 0 14px 34px -12px rgba(30,31,36,.28)`. Round hero buttons: `0 6px 18px -6px rgba(30,31,36,.45)`. Orb: `0 0 0 5px #FFFFFF, 0 14px 26px -8px rgba(110,92,230,.55)`. Thumbnail stacks get a small shadow so they lift off the tile.
-- Spacing on a 4-pt grid. Page side padding 20 px. 30 px between Home sections; 38 px between Reel page sections.
-- Minimum tap target 44 × 44 px.
-
-### 19.4 Motion
-
-- One easing for everything: `cubic-bezier(.22, 1, .36, 1)` (or a framer-motion spring that feels the same). Pressed elements scale to 0.97.
-- **Opening a reel:** the Reel page slides in from the right over 0.55 s while Home shifts 24% to the left underneath it. Going back reverses it.
-- **Sheets** slide up over 0.5 s with a 32% `--ink` scrim behind them.
-- **Processing tile:** the gradient drifts back and forth over 5 s; the finished thumbnail fades in from blurred. No confetti.
-- **Toasts** rise 14 px and fade in, then leave after about 2.6 s.
-- The orb animates as described in 18.1. While recording, its scale is driven by the audio level.
-- Respect `prefers-reduced-motion`: stop the orb rotation, gradient drift and waveform, and make transitions near-instant.
-
-### 19.5 Accessibility
-
-- All text contrast meets WCAG AA. Pastels are backgrounds only; text on pastel uses the matching deep color or `--ink`.
-- Every icon button has an `aria-label`. Focus rings are visible (2 px `--focus`, 2 px offset). The orb has a keyboard alternative (Enter opens Ask).
-- Checklist rows are real checkboxes, sheets are dialogs that trap focus and close on Escape, and the screen behind an open sheet or page is `inert`.
-
-### 19.6 Icons
-
-Never use icon as icons. All icons are line icons from **lucide-react** at a 1.75 stroke width with round caps and joins, in `currentColor`.
-
-Categories and plans store an **icon key**, not an icon. The extraction agent and the chat agent must choose from this list; anything else is stored as `other`.
-
-| Key | lucide-react icon | Key | lucide-react icon |
+{"type":"step","label":"Checking your saves"}
+{"type":"cards","cards":[Card]}
+{"type":"plans","tickets":[Ticket]}
+{"type":"answer","text":"…","confidence":"high|low|none","save_ids":["…"]}
+{"type":"done"}
+{"type":"error","message":"Ask didn't answer. Try again."}
+```
+Card: `{save_id, title, type, thumb_url, saved_on: "Oct 3", snippet, url}`.
+Agent: GEMINI_MODEL_FAST, same loop rules as 8.4, max 5 turns, force `respond` from turn 4, timeout 30 s.
+Tools: `search_saves(query, type?, limit ≤ 8)`, `get_save(save_id)` (fields, summary, transcript max 3,000 chars), `list_plans(range: week|upcoming|done)`, `propose_plans(save_ids ≤ 5)` (code only: for each save, reuse or create a plan in proposed state with fresh options from slots.py, reserving earlier picks so plans don't collide; returns tickets), `respond(text ≤ 600 chars, confidence, save_ids)` (terminal).
+System prompt:
+```
+You are Ask, inside Realize. You help the user find and use reels they saved.
+Today is {today_local} ({timezone}).
+- Call search_saves before answering anything about their saves. Use get_save for details.
+- Only state facts that appear in saves you retrieved. If nothing matches, say so plainly and use
+  confidence none. If two saves fit, include both; never guess which one they mean.
+- When they ask to plan, schedule or make something from their saves, call propose_plans with the
+  matching save_ids. The app shows each plan as a ticket they confirm. Never say a plan was added;
+  say it's ready to confirm.
+- Finish with respond: 1 to 3 short sentences, answer first. Don't list everything you found; the
+  app shows cards. save_ids are the saves that answer the question, best first.
+- confidence: high if a save clearly answers it, low if one partly does, none if nothing does.
+```
+Server side: after `respond`, emit cards for save_ids. If confidence is none, emit the top 3 search results as cards; the UI labels them "Closest ones".
+
+## 13. Web app
+### 13.1 Routes
+`/` landing (no key) or redirect to `/plans`; `/demo` sample feed; `/setup`; `/plans` (home); `/library`; `/s/[id]` save detail; `/ask`; `/settings`; `/p/[id]` public plan page (token); `/map` stretch. All pages are client components; data via SWR with a fetch wrapper that adds `Authorization: Bearer <localStorage rl_key>`. Thumbnails use plain `<img>` with `/api/t/{thumb_id}`.
+### 13.2 Auth on the web
+- "Use it for real": POST /api/users with the browser timezone → store the key in localStorage `rl_key`.
+- Laptop to phone: the QR code encodes `{PUBLIC_BASE_URL}/setup#k=<key>`. /setup reads the fragment, stores it, then clears it with history.replaceState.
+- No key on an app route → redirect to `/`.
+### 13.3 Ticket (the one shape every list returns)
+```jsonc
+{ "save_id": "…", "plan_id": "…" | null, "url": "…", "title": "…" | null, "type": "recipe" | null,
+  "creator": "@chefjohn", "thumb_url": "/api/t/…" | null, "saved_on": "Oct 3",
+  "processing": "queued|reading|planning|planned|enriching|ready|failed", "failure_message": null,
+  "is_sample": false,
+  "plan": null | { "status": "proposed|accepted|declined|done|skipped", "intent": null | "later",
+    "actionable": true, "question": "…", "why": "…", "confidence": "sure|best_guess",
+    "options": [{ "id": "opt_1", "label": "…", "web_label": "Add to Thursday", "big_time": "Thu 6:30 pm",
+                  "secondary": "+3 groceries", "action": "event|reminder" }],
+    "extras": [{ "id": "later", "label": "Not now" }, { "id": "none", "label": "Just vibes" }],
+    "chosen": Option | null, "big_time": "Thu 6:30 pm" | null,
+    "followup_due": false, "confirmed_via": "web|shortcut" | null,
+    "gcal_url": "…" | null, "ics_url": "…" | null, "reminders_preview": ["Groceries, Thu 12 pm"] },
+  "steps": [{ "label": "Checking your week", "state": "done|current|failed", "ms": 412 }] }
+```
+`followup_due` = accepted and now > ends_at. `steps` come from the latest run, in detail and poll responses only. Mirror these types in web/lib/types.ts.
+### 13.4 Live updates
+After POST /api/save with wait 0, the web polls GET /api/saves/{id} every 700 ms while processing is queued, reading or planning, then every 3 s while enriching, then stops. Steps print as they appear (DESIGN.md motion 1). Over 30 s still queued: show the "finishes in the background" copy. Live paste with no worker seen in the last 60 s (from /api/health): show the offline copy.
+### 13.5 Desktop
+At 1100 px or wider: a 440 px app column plus a 560 px side panel with the agent trace for the selected ticket (and the map if built). Below that: one column, with the trace in a bottom sheet.
+
+## 14. Demo mode
+- `POST /api/demo/session {timezone?}` (10 per hour per IP): creates a user with is_demo true and expires_at now + 24 h. Copies every featured sample into saves (status ready, is_sample, source sample). Plans: the first two actionable recipe or workout samples are accepted into the first free slots; one other sample stays proposed ("Waiting on you"); the rest are declined (library only). Returns `{api_key, expires_at}`.
+- `GET /api/demo/samples` (key optional): non-featured samples `[{shortcode, url, title, creator, caption_excerpt, thumb_url, type, saved}]`.
+- Saving a sample: POST /api/save with source sample → section 8.6.
+- Limits per demo user: 3 non-sample saves (live paste), 20 chats. Messages: "That's the live limit for this demo. The samples still work." and "That's the chat limit for this demo."
+- Judge user: `python -m scripts.create_user --judge --label judge` (is_judge true, no expiry, 30 saves per hour).
+- `scripts/reset_demo.py` deletes all demo users and their documents (TTL does this too).
+
+## 15. API reference
+Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with `{ "message": "…" }`.
+| method | path | auth | purpose |
 |---|---|---|---|
-| `food` | `Utensils` | `tech` | `Cpu` |
-| `fragrance` | custom (`i-scent` in the mockup) | `beauty` | `Sparkles` |
-| `travel` | `Plane` | `money` | `Wallet` |
-| `basketball` | custom (`i-ball` in the mockup) | `nature` | `Leaf` |
-| `fitness` | `Dumbbell` | `groceries` | `ShoppingBasket` |
-| `learning` | `BookOpen` | `calendar` | `CalendarCheck` |
-| `motivation` | `Flame` | `map` | `Map` |
-| `style` | `Shirt` | `compare` | `Scale` |
-| `gaming` | `Gamepad2` | `other` | `Bookmark` |
-| `home` | `House` | `music` | `Music` |
+| GET | /api/health | none | `{ok, db, worker_last_seen_s, hybrid_mode, planner_mode, models}` |
+| GET | /api/config | none | `{app_name, public_base_url, shortcut_url, judge_shortcut_url, first_save_reel_url, demo_enabled}` |
+| POST | /api/users | none, 5/h/IP | `{timezone?}` → `{user_id, api_key}` (shown once) |
+| GET | /api/me | key | `{user_id, is_demo, is_judge, timezone, prefs, key_preview, expires_at, counts}` |
+| PATCH | /api/me | key | `{timezone?, prefs?}` |
+| POST | /api/me/key | key | new key → `{api_key}`; the old one stops working |
+| POST | /api/save | key | section 6 |
+| GET | /api/saves | key | `?type&limit=30&before=<iso>` → `{items: Ticket[], next_before}` |
+| GET | /api/saves/{id} | key | `{ticket, details: {caption, summary, fields, transcript, on_screen_text, entities, unverified, enrich_error}, runs: AgentRun[]}` |
+| POST | /api/saves/{id}/confirm | key | section 7 |
+| POST | /api/saves/{id}/unconfirm | key | section 7 |
+| POST | /api/saves/{id}/replan | key | fresh options from slots.py, plan back to proposed ("Plan again") |
+| POST | /api/saves/{id}/retry | key | failed → queued + propose job |
+| DELETE | /api/saves/{id} | key | deletes the save, its plan, its runs and its owned thumbnail |
+| GET | /api/plans | key | `?range=week` → `{waiting: Ticket[], days: [{label: "Thursday, Nov 19", items: Ticket[]}], done: Ticket[], later_count}`; `?range=upcoming` → days beyond this week |
+| POST | /api/plans/{id}/status | key | `{status: "done"|"skipped"|"accepted"}` (accepted = undo) |
+| GET | /api/search | key | `?q&type` → `{items: (Ticket & {snippet})[], mode}` |
+| POST | /api/chat | key | section 12 |
+| GET | /api/agent_runs | key | `?save_id` → runs with full steps |
+| GET | /api/public/plans/{id} | `?t=` | `{ticket}` |
+| POST | /api/public/plans/{id}/status | `?t=` | `{status: "done"|"skipped"}` |
+| GET | /api/public/plans/{id}/ics | `?t=` | text/calendar |
+| GET | /api/t/{thumb_id} | none | image, `Cache-Control: public, max-age=86400` |
+| POST | /api/demo/session | none, 10/h/IP | section 14 |
+| GET | /api/demo/samples | optional | section 14 |
+| GET | /api/map | key | stretch (phase 8) |
+| GET | /api/debug/sleep | DEBUG_ENDPOINTS only | `?s=` |
 
-The two custom icons are small inline SVGs; copy them from the `<symbol>` definitions at the top of `mockups/index.html`.
-
-### 19.7 Reference mockup
-
-`mockups/index.html` is a clickable mockup of **Home** and the **Reel page** (recipe card). `mockups/README.md` explains how to open it and what is clickable.
-
-- For **look and layout** (spacing, sizes, colors, type, motion), the mockup is the source of truth for those two screens. Match it, and carry the same language to the screens it doesn't show.
-- For **behavior and data**, this spec is the source of truth. The mockup fakes its data and skips features such as search, real voice capture and note editing.
-- The mockup is plain HTML, CSS and JavaScript. Rebuild it with the stack in section 18 rather than copying its code structure.
-- Its reels, names, counts and recipe are sample content, and its photos are public-domain placeholders for reel thumbnails.
-
----
-
-## 20. PWA and iPhone specifics
-
-- **`app/manifest.ts`:** `name: "Reel Brain"`, `short_name: "Brain"`, `display: "standalone"`, `start_url: "/"`, `background_color: "#FFFFFF"`, `theme_color: "#FFFFFF"`, icons 192/512 plus a maskable icon, and `share_target`:
-  ```json
-  { "action": "/share-target", "method": "GET",
-    "params": { "title": "title", "text": "text", "url": "url" } }
-  ```
-- **Head:** `apple-touch-icon` (180 px), `apple-mobile-web-app-capable=yes`, `apple-mobile-web-app-status-bar-style=default`, and viewport `width=device-width, initial-scale=1, viewport-fit=cover`.
-- **Layout:** use `env(safe-area-inset-*)` paddings. Use `100dvh` heights (not `100vh`). Inputs use 16 px font size to prevent iOS zoom on focus. `overscroll-behavior: none` on the shell.
-- **Service worker:** register `/sw.js` on app load (needed for push).
-- **Install prompt:** if on iOS Safari and not standalone, show a dismissible banner: "Add Reel Brain to your Home Screen: tap Share → Add to Home Screen".
-- **Clerk inside a home-screen app:** sign-in must complete inside the standalone app (Clerk's embedded `<SignIn>` component, no OAuth redirect to an external browser). Use email + password or an email code, not Google OAuth, to avoid iOS standalone redirect issues.
-
----
-
-## 21. Error handling
-
-| Situation | Behavior |
+## 16. Messages for failures (exact copy; never apologize)
+| reason | message |
 |---|---|
-| Unsupported URL (not Instagram/TikTok) | `400 unsupported_url`. The Shortcut notification shows the response body's `message`: "Only Instagram and TikTok links work right now." |
-| Invalid/missing token | `401 invalid_token`, message "Open Reel Brain → Profile to copy your token." |
-| Duplicate share | `200` with `duplicate: true`. The note is appended. |
-| Private/unavailable reel | Reel `failed` (`private`/`unavailable`), message shown on the tile and Reel page, Retry available. |
-| Instagram rate-limit/login wall | Transient: retried 3× with backoff. Then `failed` (`blocked`), message "Instagram blocked the download. Try again in a few minutes." The worker logs a loud warning (switch to the laptop worker or refresh cookies). |
-| Video longer than 10 min | `failed` (`too_long`). |
-| Gemini errors (429/5xx) | Transient retry (job backoff). In `/api/ask`: one retry after 2 s, then an `error` event with "Brain is overloaded, try again in a moment." |
-| Agent produced no valid card | Deterministic fallback (8.6), then `failed` (`processing_error`). |
-| Worker crash mid-job | The lease expires after 120 s and another worker (or the restarted one) reclaims the job. |
-| Change stream disconnect | Resume with the stored resume token. The 5 s polling covers any gap. |
-| Push subscription expired | Deleted on 404/410. Profile shows notifications as off. |
-| Category routing filtered too much | The unfiltered re-run covers it (11.2 step 4). |
-| `$rankFusion` unsupported | Manual RRF fallback (11.3). |
+| private | Saved, but this reel is private, so I can't read it. |
+| unavailable | Saved, but Instagram says this post isn't available. |
+| not_video | Saved, but this post has no video. Realize reads reels. |
+| blocked | Saved. Instagram is slowing me down. I'll keep trying. |
+| processing_error | Saved. Couldn't read this reel yet. Tap Try again in Realize. |
+| bad key | Your Realize key doesn't work. Get a new one at {PUBLIC_BASE_URL}/setup. |
+| rate limit | Slow down a little. Try again in a minute. |
+| Gemini down (planner) | the deterministic fallback; the user still gets a ticket |
+| Gemini down (Ask) | Ask didn't answer. Try again. |
 
-UI conventions: toasts for transient errors; inline error states with Retry for failed loads; never a blank screen.
+## 17. Security
+- user_id comes from the key, never the body. Keys hashed (sha256), rotatable.
+- Rate limits (in-memory, single uvicorn process): save 20/min per key; chat 15/min per key; demo and user creation per IP (uvicorn `--proxy-headers --forwarded-allow-ips="*"` behind Caddy).
+- Only instagram.com URLs reach yt-dlp; only Instagram CDN hosts are fetched for thumbnails. No other outbound fetches.
+- Public plan routes require share_token (constant-time compare).
+- Same origin through Caddy; no CORS.
+- Secrets live only in .env and secrets/. Demo data expires on its own.
+- Videos are deleted from disk and from Gemini Files after processing; every save links to the creator's post.
 
----
-
-## 22. Security and privacy
-
-- Every database query includes `userId` from the server session or token, **never** from the request body.
-- API tokens: random, stored hashed, regenerable. `/api/ingest` is rate-limited per token to 30 requests/minute (in-memory map is fine for this build).
-- `fetch_linked_page` only fetches `http(s)` URLs found in the reel's own caption or on-screen text. It blocks private IP ranges and `localhost`, caps responses at 2 MB, and has a 10 s timeout.
-- Instagram cookies live only on the worker host (`chmod 600`) and are listed in `.gitignore`. Secrets go in environment variables, never in the repo.
-- Videos are deleted from disk and from Gemini Files right after processing. Only derived text, embeddings, and a small thumbnail are kept, and every card links back to the original creator's post.
-
----
-
-## 23. Configuration and environment variables
-
-### 23.1 `web/.env.local` (and Vercel project env)
-
+## 18. Deployment
+server/Dockerfile:
+```dockerfile
+FROM python:3.12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 ```
-MONGODB_URI=mongodb+srv://…
-MONGODB_DB=reelbrain
-GEMINI_API_KEY=…
-GEMINI_PRO_MODEL=           # newest Pro model listed by the Gemini API (e.g. gemini-2.5-pro or newer)
-GEMINI_FLASH_MODEL=         # newest Flash model (e.g. gemini-2.5-flash or newer)
-GEMINI_EMBED_MODEL=gemini-embedding-001
-EMBED_DIM=768
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=…
-CLERK_SECRET_KEY=…
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=…
-NEXT_PUBLIC_SHORTCUT_URL=https://www.icloud.com/shortcuts/…
-NEXT_PUBLIC_APP_NAME=Reel Brain
-NEXT_PUBLIC_ASSISTANT_NAME=Brain
-ROUTE_MIN_SIM=0.55
-ROUTE_MARGIN=0.06
+web/Dockerfile: multi-stage on node:22-slim, `output: "standalone"` in next.config, runs `node server.js` on port 3000.
+docker-compose.yml:
+```yaml
+services:
+  api:
+    build: ./server
+    command: uvicorn realize.api.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*
+    env_file: .env
+    restart: unless-stopped
+  worker:
+    build: ./server
+    command: python -m realize.worker
+    env_file: .env
+    environment:
+      WORKER_ID: vultr-1
+    volumes:
+      - ./secrets:/secrets:ro
+    restart: unless-stopped
+  web:
+    build: ./web
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    ports: ["80:80", "443:443", "443:443/udp"]
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api, web]
+    restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:
 ```
-
-> Gemini model names change often. On night one, list the available models (`client.models.list()`) and set `GEMINI_PRO_MODEL` / `GEMINI_FLASH_MODEL` to the newest Pro and Flash models that support function calling, structured output, and video input. Code must read models only from these variables.
-
-### 23.2 `worker/.env`
-
+If cookies are used on the server, set `INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt` in the server's .env.
+Caddyfile (no compression on /api so NDJSON streams aren't buffered):
 ```
-MONGODB_URI=mongodb+srv://…
-MONGODB_DB=reelbrain
-GEMINI_API_KEY=…
-GEMINI_PRO_MODEL=…
-GEMINI_FLASH_MODEL=…
-GEMINI_EMBED_MODEL=gemini-embedding-001
-EMBED_DIM=768
-WORKER_ID=vultr-1            # "laptop-ali" when running locally
-WORKER_CONCURRENCY=3
-INSTAGRAM_COOKIES_PATH=/opt/reelbrain/secrets/instagram_cookies.txt
-VAPID_PUBLIC_KEY=…
-VAPID_PRIVATE_KEY=…
-VAPID_SUBJECT=mailto:<team contact email>
-NEW_CATEGORY_DUP_THRESHOLD=0.86
-HTTP_USER_AGENT=ReelBrain-Hackathon/1.0
+{$DOMAIN} {
+	handle /api/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+	handle {
+		encode zstd gzip
+		reverse_proxy web:3000
+	}
+}
 ```
+requirements.txt: fastapi, uvicorn[standard], pymongo, dnspython, google-genai, pydantic, pydantic-settings, yt-dlp[default] (unpinned, so `docker compose build --no-cache worker` picks up Instagram fixes), httpx, Pillow, numpy, tzdata, pytest.
 
-### 23.3 Python dependencies (`worker/requirements.txt`)
+## 19. Scripts (run from server/ as `python -m scripts.<name>`)
+- check_models: lists Flash models for the key and confirms GEMINI_MODEL_FAST, GEMINI_MODEL_VIDEO and GEMINI_EMBED_MODEL exist; exits nonzero if not.
+- create_indexes: every index in section 5 plus both search indexes (`create_search_index` with SearchIndexModel; vector index type "vectorSearch"). Polls list_search_indexes until both are queryable (max 5 min). Runs one $rankFusion test query and prints whether it worked.
+- create_user `[--label NAME] [--tz ZONE] [--judge]`: prints the key once.
+- build_samples `[--only SHORTCODE]`: for fixtures/reels.csv rows with sample=yes, runs metadata, thumbnail, enrichment, embedding and planner (as a template user with default prefs) and upserts sample_cache. Needs Instagram access. Idempotent; skips rows that fail and reports them.
+- simulate_shortcut `--url URL [--key KEY] [--choose 1|2|later|none] [--base http://localhost:3000]`: does exactly what the Shortcut does; prints the prompt, menu, choice, event and reminders, plus timings. Exits nonzero if any field from sections 6 and 7 is missing.
+- eval_recall `[--user UID]`: default creates a temporary demo user holding all samples, runs fixtures/queries.csv through hybrid search, prints hit@1 and hit@3, writes eval/results.md (date, hybrid mode, counts, per-query result), deletes the temp user.
+- reset_demo: section 14.
 
-`yt-dlp[default,curl-cffi]`, `google-genai`, `pymongo[srv]`, `pydantic>=2`, `pywebpush`, `Pillow`, `httpx`, `beautifulsoup4`, `python-dotenv`, `numpy`. System packages: `ffmpeg`.
+## 20. Build phases (each ends with its PASS check, then a commit and push)
+0. Repo reconciliation (before any code).
+   - `git fetch --all --prune`; read `git log --all --oneline`, every branch, and every folder, including what teammates added since this spec was written (prototype/, docs/archive/, any web/, worker/, server/, shortcut/ or fixtures).
+   - Merge the latest main into the working branch. For each teammate file or feature: reuse it if it matches this spec (adapt names and paths), keep it in prototype/ or docs/archive/ if it doesn't, never delete it. Specifically keep prototype/ untouched; reuse its tested URL-extraction rules and Shortcut notes in urls.py and shortcut/README.md.
+   - If a teammate's newer commit changes a requirement (new fixtures, a domain, a Shortcut finding), follow it when it doesn't break sections 2, 6, 7 or 10, and log the decision.
+   - Write BUILD_LOG.md: what exists, what you reuse, what you archive, open questions with the call you made.
+   - Before each later phase, `git fetch` again; if main moved, merge it and log what changed.
+   PASS: BUILD_LOG.md lists every top-level path and every branch with a decision; working branch builds on the latest main.
+1. Skeleton and contract (PLANNER_MODE=fake). check_models, config, db, models, urls, slots, actions, ICS, gcal, auth, users, /api/save, confirm, unconfirm, health, config, create_indexes, create_user, simulate_shortcut, web skeleton with tokens and fonts. PASS: check_models passes (or .env updated per CLAUDE.md); pytest green (urls, slots including quiet hours across midnight and daily cap, labels, device actions, ICS, RRF); create_indexes reports both indexes queryable plus the $rankFusion result; simulate_shortcut (fake) prints a menu and an event at the right local time.
+2. Real propose (worker, yt-dlp, planner). PASS: simulate_shortcut on every fixture: the recipe's first option is a future weeknight 6:30 pm slot with groceries; the event's start matches its caption date; the meme gives actionable false and menu ["Remind me in a week", "Just save"]; a second share gives duplicate; median time from save to proposal printed and compared with PROPOSAL_WAIT_SECONDS. If Instagram blocks without cookies, record it in BLOCKERS.md, continue the rest of the phase with sample-style cached input, and keep going.
+3. Enrich. PASS: every fixture that downloads reaches ready; the speech-only reel has a transcript; a phrase that is only spoken in a reel finds it through /api/search; client.files.list() shows none of the uploaded files; agent_runs show propose and enrich runs.
+4. Web core (DESIGN.md): plans, library, save detail, Ask, settings, setup, agent trace. PASS: webapp-testing screenshots at 390x844 and 1440x900 for every screen and state in DESIGN.md section 9, saved to screenshots/phase4/, reviewed against the DESIGN.md checklist and fixed; 3 queries from queries.csv return the expected card in Ask.
+5. Demo mode. PASS: build_samples done; with the worker stopped, in a fresh logged-out browser: landing → Try the demo → save a sample → steps print → Add → toast and Plans shows it → an Ask chip returns cards. Repeat with an invalid GEMINI_API_KEY: the cached fallback still produces a ticket.
+6. Ship files: Dockerfiles, compose, Caddyfile, README.md (UTF-8: video and demo links as TODO, what it does, architecture diagram, local run, deploy, one section per prize with file paths, accuracy method linking eval/results.md, no invented numbers, TODO for the real saved-count stat), shortcut/README.md, .env.example. PASS: `docker compose config` validates; `docker compose build` succeeds if Docker is installed.
+7. Eval. PASS: eval/results.md written from a real run.
+8. Stretch, only if 1 to 7 pass: /api/map clusters ready embeddings (scikit-learn AgglomerativeClustering, cosine metric, average linkage, distance_threshold 0.45; singletons go to "Other"), names clusters with one GEMINI_MODEL_FAST call, edges to each node's top 2 neighbors with cosine ≥ 0.75, cached per user and save count; /map with react-force-graph-2d, clusters first, layout frozen after cooldown, nodes from the last Ask answer highlighted.
 
-### 23.4 Web dependencies
-
-`next`, `react`, `@clerk/nextjs`, `@google/genai`, `mongodb`, `zod`, `swr`, `nanoid`, `tailwindcss`, shadcn/ui components, `vaul`, `framer-motion`, `lucide-react`, `react-leaflet`, `leaflet`, `react-markdown`, `sonner`.
-
----
-
-## 24. Deployment
-
-### 24.1 MongoDB Atlas
-
-1. Create a cluster (M0 is fine), a database user, and a network access rule. Allow `0.0.0.0/0` for the hackathon, since Vercel IPs are dynamic.
-2. Run `python -m scripts.create_indexes`. It creates every regular index from section 5 and the two search indexes (`reels_vector`, `reels_text`) through `collection.create_search_index(...)` (the Vector Search index uses `type="vectorSearch"`). It waits until both report `queryable: true`.
-
-### 24.2 Vercel (web)
-
-1. Import the repo with Root Directory `web`. Add all variables from 23.1.
-2. Deploy. Copy the production domain into the Shortcut URL.
-3. The Clerk dashboard: add the Vercel domain and enable email + password / email code.
-
-### 24.3 Vultr (worker and scheduler)
-
-1. Create a Cloud Compute instance: Ubuntu 24.04 LTS, 1 vCPU / 2 GB RAM is enough. Add an SSH key.
-2. `apt update && apt install -y python3.12-venv ffmpeg git`
-3. `git clone` the repo to `/opt/reelbrain`, then `python3.12 -m venv /opt/reelbrain/venv` and `pip install -r worker/requirements.txt`.
-4. Create `/opt/reelbrain/worker/.env` (23.2) and `scp` the Instagram cookies file to `INSTAGRAM_COOKIES_PATH` (`chmod 600`).
-5. Install `worker/deploy/brain-worker.service`:
-   ```ini
-   [Unit]
-   Description=Reel Brain worker
-   After=network-online.target
-   [Service]
-   WorkingDirectory=/opt/reelbrain/worker
-   EnvironmentFile=/opt/reelbrain/worker/.env
-   ExecStart=/opt/reelbrain/venv/bin/python -m worker
-   Restart=always
-   RestartSec=5
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   Then `systemctl enable --now brain-worker` and follow logs with `journalctl -u brain-worker -f`.
-6. In the Atlas network access list, add the VPS's IP (or rely on `0.0.0.0/0`).
-
-### 24.4 Laptop fallback
-
-From `worker/`: create a venv, `pip install -r requirements.txt`, copy `.env` with `WORKER_ID=laptop-<name>`, then `python -m worker`. Both workers can run at the same time. If Instagram blocks the VPS, stop the VPS worker (`systemctl stop brain-worker`) so it doesn't keep claiming Instagram jobs and failing them.
-
-Optional improvement: a `WORKER_PLATFORMS=instagram,tiktok` env filter, so the VPS can handle only TikTok while a laptop handles Instagram.
-
-### 24.5 Demo data
-
-`python -m scripts.seed --user <clerkUserId> --file demo_urls.txt` enqueues 40–80 real public reels across the team's interests (recipes, fragrances, Lisbon/travel, basketball drills, gym splits, Pokémon/educational, motivational speeches). Run it on night one so the demo account is full.
-
----
-
-## 25. Night-one verification checklist
-
-Do these before building features on top of them. Each one has a fallback already designed in.
-
-1. **Instagram download from the Vultr IP** with throwaway cookies, tested on 5 real reels. If blocked, use the laptop worker (24.4).
-2. **TikTok download** with `curl-cffi` impersonation, on 3 real videos.
-3. **Shortcut to production:** Instagram → Share → Save to Brain → `/api/ingest` → reel appears on Home.
-4. **Gemini video analysis:** upload a 60 s reel, poll until ACTIVE, and get a structured `VideoAnalysis` back. Note the latency.
-5. **Gemini function calling** in Python with a manual loop, and forcing `finalize_card` with `mode: ANY`.
-6. **Embeddings:** `gemini-embedding-001` at 768 dims, normalized. Similar reels score higher than unrelated ones.
-7. **Atlas:** both search indexes queryable. Check whether `$rankFusion` runs on the cluster; if not, switch on the RRF fallback.
-8. **Change stream** on `jobs` works on the cluster tier (polling covers it either way).
-9. **Web Push on iPhone:** install to the home screen, enable notifications, and receive a test push sent from the worker.
-10. **Voice:** iPhone `MediaRecorder` audio → `/api/voice/transcribe` → correct text.
-11. **Clerk sign-in** completes inside the home-screen app.
-12. **Routing thresholds:** on the seeded data, run 15 test queries and adjust `ROUTE_MIN_SIM` / `ROUTE_MARGIN` so obvious queries route and ambiguous ones don't.
-
----
-
-## 26. Acceptance criteria
-
-The build is done when all of these hold on an iPhone using the home-screen app:
-
-1. Sharing an Instagram reel through the Share sheet → Save to Brain shows "Saved ✓" in under 3 s. The reel then appears on Home with live stage text and becomes a complete, correct card within ~60 s.
-2. The same works for a TikTok link and for a pasted link.
-3. A reel with an irrelevant caption ("follow for part 2 #fyp") still produces a correct card from the video. Its "How Brain read this" chips show the video as the source.
-4. A reel whose caption contains the full recipe finishes without analyzing the video (`tiersUsed: ["caption"]`) and is noticeably faster.
-5. A silent reel with only on-screen text produces a correct card from that text.
-6. New reels are filed into existing categories when they fit. A new interest creates a new category, and a recurring theme creates a subcategory. Moving a reel by hand is never undone by reprocessing.
-7. Searching "pad thai" finds the pad thai reel first. Searching "that crossover drill" finds the basketball reel even though those exact words aren't in it.
-8. In Ask, "Bring up the pad thai recipe I saved" answers with the recipe and a ReelChip.
-9. "Make me a 4-day ball-handling week starting Monday from my saves" creates a plan with a schedule block linked to the source drills. Auto reminders are created, and the day-before reminder arrives as a push notification. (For the demo, test with a plan starting tomorrow, or set a reminder 2 minutes out via Ask.)
-10. "Grocery list for my Thai recipes" creates a checklist grouped by aisle with merged quantities. Items can be checked off.
-11. Holding the orb, speaking a question, and releasing sends the transcribed question to Ask.
-12. Categories and subcategories can be renamed, recolored, merged, and deleted in Profile, and reels follow correctly.
-13. A private or unavailable reel shows as failed with a clear reason and a working Retry.
-14. Every screen looks right at 375–430 px wide, respects safe areas, has no horizontal scroll, and matches the design system. Home and the Reel page match `mockups/index.html`.
-
----
-
-## 27. Demo script and pitch
-
-### 27.1 One-liner
-
-> **Instagram's Save is where good ideas go to die. Send them to Brain instead: you get the useful part back instantly, you can ask for it anytime, and it comes back when you need it.**
-
-Add a stat from a quick survey of hackathon attendees: how many reels they've saved, and when they last opened their saved folder.
-
-### 27.2 Two-minute demo
-
-1. **Problem (15 s):** scroll a real, messy Instagram saved folder. "Where was that pad thai recipe?"
-2. **Send it (25 s):** live on stage, Instagram reel → Share → Save to Brain → "Saved ✓". Switch to Reel Brain: the tile shows "Watching the video…".
-3. **While it processes (25 s):** show Home: tastes as pastel tiles. Open Basketball → Ball Handling. Search "that crossover drill" and it's found.
-4. **The card lands (20 s):** the live reel becomes a full recipe card in Food › Thai. Point out "How Brain read this": the caption was irrelevant, so Brain watched the video and read the on-screen text. (This is the agentic and Gemini story.)
-5. **Plan it (25 s):** hold the orb and say "Make me a 4-day ball-handling week starting tomorrow." A plan appears with a schedule linked to the saved drills, and a reminder is set. Show the push notification arriving on the phone.
-6. **Close (10 s):** architecture in one slide. Gemini (video understanding, two agents, embeddings) + MongoDB Atlas (vector + keyword hybrid search with `$rankFusion`, Change Streams, the job queue) + Vultr (the AI worker and scheduler) + Vercel.
-
-### 27.3 Prize talking points
-
-- **Gemini:** native video understanding, tiered agentic extraction, embedding-based category routing, and a chat agent with tools.
-- **MongoDB Atlas:** one cluster as document store, vector store, search engine, job queue (Change Streams + atomic leases), and thumbnail store. Hybrid search with `$rankFusion` and pre-filtered vector search.
-- **Agentic:** two agents. One decides how much of the video it needs to watch; the other turns saves into plans and reminders.
-- **Impact:** converts passive consumption into action: cooking, training, and traveling from what you already saved.
-- **UI/UX:** pastel tastes dashboard, hold-to-speak orb, live processing, per-type cards.
-- **Vultr:** always-on worker for video processing and the reminder scheduler.
-
----
-
-## 28. Out of scope
-
-- Public launch, App Store, TestFlight, native iOS code.
-- YouTube Shorts and other platforms.
-- Bulk import of past saves from Instagram's data export.
-- Instagram DM bot, Telegram, iMessage.
-- Knowledge graph view.
-- Proactive "rediscover" push notifications (the in-app section only).
-- Sharing plans with friends, collaboration, payments.
-- Dark mode, desktop layout, offline mode.
+## 21. Out of scope
+TikTok and other platforms, the Instagram API, native iOS app, Android share target, Web Push, Google Calendar OAuth, location reminders, voice input, recommendations, price alerts, bulk import from the Instagram export, collaboration, payments, dark mode, offline mode.

@@ -1,0 +1,603 @@
+"""Unit tests for the pure functions: URLs, slots, labels, device actions, ICS, RRF.
+None of these touch Atlas, Gemini or Instagram."""
+from __future__ import annotations
+
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
+import pytest
+from bson import ObjectId
+
+from realize import actions, planops, ratelimit, search, slots, thumbs, urls, ytdlp
+from realize.models import default_prefs
+from realize.timeutil import big_time, fmt_text, fmt_time, long_day, short_day
+
+NY = ZoneInfo("America/New_York")
+
+
+def user(**prefs):
+    p = default_prefs()
+    p.update(prefs)
+    return {"_id": "u_test", "timezone": "America/New_York", "prefs": p}
+
+
+def ny(y, mo, d, h=0, mi=0):
+    return datetime(y, mo, d, h, mi, tzinfo=NY)
+
+
+# Saturday Nov 14 2026, 3:05 am, the moment in the spec's example prompt.
+NOW = ny(2026, 11, 14, 3, 5)
+
+
+# ---------- urls ----------
+
+@pytest.mark.parametrize("text,code,url", [
+    ("https://www.instagram.com/reel/ABC123/", "ABC123", "https://www.instagram.com/reel/ABC123/"),
+    ("https://instagram.com/reels/Ab-_9/?igsh=xyz", "Ab-_9", "https://www.instagram.com/reel/Ab-_9/"),
+    ("Check out this reel https://m.instagram.com/tv/XYZ?utm=1 wow", "XYZ", "https://www.instagram.com/reel/XYZ/"),
+    ("https://www.instagram.com/chef.john_1/reel/DfYi19kRNT0/", "DfYi19kRNT0",
+     "https://www.instagram.com/reel/DfYi19kRNT0/"),
+    ("http://www.instagram.com/p/CODE1/", "CODE1", "https://www.instagram.com/p/CODE1/"),
+])
+def test_extract(text, code, url):
+    link = urls.extract(text)
+    assert link and link.shortcode == code and link.url == url
+
+
+@pytest.mark.parametrize("text", ["", None, "hello", "https://www.tiktok.com/@a/video/1",
+                                   "https://www.instagram.com/chefjohn/", "https://evil.com/instagram.com/reel/A/"])
+def test_extract_rejects(text):
+    assert urls.extract(text) is None
+
+
+# ---------- time labels ----------
+
+def test_labels():
+    assert fmt_time(time(18, 30)) == "6:30 pm"
+    assert fmt_time(time(12, 0)) == "12 pm"
+    assert fmt_time(time(7, 0)) == "7 am"
+    assert fmt_time(time(0, 5)) == "12:05 am"
+    assert short_day(ny(2026, 11, 14, 19), NOW) == "Today"
+    assert short_day(ny(2026, 11, 15, 12), NOW) == "Tomorrow"
+    assert short_day(ny(2026, 11, 19, 18, 30), NOW) == "Thu"
+    assert short_day(ny(2026, 11, 20, 18, 30), NOW) == "Fri"       # 6 days out
+    assert short_day(ny(2026, 11, 21, 18, 30), NOW) == "Nov 21"    # 7 days out
+    assert long_day(ny(2026, 11, 14, 19), NOW) == "today"
+    assert long_day(ny(2026, 11, 19, 18, 30), NOW) == "Thursday"
+    assert long_day(ny(2026, 11, 26, 18, 30), NOW) == "Nov 26"
+    assert big_time(ny(2026, 11, 19, 18, 30), NOW) == "Thu 6:30 pm"
+    assert big_time(ny(2026, 11, 26, 18, 30), NOW) == "Nov 26, 6:30 pm"
+    assert fmt_text(ny(2026, 11, 19, 18, 30)) == "Nov 19, 2026 at 6:30 PM"
+    assert fmt_text(ny(2026, 11, 19, 12, 0)) == "Nov 19, 2026 at 12:00 PM"
+
+
+# ---------- quiet hours ----------
+
+def test_quiet_across_midnight():
+    assert slots.in_quiet(time(23, 0), "22:00", "08:00")
+    assert slots.in_quiet(time(2, 0), "22:00", "08:00")
+    assert slots.in_quiet(time(22, 0), "22:00", "08:00")
+    assert not slots.in_quiet(time(8, 0), "22:00", "08:00")
+    assert not slots.in_quiet(time(18, 30), "22:00", "08:00")
+
+
+def test_quiet_same_day_window():
+    assert slots.in_quiet(time(13, 0), "12:00", "14:00")
+    assert not slots.in_quiet(time(14, 0), "12:00", "14:00")
+    assert not slots.in_quiet(time(9, 0), "00:00", "00:00")
+
+
+# ---------- slots ----------
+
+def test_recipe_slots_are_future_weeknights():
+    found = slots.find_free_slot(user(), "recipe", now=NOW, accepted=[])
+    assert [s["start_local"] for s in found] == [
+        "2026-11-16T18:30", "2026-11-17T18:30", "2026-11-18T18:30", "2026-11-19T18:30", "2026-11-20T18:30"]
+    assert found[0]["big_time"] == "Mon 6:30 pm" and found[0]["long_day"] == "Monday"
+    assert len(found) <= 5
+
+
+def test_slot_needs_an_hour_of_notice():
+    now = ny(2026, 11, 16, 18, 0)  # Monday, 30 min before cook time
+    found = slots.find_free_slot(user(), "recipe", now=now, accepted=[])
+    assert found[0]["start_local"] == "2026-11-17T18:30"
+
+
+def test_slot_skips_overlap_and_reserved():
+    busy = [{"start_utc": ny(2026, 11, 16, 18, 0).astimezone(UTC), "end_utc": ny(2026, 11, 16, 19, 0).astimezone(UTC)}]
+    found = slots.find_free_slot(user(), "recipe", now=NOW, accepted=busy)
+    assert found[0]["start_local"] == "2026-11-17T18:30"
+    res = [{"start_utc": ny(2026, 11, 17, 18, 30).astimezone(UTC), "end_utc": ny(2026, 11, 17, 19, 30).astimezone(UTC)}]
+    found = slots.find_free_slot(user(), "recipe", now=NOW, accepted=busy, reserved=res)
+    assert found[0]["start_local"] == "2026-11-18T18:30"
+
+
+def test_daily_cap():
+    # Two accepted plans on Monday that don't overlap 6:30 pm still fill the day at cap 2.
+    day = [
+        {"start_utc": ny(2026, 11, 16, 7, 0).astimezone(UTC), "end_utc": ny(2026, 11, 16, 7, 45).astimezone(UTC)},
+        {"start_utc": ny(2026, 11, 16, 12, 0).astimezone(UTC), "end_utc": ny(2026, 11, 16, 13, 0).astimezone(UTC)},
+    ]
+    found = slots.find_free_slot(user(), "recipe", now=NOW, accepted=day)
+    assert found[0]["start_local"] == "2026-11-17T18:30"
+    found = slots.find_free_slot(user(daily_cap=3), "recipe", now=NOW, accepted=day)
+    assert found[0]["start_local"] == "2026-11-16T18:30"
+
+
+def test_quiet_hours_block_a_slot_that_runs_into_them():
+    # Cooking at 9:30 pm for 60 min ends at 10:30 pm, inside quiet hours that cross midnight.
+    u = user(cook_time="21:30")
+    assert slots.find_free_slot(u, "recipe", now=NOW, accepted=[]) == []
+    assert len(slots.find_free_slot(u, "recipe", duration_min=30, now=NOW, accepted=[])) == 5
+
+
+def test_preferred_time_inside_quiet_window_is_a_deliberate_choice():
+    # Default workouts are 7 am with quiet until 8 am; the user set both, so the slot stands.
+    found = slots.find_free_slot(user(), "workout", now=NOW, accepted=[])
+    assert found[0]["start_local"] == "2026-11-16T07:00"
+    assert found[0]["duration_min"] == 45
+
+
+def test_place_slots_are_weekends():
+    found = slots.find_free_slot(user(), "place", now=NOW, accepted=[])
+    assert found[0]["start_local"] == "2026-11-14T12:00"
+    assert found[1]["start_local"] == "2026-11-15T12:00"
+    assert found[0]["big_time"] == "Today 12 pm"
+
+
+def test_not_before_and_not_after():
+    found = slots.find_free_slot(user(), "recipe", not_before="2026-11-18T00:00",
+                                 not_after="2026-11-19T23:00", now=NOW, accepted=[])
+    assert [s["start_local"] for s in found] == ["2026-11-18T18:30", "2026-11-19T18:30"]
+
+
+# ---------- reminder times ----------
+
+def test_reminder_times():
+    u = user()
+    assert slots.reminder_due("product", u, now=NOW, accepted=[]).astimezone(NY) == ny(2026, 11, 17, 18)
+    assert slots.reminder_due("week", u, now=NOW, accepted=[]).astimezone(NY) == ny(2026, 11, 21, 9)
+    # NOW is a Saturday: "next Saturday" is a week out, never today.
+    assert slots.reminder_due("place", u, now=NOW, accepted=[]).astimezone(NY) == ny(2026, 11, 21, 10)
+    assert slots.reminder_due("event_no_date", u, now=NOW, accepted=[]).astimezone(NY) == ny(2026, 11, 16, 18)
+
+
+def test_reminder_moves_out_of_quiet_hours_and_off_full_days():
+    u = user(quiet_start="17:00", quiet_end="20:00")
+    assert slots.reminder_due("product", u, now=NOW, accepted=[]).astimezone(NY) == ny(2026, 11, 17, 20)
+    full = [{"start_utc": ny(2026, 11, 17, 9).astimezone(UTC), "end_utc": ny(2026, 11, 17, 10).astimezone(UTC)}] * 2
+    assert slots.reminder_due("product", user(), now=NOW, accepted=full).astimezone(NY) == ny(2026, 11, 18, 18)
+
+
+def test_ticket_reminder_only_a_day_before():
+    u = user()
+    far = ny(2026, 11, 20, 20).astimezone(UTC)
+    near = ny(2026, 11, 15, 20).astimezone(UTC)
+    assert slots.reminder_due("event_ticket", u, now=NOW, event_start=far).astimezone(NY) == ny(2026, 11, 15, 18)
+    assert slots.reminder_due("event_ticket", u, now=NOW, event_start=near) is None
+
+
+# ---------- options and labels ----------
+
+RECIPE = {"recipe": {"total_time_min": 40, "ingredients": [
+    {"qty": 2, "unit": "tbsp", "item": "gochujang"}, {"qty": 1, "unit": "", "item": "butternut squash"},
+    {"qty": 0.5, "unit": "cup", "item": "butter"}], "steps": ["Roast the squash.", "Toss with butter."]}}
+
+
+def recipe_options():
+    found = slots.find_free_slot(user(), "recipe", now=NOW, accepted=[])
+    return actions.build_options("recipe", "Gochujang butter squash", RECIPE, user(), slots=found,
+                                 now=NOW, accepted=[])
+
+
+def test_recipe_options():
+    built = recipe_options()
+    o1, o2 = built["options"]
+    assert o1["label"] == "Cook Mon 6:30 pm + 3 groceries"
+    assert o1["web_label"] == "Add to Monday" and o1["big_time"] == "Mon 6:30 pm"
+    assert o1["secondary"] == "+3 groceries" and o1["action"] == "event" and o1["duration_min"] == 40
+    assert o2["label"] == "Cook Tue 6:30 pm + 3 groceries" and o2["id"] == "opt_2"
+    plan = {"options": built["options"], "actionable": True}
+    assert actions.menu_for(plan) == [o1["label"], o2["label"], "Not now", "Just vibes"]
+
+
+def test_meme_menu():
+    built = actions.build_options("other", "Potato to polar bear", {}, user(), now=NOW, accepted=[])
+    plan = {"options": built["options"], "actionable": False}
+    assert actions.menu_for(plan) == ["Remind me in a week", "Just save"]
+    assert built["options"][0]["action"] == "reminder"
+
+
+def test_workout_place_product_options():
+    w = actions.build_options("workout", "Sculpt", {"workout": {"duration_min": 20}}, user(),
+                              slots=slots.find_free_slot(user(), "workout", now=NOW, accepted=[]),
+                              now=NOW, accepted=[])["options"]
+    assert w[0]["label"] == "Train Mon 7 am" and w[0]["secondary"] == "20 min"
+    p = actions.build_options("place", "Somssi", {"place": {"places": [{"name": "Somssi", "city": "New York"}]}},
+                              user(), slots=slots.find_free_slot(user(), "place", now=NOW, accepted=[]),
+                              now=NOW, accepted=[])["options"]
+    assert p[0]["label"] == "Visit Today 12 pm" and p[0]["action"] == "event" and p[0]["secondary"] == "Somssi"
+    assert p[1]["label"] == "Remind me Nov 21" and p[1]["action"] == "reminder"
+    pr = actions.build_options("product", "Curling iron", {}, user(), now=NOW, accepted=[])["options"]
+    assert pr[0]["label"] == "Remind me Tue" and pr[0]["web_label"] == "Remind me Tuesday"
+
+
+def test_event_options():
+    future = {"event": {"name": "Carrie: The Musical", "start_local": "2026-11-14T19:00", "venue": "Bowker Auditorium"}}
+    b = actions.build_options("event", "Carrie", future, user(), now=NOW, accepted=[])
+    assert b["options"][0]["label"] == "Add Today 7 pm" and b["options"][0]["web_label"] == "Add to calendar"
+    assert b["options"][0]["duration_min"] == 120 and b["actionable"] is None
+    past = {"event": {"name": "Old show", "start_local": "2026-11-10T19:00"}}
+    b = actions.build_options("event", "Old show", past, user(), now=NOW, accepted=[])
+    assert b["options"] == [] and b["actionable"] is False and b["why"] == "This was on Nov 10. It's passed."
+    undated = actions.build_options("event", "Some show", {"event": {"name": "Some show"}}, user(), now=NOW, accepted=[])
+    assert undated["options"][0]["label"] == "Remind me to check dates"
+
+
+def test_labels_are_short_and_unique():
+    found = slots.find_free_slot(user(), "recipe", now=NOW, accepted=[])
+    same = [found[0], found[0]]
+    opts = actions.build_options("recipe", "T", RECIPE, user(), slots=same, now=NOW, accepted=[])["options"]
+    labels = [o["label"] for o in opts]
+    assert len(set(labels)) == 2 and all(len(x) <= 38 for x in labels)
+
+
+def test_match_choice():
+    plan = {"options": recipe_options()["options"], "options_prev": [
+        {"id": "opt_1", "label": "Cook Sun 6:30 pm", "action": "event", "start_utc": NOW, "duration_min": 60}],
+        "actionable": True}
+    assert actions.match_choice(plan, "opt_2")[1]["label"].startswith("Cook Tue")
+    assert actions.match_choice(plan, "  cook mon 6:30 PM + 3 groceries ")[1]["id"] == "opt_1"
+    assert actions.match_choice(plan, "Cook Sun 6:30 pm")[0] == "option"
+    assert actions.match_choice(plan, "Not now")[0] == "later"
+    assert actions.match_choice(plan, "Just vibes")[0] == "none"
+    assert actions.match_choice(plan, "Just save")[0] == "none"
+    assert actions.match_choice(plan, "nonsense")[0] == "nomatch"
+
+
+def test_custom_option_must_be_future():
+    with pytest.raises(ValueError):
+        actions.custom_option("recipe", "2026-11-13T18:00", "T", RECIPE, user(), now=NOW)
+    o = actions.custom_option("recipe", "2026-11-15T17:00", "T", RECIPE, user(), now=NOW)
+    assert o["id"] == "opt_custom" and o["web_label"] == "Add to tomorrow" and o["action"] == "event"
+    r = actions.custom_option("tip", "2026-11-15T17:00", "T", {}, user(), now=NOW)
+    assert r["action"] == "reminder"
+
+
+# ---------- device actions ----------
+
+def plan_doc(kind):
+    return {"_id": ObjectId("64b000000000000000000001"), "kind": kind, "share_token": "tok_tok_tok_tok_tok_22"}
+
+
+def test_recipe_device_actions():
+    opt = recipe_options()["options"][0]
+    save = {"title": "Gochujang butter squash", "fields": RECIPE}
+    da = actions.build_device_actions(plan_doc("recipe"), save, opt, user(), now=NOW)
+    ev = da["event"]
+    assert ev["title"] == "Cook: Gochujang butter squash"
+    assert ev["start_utc"].astimezone(NY) == ny(2026, 11, 16, 18, 30)
+    assert ev["end_utc"].astimezone(NY) == ny(2026, 11, 16, 19, 10)   # 40 min, within 30..120
+    assert "• 2 tbsp gochujang" in ev["notes"] and "1. Roast the squash." in ev["notes"]
+    assert ev["notes"].rstrip().endswith("/p/64b000000000000000000001?t=tok_tok_tok_tok_tok_22")
+    groceries, followup = da["reminders"]
+    assert groceries["title"] == "Groceries for Gochujang butter squash"
+    assert groceries["due_utc"].astimezone(NY) == ny(2026, 11, 16, 12, 0)   # slot is after 3 pm: noon same day
+    assert groceries["notes"].splitlines() == ["• 2 tbsp gochujang", "• 1 butternut squash", "• 0.5 cup butter"]
+    assert followup["title"] == "Did you make Gochujang butter squash?"
+    assert followup["due_utc"].astimezone(NY) == ny(2026, 11, 16, 21, 10)   # ends_at + 2 h
+    assert da["followup_at"] == followup["due_utc"]
+    assert len(da["reminders"]) <= 2
+
+
+def test_morning_slot_groceries_go_the_evening_before():
+    opt = actions.custom_option("recipe", "2026-11-16T11:00", "Brunch", RECIPE, user(), now=NOW)
+    da = actions.build_device_actions(plan_doc("recipe"), {"title": "Brunch", "fields": RECIPE}, opt, user(), now=NOW)
+    assert da["reminders"][0]["due_utc"].astimezone(NY) == ny(2026, 11, 15, 18, 0)
+
+
+def test_followup_moves_out_of_quiet_hours():
+    opt = actions.custom_option("recipe", "2026-11-16T19:30", "Late", {"recipe": {"total_time_min": 60}}, user(), now=NOW)
+    da = actions.build_device_actions(plan_doc("recipe"), {"title": "Late", "fields": {}}, opt, user(), now=NOW)
+    # ends 8:30 pm, +2 h is 10:30 pm, inside quiet hours: moved to 8 am the next day.
+    assert da["followup_at"].astimezone(NY) == ny(2026, 11, 17, 8, 0)
+
+
+def test_event_and_reminder_device_actions():
+    fields = {"event": {"name": "Carrie: The Musical", "start_local": "2026-11-20T19:00", "venue": "Bowker Auditorium",
+                        "city": "Amherst", "ticket_url": "https://example.org/t", "price_hint": "$10"}}
+    opt = actions.build_options("event", "Carrie", fields, user(), now=NOW, accepted=[])["options"][0]
+    da = actions.build_device_actions(plan_doc("event"), {"title": "Carrie", "fields": fields}, opt, user(), now=NOW)
+    assert da["event"]["title"] == "Carrie: The Musical" and da["event"]["location"] == "Bowker Auditorium, Amherst"
+    assert da["event"]["end_utc"] - da["event"]["start_utc"] == timedelta(hours=2)
+    assert da["reminders"][0]["title"] == "Get tickets: Carrie: The Musical" and da["followup_at"] is None
+    tip = actions.build_options("tip", "Focus", {}, user(), now=NOW, accepted=[])["options"][0]
+    da = actions.build_device_actions(plan_doc("tip"), {"title": "Focus", "fields": {"tip": {"key_points": ["Move first"]}}},
+                                      tip, user(), now=NOW)
+    assert da["event"] is None and da["reminders"][0]["title"] == "Revisit: Focus"
+    assert da["reminders"][0]["notes"] == "• Move first"
+
+
+# ---------- ICS and Google Calendar ----------
+
+def accepted_plan():
+    opt = recipe_options()["options"][0]
+    plan = plan_doc("recipe")
+    da = actions.build_device_actions(plan, {"title": "Gochujang butter squash", "fields": RECIPE}, opt, user(), now=NOW)
+    plan["device_actions"] = {"event": da["event"], "reminders": da["reminders"]}
+    return plan
+
+
+def test_ics():
+    ics = actions.build_ics(accepted_plan(), now=NOW)
+    assert ics.endswith("\r\n") and "\n" not in ics.replace("\r\n", "")
+    lines = ics.split("\r\n")
+    assert lines[0] == "BEGIN:VCALENDAR" and "END:VCALENDAR" in lines
+    assert ics.count("BEGIN:VEVENT") == 1 and ics.count("BEGIN:VALARM") == 2
+    assert "DTSTART:20261116T233000Z" in lines and "DTEND:20261117T001000Z" in lines   # 6:30 pm EST in UTC
+    assert "TRIGGER;VALUE=DATE-TIME:20261116T170000Z" in lines                          # groceries, noon EST
+    assert "SUMMARY:Cook: Gochujang butter squash" in lines
+    assert all(len(l.encode("utf-8")) <= 75 for l in lines)
+    unfolded = ics.replace("\r\n ", "")
+    assert "\\n• 2 tbsp gochujang" in unfolded
+
+
+def test_ics_reminder_only_is_a_15_minute_event():
+    plan = plan_doc("tip")
+    due = ny(2026, 11, 21, 9).astimezone(UTC)
+    plan["device_actions"] = {"event": None, "reminders": [{"title": "Revisit: Focus", "due_utc": due, "notes": "", "url": "u"}]}
+    ics = actions.build_ics(plan, now=NOW)
+    assert "DTSTART:20261121T140000Z" in ics and "DTEND:20261121T141500Z" in ics and ics.count("BEGIN:VALARM") == 1
+    assert "dates=20261121T140000Z%2F20261121T141500Z" in actions.gcal_url(plan)
+
+
+def test_gcal_url():
+    url = actions.gcal_url(accepted_plan())
+    assert url.startswith("https://calendar.google.com/calendar/render?action=TEMPLATE&text=Cook%3A%20Gochujang")
+    assert "dates=20261116T233000Z%2F20261117T001000Z" in url
+
+
+def test_device_payload_text_format():
+    payload = actions.device_payload(accepted_plan(), user())
+    assert payload["has_event"] == "yes"
+    assert payload["event_start_text"] == "Nov 16, 2026 at 6:30 PM"
+    assert payload["event_end_text"] == "Nov 16, 2026 at 7:10 PM"
+    assert payload["event_start_iso"] == "2026-11-16T18:30:00-05:00"
+    assert payload["reminders"][0]["due_text"] == "Nov 16, 2026 at 12:00 PM"
+    assert set(payload["reminders"][0]) == {"title", "due_text", "due_iso", "notes", "url"}
+
+
+# ---------- RRF ----------
+
+def test_rrf_merge():
+    ranked = {"vector": ["a", "b", "c"], "text": ["b", "d"]}
+    merged = search.rrf_merge(ranked)
+    assert merged[0] == "b"                        # in both lists
+    assert merged.index("a") < merged.index("d")   # vector rank 1 (0.6/61) beats text rank 2 (0.4/62)
+    assert set(merged) == {"a", "b", "c", "d"}
+    assert search.rrf_merge({"vector": [], "text": []}) == []
+
+
+def test_rrf_scores():
+    merged = search.rrf_merge({"vector": ["x"], "text": ["y"]})
+    assert merged == ["x", "y"]                    # 0.6/61 > 0.4/61
+
+
+# ---------- small guards ----------
+
+def test_error_mapping():
+    assert ytdlp.map_error("This account is private") == "private"
+    assert ytdlp.map_error("HTTP Error 404: Not Found") == "unavailable"
+    assert ytdlp.map_error("There is no video in this post") == "not_video"
+    assert ytdlp.map_error("Requested content is not available, rate-limit reached or login required") == "blocked"
+    assert ytdlp.map_error("HTTP Error 429") == "blocked"
+    assert ytdlp.map_error("something odd") == "processing_error"
+
+
+def test_thumbnail_hosts():
+    assert thumbs.allowed("https://scontent-bos5-1.cdninstagram.com/v/x.jpg")
+    assert thumbs.allowed("https://instagram.fbos1-1.fna.fbcdn.net/x.jpg")
+    assert not thumbs.allowed("https://evilcdninstagram.com/x.jpg")
+    assert not thumbs.allowed("http://scontent.cdninstagram.com/x.jpg")
+    assert not thumbs.allowed("https://example.com/cdninstagram.com/x.jpg")
+
+
+def test_rate_limit_window():
+    ratelimit.reset()
+    assert all(ratelimit.allow("users", "1.2.3.4", now=100.0 + i) for i in range(5))
+    assert not ratelimit.allow("users", "1.2.3.4", now=110.0)
+    assert ratelimit.allow("users", "5.6.7.8", now=110.0)
+    assert ratelimit.allow("users", "1.2.3.4", now=100.0 + 3601)
+
+
+def test_snippet_picks_the_matching_sentence():
+    save = {"summary": "A creamy dessert. It uses Greek yogurt instead of mascarpone.",
+            "transcript_text": "Dip the ladyfingers in espresso.", "on_screen_text": ["1 cup Greek yogurt"]}
+    assert search.snippet(save, "ladyfingers espresso") == "Dip the ladyfingers in espresso."
+
+
+# ---------- event date sanity, ongoing events, search relevance ----------
+
+def test_event_year_is_pulled_to_the_post_year():
+    posted = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
+    f = {"event": {"name": "Holiday Train Show", "start_local": "2023-11-14T00:00", "end_local": "2024-01-10T00:00"}}
+    actions.fix_event_year(f, posted)
+    assert f["event"]["start_local"] == "2026-11-14T00:00" and f["event"]["end_local"] == "2027-01-10T00:00"
+    ok = {"event": {"start_local": "2026-11-20T19:00"}}
+    actions.fix_event_year(ok, posted)
+    assert ok["event"]["start_local"] == "2026-11-20T19:00"
+    jan = {"event": {"start_local": "2025-01-05T19:00"}}   # posted in November, happens in January
+    actions.fix_event_year(jan, posted)
+    assert jan["event"]["start_local"] == "2027-01-05T19:00"
+
+
+def test_event_already_open_and_still_running_gets_a_reminder():
+    f = {"event": {"name": "Holiday Train Show", "start_local": "2026-11-13T10:00", "end_local": "2027-01-10T18:00",
+                   "venue": "New York Botanical Garden"}}
+    b = actions.build_options("event", "Train show", f, user(), now=NOW, accepted=[])
+    assert b["actionable"] is None and b["why"] == "It runs until Jan 10."
+    assert b["options"][0]["action"] == "reminder" and b["options"][0]["label"] == "Remind me Nov 21"
+
+
+def test_search_relevance_floor():
+    doc = {"title": "Easy Greek Yogurt Tiramisu", "summary": "A lighter tiramisu.", "tags": ["dessert"],
+           "embedding": [1.0, 0.0]}
+    assert search._relevant(dict(doc), "zebra unicycle", [0.7, 0.714])        # cosine 0.7 clears the floor
+    assert not search._relevant(dict(doc), "zebra unicycle", [0.5, 0.866])    # 0.5 and no shared word
+    assert search._relevant(dict(doc), "desserts for friday", [0.5, 0.866])   # shares "dessert"
+
+
+# ---------- event dates written as text ----------
+
+@pytest.mark.parametrize("text,first,last", [
+    ("November 13th and 14th", date(2026, 11, 13), date(2026, 11, 14)),
+    ("13 and 14 November", date(2026, 11, 13), date(2026, 11, 14)),
+    ("Nov 28 through Jan 3", date(2026, 11, 28), date(2027, 1, 3)),
+    ("Saturday, December 5 at 7:30 pm", date(2026, 12, 5), date(2026, 12, 5)),
+    ("Doors at 7, Dec 5", date(2026, 12, 5), date(2026, 12, 5)),
+    ("11/21", date(2026, 11, 21), date(2026, 11, 21)),
+    ("2026-12-01", date(2026, 12, 1), date(2026, 12, 1)),
+    ("January 10", date(2027, 1, 10), date(2027, 1, 10)),   # more than 60 days back means next year
+    ("March 3, 2027", date(2027, 3, 3), date(2027, 3, 3)),
+])
+def test_event_date_range(text, first, last):
+    assert actions.event_date_range({"event": {"date_text": text}}, date(2026, 11, 14)) == (first, last)
+
+
+@pytest.mark.parametrize("text", ["", "this weekend", "every Friday at 8 pm", "February 30"])
+def test_event_date_range_gives_up_without_a_day(text):
+    assert actions.event_date_range({"event": {"date_text": text}}, date(2026, 11, 14)) is None
+
+
+def test_event_date_range_uses_the_post_date_for_the_year():
+    # Saved in January 2027, posted in November 2026: "November 20" is the one just gone.
+    posted = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
+    got = actions.event_date_range({"event": {"date_text": "November 20"}}, date(2027, 1, 20), posted)
+    assert got == (date(2026, 11, 20), date(2026, 11, 20))
+
+
+def _event(date_text, now=NOW):
+    f = {"event": {"name": "Carrie: The Musical", "date_text": date_text, "venue": "Bowker Auditorium"}}
+    return actions.build_options("event", "Carrie", f, user(), now=now, accepted=[])
+
+
+def test_event_with_days_but_no_time_that_has_passed():
+    b = _event("November 10th to 12th")
+    assert b["options"] == [] and b["actionable"] is False
+    assert b["why"] == "This was on Nov 10 to Nov 12. It's passed."
+
+
+def test_event_with_days_but_no_time_gets_a_7_pm_guess():
+    b = _event("November 21")
+    o = b["options"][0]
+    assert o["action"] == "event" and o["label"] == "Add Nov 21, 7 pm" and o["duration_min"] == 120
+    assert b["actionable"] is None
+    assert b["why"] == "It's on Nov 21. The reel gives no time, so 7 pm is a guess."
+
+
+def test_event_on_its_last_day():
+    # 3:05 am on the 14th: tonight's show is still ahead.
+    b = _event("November 13th and 14th")
+    assert b["options"][0]["label"] == "Add Today 7 pm" and b["options"][0]["action"] == "event"
+    assert b["why"] == "It's on Nov 13 to Nov 14. The reel gives no time, so 7 pm is a guess."
+    # 6:45 pm: 7 pm is too close to plan for, and there is no later day.
+    late = _event("November 13th and 14th", now=ny(2026, 11, 14, 18, 45))
+    assert late["options"] == [] and late["actionable"] is False and late["why"] == "Today was the last day."
+    # With a day left, the guess moves to tomorrow.
+    more = _event("November 13th to 15th", now=ny(2026, 11, 14, 18, 45))
+    assert more["options"][0]["label"] == "Add Tomorrow 7 pm"
+
+
+def test_long_run_with_days_but_no_time_gets_a_reminder():
+    running = _event("Nov 13 through Jan 10")
+    assert running["options"][0]["action"] == "reminder" and running["options"][0]["label"] == "Remind me Nov 21"
+    assert running["why"] == "It runs until Jan 10."
+    coming = _event("Nov 28 through Jan 3")
+    assert coming["options"][0]["label"] == "Remind me Nov 27" and coming["options"][0]["big_time"] == "Nov 27, 6 pm"
+    assert coming["why"] == "It runs Nov 28 to Jan 3."
+
+
+# ---------- two plans can't take the same time ----------
+
+def test_slot_taken():
+    plan = {"_id": "p1", "kind": "recipe"}
+    opt = {"action": "event", "start_utc": ny(2026, 11, 18, 18, 30), "duration_min": 60}
+    other = {"plan_id": "p2", "start_utc": ny(2026, 11, 18, 18, 30), "end_utc": ny(2026, 11, 18, 19, 30)}
+    assert planops.slot_taken(plan, opt, user(), [other])
+    assert planops.slot_taken(plan, opt, user(), [{**other, "start_utc": ny(2026, 11, 18, 19, 0),
+                                                   "end_utc": ny(2026, 11, 18, 20, 0)}])       # partial overlap
+    assert not planops.slot_taken(plan, opt, user(), [])
+    assert not planops.slot_taken(plan, opt, user(), [{**other, "plan_id": "p1"}])               # its own booking
+    assert not planops.slot_taken(plan, opt, user(), [{**other, "start_utc": ny(2026, 11, 18, 19, 30),
+                                                       "end_utc": ny(2026, 11, 18, 20, 30)}])   # back to back
+    # A reminder takes no time, and an event keeps its own date.
+    assert not planops.slot_taken(plan, {**opt, "action": "reminder"}, user(), [other])
+    assert not planops.slot_taken({"_id": "p1", "kind": "event"}, opt, user(), [other])
+
+
+def test_slot_taken_at_the_daily_cap():
+    plan = {"_id": "p1", "kind": "recipe"}
+    opt = {"action": "event", "start_utc": ny(2026, 11, 18, 18, 30), "duration_min": 60}
+    morning = {"plan_id": "p2", "start_utc": ny(2026, 11, 18, 7, 0), "end_utc": ny(2026, 11, 18, 7, 45)}
+    noon = {"plan_id": "p3", "start_utc": ny(2026, 11, 18, 12, 0), "end_utc": ny(2026, 11, 18, 13, 0)}
+    assert not planops.slot_taken(plan, opt, user(), [morning])
+    assert planops.slot_taken(plan, opt, user(), [morning, noon])          # daily_cap is 2
+    assert not planops.slot_taken(plan, opt, user(daily_cap=3), [morning, noon])
+
+
+def test_search_puts_a_fresh_save_ahead_of_weaker_indexed_results(monkeypatch):
+    indexed = [{"_id": 1, "title": "Chickpea curry", "embedding": [1.0, 0.0]},
+               {"_id": 2, "title": "Pepper chicken", "embedding": [0.8, 0.6]}]
+    fresh = [{"_id": 3, "title": "Tiramisu", "embedding": [0.96, 0.28]},
+             {"_id": 4, "title": "Unrelated", "embedding": [0.0, 1.0]}]
+    monkeypatch.setattr(search, "_fresh", lambda uid, t, have: [dict(d) for d in fresh])
+    out = search._finish([dict(d) for d in indexed], "zzz", [1.0, 0.0], 10, "u_test", None)
+    assert [d["_id"] for d in out] == [1, 3, 2]          # 4 is under the relevance floor
+    assert all("embedding" not in d for d in out)
+
+
+
+# ---------- what a hand-built Shortcut sends ----------
+
+def test_bearer_is_forgiving():
+    from realize.api.deps import bearer
+    assert bearer("Bearer rl_abc123") == "rl_abc123"
+    assert bearer("bearer   rl_abc123  ") == "rl_abc123"
+    assert bearer("rl_abc123") == "rl_abc123"           # the word Bearer left out
+    assert bearer(' "Bearer rl_abc123" ') == "rl_abc123"
+    assert bearer("Bearer: rl_abc123") == "rl_abc123"
+    assert bearer(None) is None and bearer("  ") is None
+    assert bearer("Basic abc def") is None
+
+
+def test_save_body_typed_on_a_phone():
+    from realize.api.deps import loose_fields, save_request_from
+    reel = "https://www.instagram.com/reel/DfiT7-QxmY-/?igsh=abc=="
+    # The iOS keyboard capitalises names and values, and numbers arrive as text.
+    r = save_request_from(loose_fields(b'{"Input": "%s", "Source": "Shortcut", "Wait": "0"}' % reel.encode(),
+                                       "application/json"))
+    assert r.input == reel and r.source == "shortcut" and r.wait == 0.0
+    # The web app's own body is unchanged.
+    r = save_request_from(loose_fields(b'{"input": "x", "source": "web", "wait": 0}', "application/json"))
+    assert (r.input, r.source, r.wait) == ("x", "web", 0.0)
+    # The prototype's field name, and no wait at all.
+    r = save_request_from(loose_fields(b'{"url": "%s", "token": "me"}' % reel.encode(), "application/json"))
+    assert r.input == reel and r.source == "shortcut" and r.wait is None
+    # Request Body left on Form.
+    r = save_request_from(loose_fields(b"input=https%3A%2F%2Fwww.instagram.com%2Freel%2FAbc%2F&source=shortcut&wait=0",
+                                       "application/x-www-form-urlencoded"))
+    assert r.input == "https://www.instagram.com/reel/Abc/" and r.wait == 0.0
+    body = (b'--XX\r\nContent-Disposition: form-data; name="Input"\r\n\r\n' + reel.encode()
+            + b'\r\n--XX\r\nContent-Disposition: form-data; name="wait"\r\n\r\n0\r\n--XX--\r\n')
+    r = save_request_from(loose_fields(body, "multipart/form-data; boundary=XX"))
+    assert r.input == reel and r.wait == 0.0
+    # Nothing readable is an empty request, not a crash.
+    r = save_request_from(loose_fields(b"\xff\xfe not json", "application/json"))
+    assert r.input == "" and r.source == "shortcut"
+    assert save_request_from(loose_fields(b'{"input": "x", "wait": "soon"}')).wait is None
+
+
+def test_confirm_body_typed_on_a_phone():
+    from realize.api.deps import confirm_request_from, loose_fields
+    c = confirm_request_from(loose_fields(b'{"Choice": "Cook Mon 6:30 pm + 7 groceries", "Source": "Shortcut"}'))
+    assert c.choice == "Cook Mon 6:30 pm + 7 groceries" and c.source == "shortcut" and c.start_local is None

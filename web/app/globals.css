@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* Tokens: the mockup's palette (docs/archive/mockups/index.html), under the names the
+   Tailwind classes on the earlier screens already use. Light theme only. The mockup's own
+   class names are in mock.css. */
+:root {
+  color-scheme: light;
+  --ink: #1e1f24;
+  --paper: #ffffff; /* the page */
+  --ticket: #f8f6f2; /* cards and fields: the mockup's surface */
+  --highlighter: #fff3c4; /* butter */
+  --done: #1a6b43;
+  --done-ink: #1a6b43;
+  --muted: #6e717c;
+  --line: #ece9e3;
+  --line-strong: #cfcbc2;
+  --danger-ink: #a2305a;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-ticket: var(--ticket);
+  --color-highlighter: var(--highlighter);
+  --color-done: var(--done);
+  --color-done-ink: var(--done-ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-danger-ink: var(--danger-ink);
+  --font-sans: var(--font-figtree), "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --radius-ticket: 16px;
+  --radius-control: 12px;
+  /* The landing page's two-column layout starts here. */
+  --breakpoint-desk: 1100px;
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-figtree), "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Display type: the wordmark, the landing headline, a plan's time. */
+.wide {
+  font-family: var(--font-hedvig), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visible focus on every interactive element. */
+:where(a, button, input, textarea, select, summary, [role="button"], [role="switch"], [role="radio"], [tabindex]):focus-visible {
+  outline: 2px solid #6a58e6;
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+  font-size: 16px; /* prevents iOS zoom */
+}
+
+button,
+[role="button"],
+summary,
+label[for] {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+
+/* Raw tool-call JSON: the only monospace in the app. */
+.tool-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* The browser's own clear button on search fields is off-palette; the field is short enough to clear by hand. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Collapsibles draw their own chevron. */
+summary {
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* The current step's dot pulses while a reel is being read. */
+@keyframes step-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.step-dot-current {
+  animation: step-pulse 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-dot-current {
+    animation: none;
+  }
+}
