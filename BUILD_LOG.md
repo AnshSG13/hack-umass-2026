@@ -195,3 +195,16 @@ The user asked for more to do with a travel reel than one visit slot: an itinera
 - **Not in this slice:** frames from the reel as stop photos (needs `ffmpeg`, which this laptop doesn't have), online images, flight and hotel prices, and the cooking equivalent.
 
 Measured live (`gemini-3.5-flash`): the Rockaway Hotel reel built in 23.7 s with 4 stops and 11 sources, its day detail in 28.8 s (8 sourced highlights, 2 places to eat); moving the dates took 0.2 s; 21 of 21 checks passed. The Carrie event built in 13.4 s and 17.2 s on two runs. Prices differed between those two runs because the search cited different pages; each number links to its page. 94 unit tests pass (21 for trips and weather).
+
+## 2026-11-14: discussions on the Reel page
+
+The owner's ask: "Ask about this" sent you to the general chat, which had to find the reel again, repeated its summary back, and kept nothing. Now the Reel page has its own chat.
+
+- **A discussion knows its reel.** `server/realize/discuss.py` puts the reel (fields, caption, on-screen text, transcript with start seconds, the person's note, the plan) in the prompt. One structured-output call, no tools, no search. The prompt says the person can already see the page, so the answer starts with the answer. General knowledge is allowed and is labelled "Not from the reel."
+- **Saved with the reel.** New `discussions` collection (`user_id`, `save_id`, bounded `messages`, TTL for demo accounts; indexes in `create_indexes.py`). A question and its answer are written together, so a failed call leaves nothing. Deleting a save deletes its discussions.
+- **API:** `GET` and `POST /api/saves/{id}/discussions`, `GET` and `DELETE /api/discussions/{id}`. Demo chat limit now counts Ask and discussions together (`demo.chats_used`).
+- **The model may point at a spoken line; code checks it.** `at_sec` is snapped to a real transcript line within 3 s or dropped. The page shows "Said at 0:05", which opens the transcript at that line. `/s/{id}?t=5` does the same.
+- **Reel page:** "Ask about this" takes the orb's colours (deepened so white text passes 4.5:1) and opens the chat as a full layer. "Discussions" lists saved ones under the actions. The transcript, on-screen text and "How it was planned" sit behind one closed "Details" row.
+- New styles go in `web/app/v2.css`, so `mock.css` stays the port of the first mockup.
+
+Measured on the poutine reel (demo account, `gemini-3.5-flash`): three questions answered in 2.0 to 3.6 s. 97 unit tests pass (3 new). Checked in headless Chrome at 390x844: new discussion, reopening a saved one, a follow-up, "Said at 0:05" opening the transcript, Escape closing the layer, no console or network errors. Not checked: a real iPhone.

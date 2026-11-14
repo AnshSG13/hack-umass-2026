@@ -149,6 +149,12 @@ class ChatRequest(BaseModel):
     history: list[ChatTurn] = []
 
 
+class DiscussRequest(BaseModel):
+    """One question about one reel. No discussion_id starts a new discussion."""
+    message: str = Field(max_length=2000)
+    discussion_id: str | None = None
+
+
 class DemoSessionRequest(BaseModel):
     timezone: str | None = None
 

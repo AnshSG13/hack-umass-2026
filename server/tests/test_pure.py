@@ -601,3 +601,42 @@ def test_confirm_body_typed_on_a_phone():
     from realize.api.deps import confirm_request_from, loose_fields
     c = confirm_request_from(loose_fields(b'{"Choice": "Cook Mon 6:30 pm + 7 groceries", "Source": "Shortcut"}'))
     assert c.choice == "Cook Mon 6:30 pm + 7 groceries" and c.source == "shortcut" and c.start_local is None
+
+
+# ---------- discussions about one reel ----------
+
+
+def test_discussion_second_is_checked_against_the_transcript():
+    from realize import discuss
+
+    save = {"transcript": [{"start_sec": 0.0, "text": "Hi"}, {"start_sec": 11.0, "text": "Rinse the noodles"},
+                           {"start_sec": 30.0, "text": ""}]}
+    assert discuss.snap_second(save, 11) == 11
+    assert discuss.snap_second(save, 12.4) == 11      # close to a real line: that line
+    assert discuss.snap_second(save, 20) is None      # no line there: no link
+    assert discuss.snap_second(save, 30) is None      # an empty line doesn't count
+    assert discuss.snap_second(save, -1) is None
+    assert discuss.snap_second(save, "soon") is None
+    assert discuss.snap_second({"transcript": []}, 5) is None
+
+
+def test_discussion_answer_follows_the_copy_rules():
+    from realize import discuss
+
+    assert discuss.clean_answer("Use tofu \u2014 it **works**.\n\n\n\nDone.") == "Use tofu, it works.\n\nDone."
+    assert len(discuss.clean_answer("x" * 5000)) == discuss.ANSWER_MAX
+    assert discuss.title_from("  what   can I swap\nfor fish sauce? ") == "what can I swap for fish sauce?"
+    assert len(discuss.title_from("word " * 40)) == discuss.TITLE_MAX
+
+
+def test_discussion_context_carries_the_reel_and_the_note():
+    from realize import discuss
+
+    save = {"title": "Pad thai", "type": "recipe", "creator": {"handle": "cook"}, "summary": "Noodles.",
+            "fields": {"recipe": {"steps": ["Soak noodles"]}}, "caption": "Easy pad thai",
+            "on_screen_text": ["20 minutes"], "note": "less sugar",
+            "transcript": [{"start_sec": 11.0, "text": "Rinse the noodles"}]}
+    ctx = discuss.reel_context(save, None, {"timezone": "America/New_York"})
+    for piece in ("Title: Pad thai", "@cook", "Soak noodles", "- 20 minutes", "[11] Rinse the noodles", "less sugar"):
+        assert piece in ctx
+    assert "Transcript: none" in discuss.reel_context({"title": "x"}, None, {"timezone": "UTC"})

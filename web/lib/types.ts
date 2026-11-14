@@ -246,3 +246,26 @@ export type ChatEvent =
   | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[] }
   | { type: "done" }
   | { type: "error"; message: string };
+
+// ---- discussions: chats about one reel, saved with it ----
+export interface DiscussionMessage {
+  role: "user" | "assistant";
+  text: string;
+  at: string | null;
+  /** The transcript line the answer leans on, checked by the server. Assistant only. */
+  at_sec?: number | null;
+  at_label?: string | null; // "0:11"
+  /** false: general knowledge, not something the reel says. Assistant only. */
+  from_reel?: boolean;
+}
+export interface DiscussionSummary {
+  id: string;
+  title: string; // the first question
+  questions: number;
+  updated_at: string;
+  preview: string;
+}
+export interface Discussion extends DiscussionSummary {
+  save_id: string;
+  messages: DiscussionMessage[];
+}

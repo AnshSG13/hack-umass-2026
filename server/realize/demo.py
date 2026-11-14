@@ -23,6 +23,11 @@ TRIP_LIMIT = 3  # trip plans per demo session; each one is paid searches
 TRIP_LIMIT_MESSAGE = "That's the trip limit for this demo."
 
 
+def chats_used(user: dict) -> int:
+    """Questions a demo session has asked, in Ask and in reel discussions together."""
+    return db.agent_runs().count_documents({"user_id": user["_id"], "kind": {"$in": ["ask", "discuss"]}})
+
+
 def sample_for(shortcode: str) -> dict | None:
     return db.sample_cache().find_one({"_id": shortcode})
 

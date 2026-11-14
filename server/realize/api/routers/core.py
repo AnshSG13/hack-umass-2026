@@ -161,8 +161,7 @@ def chat(body: ChatRequest, user: dict = Depends(current_user)):
     if not ratelimit.allow("chat", user["_id"]):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
     if user.get("is_demo"):
-        used = db.agent_runs().count_documents({"user_id": user["_id"], "kind": "ask"})
-        if used >= demo.CHAT_LIMIT:
+        if demo.chats_used(user) >= demo.CHAT_LIMIT:
             raise HTTPException(status_code=429, detail=demo.CHAT_LIMIT_MESSAGE)
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Type a question first.")
