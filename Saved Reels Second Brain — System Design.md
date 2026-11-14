@@ -10,17 +10,34 @@ Users share Instagram reels to our bot account; we turn each one into searchable
 
 **Pitch.** "Your saved folder is a graveyard of good ideas. We turn it into a second brain."
 
+**Product template: ReciMe.** We model the app's UX on ReciMe (4.8★, the leading recipe importer), which already proves the loop "share a video → get a clean, structured, actionable card." ReciMe does this for recipes only; we generalize it to every kind of reel. What we borrow:
+
+| ReciMe pattern | Our version |
+| --- | --- |
+| Share a TikTok/IG video to the app → structured recipe | Share a reel to our bot (or paste a link) → structured card for any type |
+| Import fallbacks: caption → audio → linked website | Caption → transcript → on-screen text/visuals |
+| Importing modal → save form with cookbook picker → "Open recipe / Done" | Processing card → "Saved to Travel" with a one-tap collection change |
+| Cookbooks (grid with cover photos, "New cookbook" tile) | Collections: auto-created categories plus user-made ones |
+| Recipe detail: hero, action buttons, ingredients, steps, notes | Reel detail: hero, actions, type-specific card, transcript, notes |
+| Ingredients → grocery list sorted by aisle, duplicates merged | Actionables → Lists: groceries, places to visit, things to buy |
+| Meal planner (assign recipes to days) | Plan: drop saves into days (meal plan, trip itinerary, workout week); stretch |
+| "Ask ReciMe" assistant on a recipe (swaps, questions) | "Ask" on one reel, plus chat across all saves |
+| Cook mode (step-by-step, screen stays on) | Step-by-step mode for recipes and workouts; stretch |
+
 **Hackathon scope (must have)**
 
-- Share a reel to the bot → it appears in the app, processed, within about a minute
+- Share a reel to the bot (or paste its link in the app) → it appears in the app, processed, within about a minute
+- Structured, type-specific cards: recipe → ingredients + steps, place → name + city + map pin, product → name + link, workout → exercises, idea → key points
 - Semantic search across transcript, on-screen text, caption and visuals
-- Auto-categories and a knowledge graph view
+- Collections (auto-categories, editable) and a knowledge graph view
+- Lists: one-tap "Add to groceries / places / wishlist" from any card
 - "Chat with your saves" (e.g. plan a trip from saved travel reels)
 
 **Stretch**
 
 - Bulk import of old saves from Instagram's data export
-- Structured extraction: recipe → ingredient list, place → map pin, product → link
+- Plan view (week/trip planner), step-by-step mode, nutrition estimate on recipe cards
+- Android PWA share target (Web Share Target API) so "Share → our app" works like ReciMe's share sheet
 
 **Out of scope.** Logging into user accounts, scraping, TikTok/YouTube, payments.
 
@@ -30,17 +47,29 @@ The user's only ongoing action is tapping Share → our bot instead of Save; eve
 
 **1. Onboarding (once)**
 
-1. Sign up in our app (email or Google).
-2. App shows a link code (e.g. `LINK-4821`) and a button that opens a DM with our bot account.
-3. User sends the code to the bot. The webhook sees it and links their Instagram-scoped ID (IGSID) to their app account.
-4. Bot replies: "Connected. Share any reel here and it's saved to your brain."
+Onboarding follows ReciMe's short, value-first sequence: say what you save, see how to share, get one real import before the empty home screen.
+
+1. Welcome screen: one-line pitch, "Get started" / "Log in".
+2. "What do you save?" picker (Food, Travel, Fitness, Business, …), multi-select chips. The picks seed the user's first collections.
+3. Sign up (email or Google).
+4. "Connect Instagram": app shows a link code (e.g. `LINK-4821`) and an "Open bot in Instagram" button. User sends the code; the webhook links their Instagram-scoped ID (IGSID) to their account. The screen flips live to "Connected ✓".
+5. "Show me how": a 3-frame illustration (tap Share on a reel → pick our bot → done) and "Try it now". User shares one reel; the screen shows the processing card, then the finished card. This is the "aha" moment, like ReciMe's onboarding import of a sample recipe.
+6. Bot replies in the DM: "Connected. Share any reel here and it's saved to your brain."
 
 **2. Save a reel (every time)**
 
-1. User taps Share on a reel → selects our bot.
+1. User taps Share on a reel → selects our bot. *(Alternative: paste a reel link into the app's "+" sheet.)*
 2. Webhook receives an `ig_reel` attachment with URL, caption and video ID.
-3. Bot replies instantly: "Got it, processing."
-4. About 30–60 seconds later: "Saved under Travel → Lisbon." The reel shows in the app.
+3. Bot replies instantly: "Got it, processing." In the app, a card with a progress state appears at the top of "Recently saved".
+4. About 30–60 seconds later the card fills in, and the bot replies "Saved to Travel → Lisbon. Open: <deep link>".
+5. Tapping the card in the app shows a small "Saved to Travel · Change" bar, the equivalent of ReciMe's cookbook picker on its save form. Moving a reel is one tap and is remembered as a user edit.
+
+**2b. Act on a save**
+
+- "Add to groceries" on a recipe card → ingredients are added to the Groceries list, merged with existing items and grouped by aisle.
+- "Add to places" on a place card → place is added to the Places list for that city, shown on a map.
+- "Add to wishlist" on a product card → product with link.
+- "Ask" on any card → chat scoped to that reel ("make this vegetarian", "how long is this hike?").
 
 **3. Bulk import (stretch)**
 
@@ -51,7 +80,7 @@ The user's only ongoing action is tapping Share → our bot instead of Save; eve
 **4. Use the brain**
 
 - **Search:** type "cheap dinner ideas" → ranked reels with the matching moment highlighted.
-- **Browse:** category grid → category → reels.
+- **Browse:** collection grid → collection → reels (filter by type or concept, sort by newest / most related).
 - **Graph:** zoom from categories to concepts to reels.
 - **Chat:** "Plan 3 days in Lisbon from my saves" → answer citing the reels it used.
 
@@ -102,9 +131,16 @@ A worker takes each queued reel through seven steps and keeps only text, embeddi
 4. **See.** Send the keyframes to a vision LLM in one call: describe each scene and read all on-screen text.
 5. **Extract.** One LLM call with caption + transcript + frame notes, returning JSON:
    - `title` (short, human-readable), `summary` (2 sentences)
+   - `type`: one of `recipe`, `place`, `product`, `workout`, `idea`, `other`. This selects the card template in the UI.
    - `category` and `subcategory` (from the user's existing list, or a new one)
    - `entities`: list of `{name, type}` where type is place, food, product, person, technique, topic, brand
-   - `actionable`: optional recipe, place list or product list
+   - `actionable`: typed by `type`:
+     - recipe: `{servings, timeMin, ingredients:[{qty, unit, item, aisle}], steps:[]}`
+     - place: `{places:[{name, city, country, why, lat?, lng?}]}`
+     - product: `{products:[{name, brand, priceHint, url?}]}`
+     - workout: `{exercises:[{name, sets, reps, durationSec}]}`
+     - idea: `{keyPoints:[]}`
+   - Source priority follows ReciMe: trust the caption first when it contains the full recipe or list, then fill gaps from the transcript, then from on-screen text. Mark each field's `source` so the UI can show "from video" hints.
 6. **Embed.** Build one search text (title + summary + transcript + on-screen text + caption) and embed it. Also embed each transcript chunk of about 30 seconds so search can jump to the right moment.
 7. **Write.** Update the `reels` document, upsert `concepts`, update `edges`, set status → `ready`, delete temp files, and DM the user "Saved under …".
 
@@ -114,16 +150,19 @@ A worker takes each queued reel through seven steps and keeps only text, embeddi
 
 ## Data model (MongoDB Atlas)
 
-Six collections in one Atlas cluster; every document carries `userId` and every query filters on it.
+Seven collections in one Atlas cluster; every document carries `userId` and every query filters on it.
 
 | Collection | Purpose | Key fields |
 | --- | --- | --- |
-| `users` | App accounts | `_id`, `email`, `igsid`, `linkCode`, `createdAt` |
-| `reels` | One per shared reel | `userId`, `reelVideoId`, `sourceUrl`, `caption`, `thumbnailUrl`, `status`, `title`, `summary`, `transcript[]`, `onScreenText`, `categoryId`, `entities[]`, `actionable`, `embedding[]`, `savedAt` |
+| `users` | App accounts | `_id`, `email`, `igsid`, `linkCode`, `interests[]`, `createdAt` |
+| `reels` | One per shared reel | `userId`, `reelVideoId`, `sourceUrl`, `source` (`dm` \| `paste` \| `export`), `caption`, `thumbnailUrl`, `status`, `type`, `title`, `summary`, `transcript[]`, `onScreenText`, `categoryId`, `entities[]`, `actionable`, `notes`, `userEdited[]`, `embedding[]`, `savedAt` |
 | `chunks` | Transcript chunks for moment-level search | `userId`, `reelId`, `startSec`, `endSec`, `text`, `embedding[]` |
 | `concepts` | Graph nodes | `userId`, `name`, `normName`, `type`, `reelIds[]`, `count`, `embedding[]`, `categoryId` |
 | `edges` | Concept-to-concept links | `userId`, `a`, `b`, `weight` (number of reels both appear in) |
-| `categories` | Auto-generated groups | `userId`, `name`, `parentId`, `reelCount`, `color` |
+| `categories` | Collections shown in the UI (ReciMe's "cookbooks") | `userId`, `name`, `parentId`, `origin` (`auto` \| `user`), `coverReelId`, `reelCount`, `color` |
+| `lists` | Groceries / Places / Wishlist | `userId`, `kind` (`groceries` \| `places` \| `wishlist`), `items[]`: `{text, qty, unit, group (aisle or city), checked, reelId}` |
+
+`userEdited[]` lists fields the user changed by hand (e.g. `categoryId`, `title`) so re-processing and re-clustering never overwrite them. Adding items to `lists` merges on normalized item text within a group, like ReciMe combining duplicate ingredients.
 
 **Indexes**
 
@@ -184,6 +223,7 @@ Search is hybrid (vector + keyword) and chat is retrieval-augmented over the sam
 2. Expand with graph neighbours: reels sharing the top concepts.
 3. Send summaries + actionable data to the LLM with an instruction to cite reel IDs.
 4. Stream the answer; the UI turns citations into reel cards.
+5. With `reelId` set ("Ask" on one card), skip retrieval and answer from that reel's full transcript and actionable data, with quick-action chips per type (recipe: "Substitutions", "Scale to 2"; place: "Best time to go"; workout: "Make it easier").
 
 **REST API**
 
@@ -192,30 +232,52 @@ Search is hybrid (vector + keyword) and chat is retrieval-augmented over the sam
 | GET / POST | `/webhooks/instagram` | Verification handshake / receive messages |
 | POST | `/auth/signup`, `/auth/login` | App accounts |
 | GET | `/me/link-code` | Code to send to the bot |
-| GET | `/reels?category=&cursor=` | Feed and category pages |
+| POST | `/reels` | Paste a reel link from the app; same queue as the webhook |
+| GET | `/reels?category=&type=&concept=&sort=&cursor=` | Feed and collection pages |
 | GET | `/reels/:id` | Detail: transcript, entities, actionable |
+| PATCH | `/reels/:id` | Edit title, collection, actionable, notes (marks `userEdited`) |
 | POST | `/reels/:id/retry` | Re-queue a failed reel |
 | GET | `/search?q=` | Hybrid search with moments |
-| GET | `/categories` | Category grid with counts |
+| GET / POST | `/categories` | Collection grid with counts / create a collection |
 | PATCH | `/categories/:id` | Rename or merge |
+| GET | `/lists/:kind` | Groceries, places or wishlist, grouped |
+| POST | `/lists/:kind/items` | Add items (e.g. `{fromReelId}` adds a reel's ingredients) |
+| PATCH / DELETE | `/lists/:kind/items/:itemId` | Check off, edit, remove |
 | GET | `/graph?level=categories\|concepts&focus=` | Nodes + edges for the graph view |
-| POST | `/chat` | Streamed answer with citations |
+| POST | `/chat` | Streamed answer with citations; optional `reelId` for single-reel Ask |
 | POST | `/import` | Upload export zip (stretch) |
 
 ## Frontend screens
 
-A mobile-first web app (installable PWA) with six screens; search is always one tap away.
+A mobile-first web app (installable PWA) structured like ReciMe: a bottom tab bar, a collection grid as home, rich detail cards, and bottom sheets for every secondary action.
+
+**Navigation.** Bottom tab bar with four tabs plus a floating "+" button.
+
+| Tab | ReciMe equivalent | Contents |
+| --- | --- | --- |
+| Home | Cookbooks | Search bar, "Recently saved" row, insight card, collection grid |
+| Lists | Groceries | Segmented control: Groceries · Places · Wishlist |
+| Ask | Ask ReciMe | Chat with all saves |
+| Graph | (none, our differentiator) | Knowledge graph |
+| **+** (floating) | Import sheet | Bottom sheet: "Share from Instagram" guide · "Paste link" · "Import export" (stretch) |
+
+**Screens**
 
 | Screen | What it shows | Notes |
 | --- | --- | --- |
-| Onboarding | Link code, "Open bot in Instagram" button, live "waiting for your code…" state | Polls `/me` until `igsid` is set |
-| Home | Search bar, category grid with counts, "recently saved" row with processing spinners, one insight card | Default screen |
-| Category | Reel cards (thumbnail, title, 1-line summary, top concepts as chips) | Chip tap → filtered view |
-| Reel detail | Thumbnail + "Open in Instagram", summary, actionable block (recipe / places / products), transcript with timestamps, related reels | Places open a map |
-| Graph | Force-directed graph: categories first, click to expand concepts, then reels | `react-force-graph-2d`; size = count, colour = category |
-| Chat | Chat thread; answers include tappable reel cards | Suggested prompts per category |
+| Onboarding | Welcome → "What do you save?" chips → sign up → link code + "Open bot in Instagram" with live "Connected ✓" → "Show me how" + first save | Polls `/me` until `igsid` is set; see User flows §1 |
+| Home | Search bar; "Recently saved" horizontal row (processing cards show a progress shimmer); one insight card; 2-column collection grid with cover thumbnail, name and count, plus a "New collection" tile | Default screen |
+| Collection | Header with cover and count; filter chips (type, top concepts); sort sheet; 2-column reel grid (thumbnail, title, type badge) | Empty state: illustration + "Add your first reel" opening the + sheet |
+| Reel detail | Hero thumbnail with "Open in Instagram"; title, collection pill ("Travel · Change"); action row (Add to list · Ask · Share); summary; **type card** (below); notes; transcript with tappable timestamps; related reels | Edit menu (⋯) for title, collection, card fields |
+| Type cards | Recipe: servings stepper, metric/imperial toggle, ingredient checklist, numbered steps, "Add to groceries". Place: list with map, "Add to places". Product: items with links, "Add to wishlist". Workout: exercise table. Idea: key points | One component per `type`; fall back to summary-only |
+| Lists | Groceries grouped by aisle with source-reel thumbnails; Places grouped by city with a map toggle; Wishlist with links; swipe to check off; "Clear checked" | Mirrors ReciMe's aisle-sorted grocery list |
+| Ask | Chat thread with suggested prompts per collection; answers include tappable reel cards; from a reel detail it opens scoped to that reel with quick-action chips | Single-reel mode = ReciMe's "Ask ReciMe" |
+| Graph | Force-directed graph: collections first, tap to expand concepts, then reels | `react-force-graph-2d`; size = count, colour = collection |
+| Search results | Reel cards with the matched moment ("at 0:42: …") highlighted | Opens from the Home search bar |
 
-**Live updates.** The "recently saved" row listens on a Server-Sent Events stream (or polls every 3 s) so a reel shared during the demo appears on screen within a minute.
+**Visual style (borrowed from ReciMe).** One bright brand colour for headers and the tab bar, one warm accent (orange) reserved for primary CTAs ("Add to groceries", "Create collection"), white rounded cards with large photos, friendly illustrated empty states, and bottom sheets instead of new pages for pickers, sort and import. Every collection gets a colour that is reused in its type badges and graph nodes.
+
+**Live updates.** The "Recently saved" row listens on a Server-Sent Events stream (or polls every 3 s), so a reel shared during the demo appears on screen within a minute and animates from "Processing…" to the finished card.
 
 ## Build plan
 
@@ -239,23 +301,23 @@ One backend service, one worker, one frontend and Atlas — split across four pe
 - **A — Instagram + backend:** Meta app, webhook, account linking, Send API replies, REST endpoints.
 - **B — Pipeline:** worker, ffmpeg, Whisper, vision, extraction prompt, embeddings.
 - **C — Data + graph:** Atlas indexes, search and RRF, concept merging, edges, categories, chat retrieval.
-- **D — Frontend + pitch:** all screens, graph view, demo script, slides.
+- **D — Frontend + pitch:** tab shell, collection grid, reel detail + type cards, Lists, graph view, demo script, slides. (If D is overloaded, A takes Lists after the endpoints are done.)
 
 **Weekend timeline**
 
 1. **Fri night:** Meta app + bot account + tester accounts; log a real `ig_reel` payload. Atlas cluster up. Repo skeleton.
 2. **Sat morning:** webhook → queue → worker end to end on one reel (even with stub AI steps). Frontend shell on mock data.
-3. **Sat afternoon:** real transcription, vision, extraction, embeddings. Search endpoint. Category grid with real data.
-4. **Sat night:** graph + concepts, reel detail, chat. Seed 50–100 reels across teammates' accounts.
-5. **Sun morning:** insights card, polish, error states. Feature freeze by noon.
+3. **Sat afternoon:** real transcription, vision, typed extraction, embeddings. Search endpoint. Collection grid and recipe/place type cards with real data.
+4. **Sat night:** Lists (groceries first), graph + concepts, chat + single-reel Ask. Seed 50–100 reels across teammates' accounts.
+5. **Sun morning:** onboarding flow, insights card, empty states, polish. Feature freeze by noon.
 6. **Sun afternoon:** rehearse the demo 3+ times; record a backup video.
 
 **Demo script (2 minutes)**
 
 1. Problem in one line + show a messy saved folder.
-2. Live: share a reel to the bot on stage; bot replies "Got it."
+2. Live: share a recipe reel to the bot on stage; bot replies "Got it."
 3. While it processes: search "cheap dinner ideas" across 100 seeded reels; jump to the exact moment.
-4. The new reel pops into "recently saved" under the right category.
+4. The new reel turns into a full recipe card in "Recently saved", in the right collection. Tap "Add to groceries"; the Lists tab shows the ingredients merged and grouped by aisle. ("ReciMe does this for recipes; we do it for everything you save.")
 5. Open the graph; zoom from Travel → Lisbon → reels.
 6. Chat: "Plan 2 days in Lisbon from my saves" → cited itinerary.
 7. Close with business model + roadmap (YouTube via official login, export import).
