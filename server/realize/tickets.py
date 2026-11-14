@@ -28,7 +28,7 @@ def plan_view(plan: dict, user: dict, *, now: datetime | None = None) -> dict:
     chosen = actions.option_view(plan["chosen"], kind, user, now=now_u) if plan.get("chosen") else None
     if plan.get("scheduled_for"):
         big = big_time(as_utc(plan["scheduled_for"]).astimezone(tz), now_l)
-    elif options and plan.get("actionable"):
+    elif options and plan.get("actionable") and status == "proposed":
         big = options[0]["big_time"]
     else:
         big = None

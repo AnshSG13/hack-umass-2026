@@ -147,7 +147,15 @@ def hybrid_search(user_id: str, query: str, type: str | None = None, limit: int 
     query = (query or "").strip()
     if not query:
         return [], active_mode()
-    qvec = gemini.embed_one(query, "RETRIEVAL_QUERY")
+    try:
+        qvec = gemini.embed_one(query, "RETRIEVAL_QUERY")
+    except Exception as e:  # noqa: BLE001 - no embedding (quota, outage): keyword search still works
+        log.warning("query embedding failed (%s); text search only", str(e)[:120])
+        _, text = _pipelines(user_id, query, [0.0], type)
+        try:
+            return list(db.saves().aggregate(text + [{"$limit": limit}, {"$project": PROJECT_OUT}])), "text"
+        except OperationFailure:
+            return [], "text"
     mode = _active_mode or get_settings().hybrid_mode
     if mode in ("auto", "rankfusion"):
         try:

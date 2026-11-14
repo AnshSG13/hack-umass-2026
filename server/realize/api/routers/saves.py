@@ -222,7 +222,8 @@ def unconfirm(save_id: str, user: dict = Depends(current_user)) -> dict:
         plan, msg = planops.unconfirm(plan)
     except planops.PlanError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
-    plan = planops.refresh_if_stale(plan, save, user)
+    # Offer times that are free now, not the ones computed before other plans were accepted.
+    plan = planops.replan_code(save, plan, user)
     return {"status": "proposed", "message": msg, "ticket": tickets.ticket(save, plan, user)}
 
 

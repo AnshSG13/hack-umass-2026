@@ -52,3 +52,56 @@ Failures and their workarounds are in BLOCKERS.md.
 - **Extra read-only routes:** `GET /api/demo/hero` (the landing page's proposed ticket, built from the first recipe sample, writes nothing) and `GET /api/chips` (Ask starter questions from the user's data, no LLM). The spec asks for both behaviors but names no route.
 - **Stale proposals.** A proposed plan whose first option has already passed gets fresh options from `slots.py` the next time it is listed, with the old ones kept in `options_prev`, so "Waiting on you" never offers a past time.
 - **Atlas.** Server 8.0.37. `create_indexes` reports both search indexes queryable and the `$rankFusion` test query worked, so `HYBRID_MODE=auto` uses `$rankFusion`.
+
+## Phase 2: real propose
+
+`git fetch` before the phase: main unchanged at `4dc4924`.
+
+- **Instagram works without cookies from this laptop.** yt-dlp read metadata for 60 public reels in a row at about 1.3 s each and downloaded every video it was asked for. No block was seen. Cookies stay optional.
+- **First live save (two model turns):** 21.0 s from POST /api/save to the proposal; the worker took 17.8 s. Command: `python -m scripts.simulate_shortcut --url https://www.instagram.com/reel/DfYi19kRNT0/ --base http://localhost:8000 --key <key> --choose 1`. The menu was "Cook Mon 6:30 pm + 7 groceries", "Cook Tue 6:30 pm + 7 groceries", "Not now", "Just vibes"; the event landed at Nov 16, 2026 at 6:30 PM with groceries at 12:00 PM and a check-in at 9:30 PM.
+- **The Gemini free-tier quota ran out during the full fixture run** (BLOCKERS.md item 1). Of the first five planner runs, three finished normally and two hit the 15 s budget and fell back. The run was stopped there.
+- **The SDK retries 429 and 5xx four times with backoff by default.** With a per-request timeout that turned one rate-limited call into a hang that held a job lease for minutes. Retries are now off (`sdk_configuration.retry_config`), every call runs under a hard wall-clock deadline, and jobs.py is the only place that retries.
+- **Planner prompt, step 3, differs from the spec text.** The spec says "Call search_saves ... call find_free_slot". Code now runs both before the first model turn and puts the results in the message (SIMILAR SAVES, FREE SLOTS); the prompt tells the model to call the tools only for a different search, window or duration. Why: each extra model turn measured 4 to 9 s on this key, and the Shortcut only waits 20 s. Both precomputed calls are still recorded as agent steps, and the model still has the tools.
+- **Propose-time fields are brief.** The schema description asks for every ingredient but at most 6 short steps and 2 tips; the video pass fills in the rest about 20 s later. The second model turn was 9 s mostly because of long step text.
+- **Status flips to `planned` before the caption embedding**, so a waiting Shortcut doesn't also wait on the embedding call. The save is searchable half a second later.
+- **A rate-limited planner retries the job** (8 s, then 25 s) instead of falling back at once; the last attempt uses the spec's deterministic fallback. A fallback plan of kind `other` is replaced by the replan after enrichment when the video shows a different type.
+- **`GEMINI_MODEL_FAST_FALLBACKS` and `GEMINI_MODEL_VIDEO_FALLBACKS`** are new optional settings (blank by default, documented in `.env.example`). They are not model names in code: the lists come from config.
+- **No thinking-level probe.** The first real request tries `minimal` and drops to `low` for a model that rejects it, so no quota is spent finding out.
+- **`scripts/run_fixtures.py`** is new: it runs the phase 2 and 3 checks over `fixtures/reels.csv` and prints the median save-to-proposal time.
+
+## Phase 3: enrich
+
+- **Verified live on 5 saves (4 reels)** with `gemini-3.5-flash`: each reached `ready` in 16 to 35 s with a timestamped transcript; `agent_runs` held a propose run and an enrich run with download, analyze, grounding and embed steps; the uploaded Gemini file was deleted each time.
+- **Spoken-only search works.** "let the fridge do the rest", "rolling pin" and "lonely bag of spinach" appear in the transcripts and not in the captions of three reels; `/api/search?q=ladyfingers dipped in coffee` returned the tiramisu reel first in `rankfusion` mode.
+- **Instagram's metadata has no duration** for these reels (yt-dlp returns `None`), so `duration_sec` is usually empty and the 600 s limit relies on the 100 MB download cap.
+- **Search falls back to text only** when the query can't be embedded (quota, outage), and says so in `mode`.
+- **The other 12 fixtures were enriched by a Lite video model** (`gemini-3.5-flash-lite` or `gemini-3.1-flash-lite`, through `GEMINI_MODEL_VIDEO_FALLBACKS`) because the configured model had no quota left. Lite is allowed for video by CLAUDE.md, but its output is weaker: it typed the Somssi restaurant reel as `other`. Rebuild with `python -m scripts.build_samples --no-reuse` when quota returns.
+
+## Phase 5: demo mode (server side)
+
+- **`build_samples` reuses work.** A reel that some account already has fully enriched is copied into the cache instead of being downloaded and watched again, and a plan the live planner already wrote for it supplies the cached question and why. `--no-reuse` turns this off; `--missing` skips reels already cached; `--plans-only` reruns the planner for cached plans that were derived by code.
+- **Cached plans hold no day words.** A planner question like "Make tiramisu Mon 6:30 pm?" would be wrong on any other day, so a cached question or why that names a day or a time is replaced by a fixed sentence for its type.
+- **Invalid key check.** With `GEMINI_API_KEY=invalid-key-for-test` and no worker: demo session, save a sample, the run ends as `fallback`, the ticket proposes "Cook Wed 6:30 pm + 6 groceries", and confirm answers "Added to Wednesday."
+
+## Phase 6: ship files
+
+- `docker compose config` validates. `docker compose build` was not run: Docker is installed (29.7.2) but the daemon was not running on this machine.
+- The web image bakes `API_INTERNAL_URL=http://api:8000` at build time, because Next.js resolves rewrites when it builds.
+- README prize sections follow the prize list in `docs/archive/SPEC-reel-brain.md` (Gemini, MongoDB Atlas, agentic, UI/UX, impact, Vultr).
+
+## Phase 7: eval
+
+- `python -m scripts.eval_recall` (2026-11-14): 20 of 20 queries at rank 1 over the 16-reel sample library, mode `rankfusion`. Full table in `eval/results.md`. Six of the queries use phrases that are spoken in the video and absent from the caption. The library is small and each query was written for one reel, so this is a smoke test of the hybrid search wiring, not a benchmark.
+
+## State of the sample cache (2026-11-14)
+
+- 16 of 16 fixture reels are cached. 4 recipes were enriched by `gemini-3.5-flash` and carry plans from the live planner. 12 were enriched by a Lite video model after the daily quota ran out, and their cached plans were derived by code because every non-Lite Flash model was out of quota (`gemini-3.8-flash` is also 20 requests per day on this key) or answering 503.
+- 15 of 16 types match `expected_type` in `fixtures/reels.csv`. The miss: the Somssi restaurant reel (`DfmpjJVNa85`) came back as `other` from the Lite model.
+- The Lite pass did not extract a start time for the two event reels, so their cached plans offer "Remind me to check dates".
+- To redo all of that with the configured models once quota is back: `python -m scripts.build_samples --no-reuse`.
+
+## Smaller calls made along the way
+
+- **Undo gives fresh times.** `POST /api/saves/{id}/unconfirm` recomputes the options, because the ones stored at proposal time can collide with plans accepted since.
+- **`GET /api/saves/{id}/slots`** returns up to 3 free slots for the Change sheet ("Sun 12 pm · You're free"). The spec describes the sheet but no route for its data.
+- **`fixtures/queries.csv`** was written after enrichment: 20 queries, at least one per reel.
