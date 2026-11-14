@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
 
-from ... import accounts, actions, db, demo, jobs, planner, planops, ratelimit, tickets, urls
+from ... import accounts, actions, db, demo, jobs, planner, planops, ratelimit, subcats, tickets, urls
 from ...config import get_settings
 from ...models import ConfirmRequest, SavePatch, SaveRequest, TYPES, failure_message
 from ...runs import run_view
@@ -294,11 +294,14 @@ def delete_save(save_id: str, user: dict = Depends(current_user)) -> dict:
 
 
 @router.get("/api/saves")
-def list_saves(type: str | None = None, limit: int = Query(default=30, ge=1, le=100),
+def list_saves(type: str | None = None, sub: str | None = None,
+               limit: int = Query(default=30, ge=1, le=100),
                before: str | None = None, user: dict = Depends(current_user)) -> dict:
     q: dict = {"user_id": user["_id"]}
     if type in TYPES:
         q["type"] = type
+        if sub:
+            q["subcategory"] = sub
     if before:
         try:
             q["created_at"] = {"$lt": datetime.fromisoformat(before.replace("Z", "+00:00"))}
@@ -341,12 +344,29 @@ def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)
     if body.note is not None:
         update["note"] = body.note.strip()
     retyped = body.type is not None and body.type != save.get("type")
-    if retyped:
+    edited = set(save.get("user_edited") or [])
+    if retyped or body.subcategory is not None:
         if save["status"] in IN_FLIGHT:
             raise HTTPException(status_code=409, detail="This save is still being read. Try again in a moment.")
+    if retyped:
         update["type"] = body.type
         # The video pass and the planner leave fields the person has set alone.
-        update["user_edited"] = sorted(set(save.get("user_edited") or []) | {"type"})
+        edited |= {"type"}
+        # A sub-category belongs to its type: moving the save clears it unless one is given.
+        if body.subcategory is None:
+            update["subcategory"] = None
+    if body.subcategory is not None:
+        kind = body.type or save.get("type")
+        if body.subcategory.strip():
+            sub = subcats.resolve(user["_id"], kind, body.subcategory)
+            if not sub:
+                raise HTTPException(status_code=400, detail="Use 1 to 4 words, at most 32 characters.")
+        else:
+            sub = None
+        update["subcategory"] = sub
+        edited |= {"subcategory"}
+    if edited != set(save.get("user_edited") or []):
+        update["user_edited"] = sorted(edited)
     if update:
         db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]}, {"$set": update})
         save = {**save, **update}

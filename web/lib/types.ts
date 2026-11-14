@@ -55,6 +55,7 @@ export interface Ticket {
   url: string;
   title: string | null;
   type: SaveType | null;
+  subcategory: string | null; // "Dessert": groups the save inside its type
   creator: string | null; // "@chefjohn"
   thumb_url: string | null; // "/api/t/<id>"
   saved_on: string; // "Oct 3"
@@ -146,6 +147,7 @@ export interface SaveDetail {
 // ---- PATCH /api/saves/{id} (answers with the same shape as GET) ----
 export interface SavePatch {
   type?: SaveType;
+  subcategory?: string; // "" removes it
   note?: string;
 }
 
@@ -199,6 +201,7 @@ export interface Taste {
   count: number;
   thumbs: string[]; // up to 3 "/api/t/<id>"
   tags: { tag: string; count: number }[]; // up to 3
+  subcategories: { name: string; count: number }[]; // every one for this type, largest first
 }
 export interface TastesResponse {
   total: number;
@@ -234,6 +237,7 @@ export interface Me {
   name: string; // "" when unset
   is_demo: boolean;
   is_judge: boolean;
+  email: string | null;
   timezone: string;
   prefs: Prefs;
   key_preview: string;

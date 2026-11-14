@@ -23,10 +23,16 @@ def regular_indexes() -> None:
     ttl = dict(expireAfterSeconds=0)
     db.users().create_index([("api_key_hash", ASCENDING)], unique=True)
     db.users().create_index([("expires_at", ASCENDING)], **ttl)
+    db.users().create_index([("email", ASCENDING)], unique=True,
+                            partialFilterExpression={"email": {"$type": "string"}})
+    db.sessions().create_index([("user_id", ASCENDING)])
+    db.sessions().create_index([("expires_at", ASCENDING)], **ttl)
 
     db.saves().create_index([("user_id", ASCENDING), ("shortcode", ASCENDING)], unique=True)
     db.saves().create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
     db.saves().create_index([("user_id", ASCENDING), ("type", ASCENDING), ("created_at", DESCENDING)])
+    db.saves().create_index([("user_id", ASCENDING), ("type", ASCENDING), ("subcategory", ASCENDING),
+                             ("created_at", DESCENDING)])
     db.saves().create_index([("expires_at", ASCENDING)], **ttl)
 
     db.plans().create_index([("user_id", ASCENDING), ("status", ASCENDING), ("scheduled_for", ASCENDING)])

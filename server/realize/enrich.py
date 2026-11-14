@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 
-from . import actions, db, gemini, planner, planops, search
+from . import actions, db, gemini, planner, planops, search, subcats
 from .config import get_settings
 from .models import ENRICH_SCHEMA, TYPES, clean_fields
 from .runs import Run
@@ -26,6 +26,8 @@ say what the video is, the way a friend would. Never use the words leverage, lev
 pivotal, intricate, showcasing, synergy, delve, realm, robust, streamlined, transformative,
 seamless or game-changer. If there is no speech, return an empty
 transcript and has_speech=false; if the audio is only music, set music_only=true.
+{subcategory_guide}
+{existing}
 CAPTION: \"\"\"{caption}\"\"\""""
 
 STOPWORDS = {"a", "an", "the", "of", "and", "or", "to", "in", "on", "for", "with", "at", "by", "from",
@@ -77,7 +79,7 @@ def ground(result: dict, caption: str) -> dict:
 # ---------- Gemini video call ----------
 
 
-def analyze_video(path: str, caption: str) -> tuple[dict, str | None]:
+def analyze_video(path: str, caption: str, existing: str = "") -> tuple[dict, str | None]:
     """Upload, wait for ACTIVE, one structured-output call. Returns (result, gemini_file_name).
     The caller deletes the file."""
     s = get_settings()
@@ -86,7 +88,9 @@ def analyze_video(path: str, caption: str) -> tuple[dict, str | None]:
         result = gemini.generate_json(
             role="video",
             input=[{"type": "video", "uri": f.uri, "mime_type": f.mime_type or "video/mp4"},
-                   {"type": "text", "text": PROMPT.format(caption=(caption or "")[:3000])}],
+                   {"type": "text", "text": PROMPT.format(
+                       caption=(caption or "")[:3000], subcategory_guide=subcats.GUIDE,
+                       existing=existing or "EXISTING SUB-CATEGORIES: none yet")}],
             schema=ENRICH_SCHEMA, timeout_s=180, thinking="low", retries=2)
     except Exception:
         gemini.delete_file(f.name)
@@ -111,6 +115,8 @@ def merge_fields(save: dict, result: dict, grounded: dict) -> dict:
         "tags": [str(t).lower().lstrip("#") for t in (result.get("tags") or []) if str(t).strip()][:8],
         "unverified": grounded["unverified"],
         "language": result.get("language") or "en",
+        "subcategory": subcats.clean(result.get("subcategory")) or (
+            save.get("subcategory") if kind == save.get("type") else None),
     }
     edited = set(save.get("user_edited") or [])
     return {k: v for k, v in update.items() if k not in edited}
@@ -158,7 +164,8 @@ def run_enrich_job(save: dict, user: dict) -> None:
             return
 
         with run.step("analyze_video", {"model": s.gemini_model_video}) as h:
-            result, file_name = analyze_video(str(path), save.get("caption") or "")
+            result, file_name = analyze_video(str(path), save.get("caption") or "",
+                                              subcats.prompt_line(save["user_id"]))
             used = gemini.last_model.get("video")
             if used and used != s.gemini_model_video:
                 db.agent_runs().update_one({"_id": run.id}, {"$set": {"model": used}})
@@ -173,6 +180,9 @@ def run_enrich_job(save: dict, user: dict) -> None:
                            "dropped_names": grounded["dropped"][:10], "unverified": grounded["unverified"]}
 
         update = merge_fields(save, result, grounded)
+        if update.get("subcategory"):
+            update["subcategory"] = subcats.snap(
+                update["subcategory"], subcats.existing(save["user_id"], update.get("type", save.get("type"))))
         actions.fix_event_year(update.get("fields"), save.get("posted_at"))
         if duration and not save.get("duration_sec"):
             update["duration_sec"] = duration

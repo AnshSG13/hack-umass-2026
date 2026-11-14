@@ -10,12 +10,22 @@ import type { SaveType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** "Food" on peach. `label` is the server's label when one came with the data. */
-export function KindChip({ type, label }: { type: SaveType | null | undefined; label?: string }) {
+export function KindChip({
+  type,
+  label,
+  sub,
+}: {
+  type: SaveType | null | undefined;
+  label?: string;
+  /** The save's sub-category, shown after the kind: "Food › Dessert". */
+  sub?: string | null;
+}) {
   const kind = kindOf(type);
   if (!kind) return null;
+  const name = label || kind.label;
   return (
     <span className="kind" style={kindTint(type)}>
-      {label || kind.label}
+      {sub ? `${name} › ${sub}` : name}
     </span>
   );
 }

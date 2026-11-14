@@ -6,6 +6,7 @@
 
 import { useId, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import useSWR from "swr";
 import { AgentTrace } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
 import { Icon, type IconName } from "@/components/icons";
@@ -16,7 +17,7 @@ import { useToast } from "@/components/toast";
 import { SEEDED_SAMPLE_NOTE } from "@/components/trace";
 import { TripPlan } from "@/components/trip-plan";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHead, SheetTitle } from "@/components/ui/sheet";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, fetcher } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import {
   clock,
@@ -30,7 +31,7 @@ import {
 } from "@/lib/format";
 import { useConfig, useRefresh, useSaveDetail } from "@/lib/hooks";
 import { KIND_ORDER, kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
-import type { Fields, Ingredient, SaveDetail, SavePatch, SaveType, Ticket } from "@/lib/types";
+import type { Fields, Ingredient, SaveDetail, SavePatch, SaveType, TastesResponse, Ticket } from "@/lib/types";
 
 const NOTE_MAX = 500; // the API's limit on a note
 
@@ -221,6 +222,10 @@ export default function ReelPage() {
 
   const [servings, setServings] = useState<number | null>(null);
   const [sheet, setSheet] = useState<"cat" | "more" | "delete" | "grocery" | null>(null);
+  const [newSub, setNewSub] = useState("");
+  const newSubId = useId();
+  // The sub-categories this account already uses, offered first in the File under sheet.
+  const tastes = useSWR<TastesResponse>(sheet === "cat" ? "/api/tastes" : null, fetcher);
   const [busy, setBusy] = useState(false);
   const [catError, setCatError] = useState<string | null>(null);
 
@@ -327,6 +332,33 @@ export default function ReelPage() {
     toast.show(`Moved to ${KINDS[next].label}`);
   }
 
+  async function fileSub(next: string) {
+    const clean = next.trim();
+    if (clean === (ticket.subcategory ?? "")) {
+      setSheet(null);
+      return;
+    }
+    setBusy(true);
+    setCatError(null);
+    let saved: string | null = null;
+    try {
+      // The server tidies the label and reuses a matching one ("desserts" -> "Dessert"),
+      // so the toast names what was saved, not what was typed.
+      const next = await api<SaveDetail>(`/api/saves/${id}`, { method: "PATCH", body: { subcategory: clean } });
+      await mutate(next, { revalidate: false });
+      refresh();
+      saved = next.ticket.subcategory;
+    } catch (e) {
+      setCatError(errorText(e, "That didn't save. Try again."));
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    setNewSub("");
+    setSheet(null);
+    toast.show(saved ? `Filed under ${kind?.label ?? "this kind"} › ${saved}` : "Sub-category removed");
+  }
+
   async function saveNote(text: string): Promise<boolean> {
     const problem = await patch({ note: text }, "Your note didn't save. Try again.");
     toast.show(problem ?? (text ? "Note saved." : "Note removed."));
@@ -390,7 +422,7 @@ export default function ReelPage() {
               className="chip-cat"
               style={tint(kind.color)}
               aria-haspopup="dialog"
-              aria-label={`Filed under ${kind.label}. Change`}
+              aria-label={`Filed under ${kind.label}${ticket.subcategory ? ` › ${ticket.subcategory}` : ""}. Change`}
               disabled={reading}
               onClick={() => {
                 setCatError(null);
@@ -398,7 +430,10 @@ export default function ReelPage() {
               }}
             >
               <Icon name={kind.icon} />
-              <span>{kind.label}</span>
+              <span>
+                {kind.label}
+                {ticket.subcategory && ` › ${ticket.subcategory}`}
+              </span>
               <Icon name="down" />
             </button>
           ) : (
@@ -577,6 +612,65 @@ export default function ReelPage() {
               );
             })}
           </ul>
+          {kind && type && (
+            <>
+              <h3 className="sheet-title" style={{ marginTop: 18, minHeight: 44, display: "flex", alignItems: "center" }}>
+                Sub-category in {kind.label}
+              </h3>
+              <ul className="opts">
+                {(tastes.data?.tastes.find((t) => t.type === type)?.subcategories ?? []).map((s) => (
+                  <li key={s.name}>
+                    <button
+                      type="button"
+                      className="opt"
+                      aria-pressed={s.name === ticket.subcategory}
+                      disabled={busy}
+                      onClick={() => void fileSub(s.name)}
+                    >
+                      <span className="opt-ico" style={tint(kind.color)}>
+                        <Icon name={kind.icon} />
+                      </span>
+                      <span className="opt-name">{s.name}</span>
+                      <Icon name="check" />
+                    </button>
+                  </li>
+                ))}
+                {ticket.subcategory && (
+                  <li>
+                    <button type="button" className="opt" disabled={busy} onClick={() => void fileSub("")}>
+                      <span className="opt-ico" style={tint("rose")}>
+                        <Icon name="skip" />
+                      </span>
+                      <span className="opt-name">No sub-category</span>
+                    </button>
+                  </li>
+                )}
+              </ul>
+              <form
+                className="name-field"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newSub.trim()) void fileSub(newSub);
+                }}
+              >
+                <label htmlFor={newSubId} className="vh">
+                  New sub-category
+                </label>
+                <input
+                  id={newSubId}
+                  type="text"
+                  maxLength={32}
+                  autoComplete="off"
+                  placeholder="New, e.g. Dessert"
+                  value={newSub}
+                  onChange={(e) => setNewSub(e.target.value)}
+                />
+                <button type="submit" className="btn" disabled={busy || !newSub.trim()}>
+                  Add
+                </button>
+              </form>
+            </>
+          )}
           {catError && (
             <p role="alert" className="field-error">
               {catError}
