@@ -11,6 +11,7 @@ _hits: dict[str, deque] = defaultdict(deque)
 LIMITS = {
     "save": (20, 60),          # per key
     "chat": (15, 60),          # per key
+    "reanalyze": (5, 600),     # per key: each one is a video pass, sometimes a planner call
     "trip": (6, 600),          # per key: each build is two model calls and a few searches
     "judge_save": (30, 3600),  # per judge key
     "users": (5, 3600),        # per IP

@@ -4,7 +4,7 @@
 // card, actions, the trip plan (places and events), your note, what was pulled from the
 // reel, how it was read and planned.
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { AgentTrace } from "@/components/agent-activity";
@@ -229,6 +229,25 @@ export default function ReelPage() {
   const [busy, setBusy] = useState(false);
   const [catError, setCatError] = useState<string | null>(null);
 
+  // After "Reanalyze and re-sort": where the reel was filed before, so the toast at the end
+  // can say whether it moved. Cleared once the second reading is done.
+  const resorting = useRef<{ type: SaveType | null; sub: string | null } | null>(null);
+  useEffect(() => {
+    const before = resorting.current;
+    const t = data?.ticket;
+    if (!before || !t) return;
+    if (inFlight(t.processing) || t.processing === "planned" || t.processing === "enriching") return;
+    resorting.current = null;
+    refresh(`/api/saves/${id}`);
+    if (data.details.enrich_error) {
+      toast.show("It couldn't be watched again. Where it's filed didn't change.");
+      return;
+    }
+    const where = [kindOf(t.type)?.label, t.subcategory].filter(Boolean).join(" › ");
+    const moved = t.type !== before.type || (t.subcategory ?? null) !== before.sub;
+    toast.show(moved ? `Re-sorted under ${where}` : `Read again. Still under ${where}`);
+  }, [data, id, refresh, toast]);
+
   const backButton = (
     <button type="button" className="round back" aria-label="Back" onClick={goBack}>
       <Icon name="back" />
@@ -376,6 +395,20 @@ export default function ReelPage() {
       toast.show(r.message || "Planned again.");
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : "Planning again didn't work. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reanalyze() {
+    setBusy(true);
+    try {
+      const r = await api<{ ticket: Ticket; message: string }>(`/api/saves/${id}/reanalyze`, { method: "POST" });
+      resorting.current = { type: ticket.type, sub: ticket.subcategory ?? null };
+      applyTicket(r.ticket);
+      toast.show(r.message);
+    } catch (e) {
+      toast.show(errorText(e, "That didn't start. Try again."));
     } finally {
       setBusy(false);
     }
@@ -584,6 +617,15 @@ export default function ReelPage() {
             </div>
           </details>
         </section>
+
+        {ticket.processing !== "failed" && (
+          <div className="reanalyze">
+            <button type="button" className="text-btn" disabled={busy || working} onClick={() => void reanalyze()}>
+              <Icon name="redo" />
+              {working ? "Reading it again" : "Reanalyze and re-sort"}
+            </button>
+          </div>
+        )}
       </article>
 
       {/* File under */}

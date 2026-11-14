@@ -157,6 +157,13 @@
   height: 16px;
 }
 
+/* Reel page: the quiet "Reanalyze and re-sort" at the very end */
+.reanalyze {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
 /* ---------- Home ---------- */
 .home-head {
   display: flex;
