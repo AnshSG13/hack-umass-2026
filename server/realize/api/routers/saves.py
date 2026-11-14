@@ -280,6 +280,35 @@ def retry(save_id: str, user: dict = Depends(current_user)) -> dict:
     return {"ticket": tickets.ticket(save, planops.get_for_save(save["_id"]), user, with_steps=True)}
 
 
+@router.post("/api/saves/{save_id}/reanalyze")
+def reanalyze(save_id: str, user: dict = Depends(current_user)) -> dict:
+    """Watch the video again and let that decide where the save is filed.
+
+    A type or sub-category the person set by hand is let go, so the new reading can re-sort
+    the reel; the note, the plan they accepted and everything else stay. A plan nobody has
+    answered is planned again when the type changes (enrich does that)."""
+    save = _own_save(save_id, user)
+    # "planned" means the video pass is queued, so it counts as busy too.
+    busy = save["status"] in (*IN_FLIGHT, "planned", "enriching") or db.jobs().find_one(
+        {"save_id": save["_id"], "kind": "enrich", "status": {"$in": ["pending", "running"]}})
+    if busy:
+        raise HTTPException(status_code=409, detail="It's already being read. Give it a moment.")
+    if save["status"] == "failed":
+        raise HTTPException(status_code=409, detail="This one couldn't be read. Use Try again instead.")
+    if not ratelimit.allow("reanalyze", user["_id"]):
+        raise HTTPException(status_code=429, detail=RATE_LIMITED)
+    edited = [f for f in (save.get("user_edited") or []) if f not in ("type", "subcategory")]
+    db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]},
+                          {"$set": {"status": "planned", "user_edited": edited, "enrich_error": None}})
+    jobs.enqueue("enrich", save)
+    save = db.saves().find_one({"_id": save["_id"], "user_id": user["_id"]})
+    plan = planops.get_for_save(save["_id"])
+    kept = plan is not None and plan["status"] in ("accepted", "done", "skipped")
+    message = ("Watching it again. Your plan stays as it is." if kept
+               else "Watching it again. This takes about half a minute.")
+    return {"message": message, "ticket": tickets.ticket(save, plan, user, with_steps=True)}
+
+
 @router.delete("/api/saves/{save_id}")
 def delete_save(save_id: str, user: dict = Depends(current_user)) -> dict:
     save = _own_save(save_id, user)
@@ -287,6 +316,7 @@ def delete_save(save_id: str, user: dict = Depends(current_user)) -> dict:
     db.agent_runs().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
     db.jobs().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
     db.trips().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
+    db.discussions().delete_many({"save_id": save["_id"], "user_id": user["_id"]})
     if save.get("thumb_id"):
         db.thumbnails().delete_one({"_id": save["thumb_id"], "owner_user_id": user["_id"]})
     db.saves().delete_one({"_id": save["_id"], "user_id": user["_id"]})

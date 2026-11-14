@@ -601,3 +601,157 @@ def test_confirm_body_typed_on_a_phone():
     from realize.api.deps import confirm_request_from, loose_fields
     c = confirm_request_from(loose_fields(b'{"Choice": "Cook Mon 6:30 pm + 7 groceries", "Source": "Shortcut"}'))
     assert c.choice == "Cook Mon 6:30 pm + 7 groceries" and c.source == "shortcut" and c.start_local is None
+
+
+# ---------- discussions about one reel ----------
+
+
+def test_discussion_second_is_checked_against_the_transcript():
+    from realize import discuss
+
+    save = {"transcript": [{"start_sec": 0.0, "text": "Hi"}, {"start_sec": 11.0, "text": "Rinse the noodles"},
+                           {"start_sec": 30.0, "text": ""}]}
+    assert discuss.snap_second(save, 11) == 11
+    assert discuss.snap_second(save, 12.4) == 11      # close to a real line: that line
+    assert discuss.snap_second(save, 20) is None      # no line there: no link
+    assert discuss.snap_second(save, 30) is None      # an empty line doesn't count
+    assert discuss.snap_second(save, -1) is None
+    assert discuss.snap_second(save, "soon") is None
+    assert discuss.snap_second({"transcript": []}, 5) is None
+
+
+def test_discussion_answer_follows_the_copy_rules():
+    from realize import discuss
+
+    assert discuss.clean_answer("Use tofu \u2014 it **works**.\n\n\n\nDone.") == "Use tofu, it works.\n\nDone."
+    assert len(discuss.clean_answer("x" * 5000)) == discuss.ANSWER_MAX
+    assert discuss.title_from("  what   can I swap\nfor fish sauce? ") == "what can I swap for fish sauce?"
+    assert len(discuss.title_from("word " * 40)) == discuss.TITLE_MAX
+
+
+def test_discussion_context_carries_the_reel_and_the_note():
+    from realize import discuss
+
+    save = {"title": "Pad thai", "type": "recipe", "creator": {"handle": "cook"}, "summary": "Noodles.",
+            "fields": {"recipe": {"steps": ["Soak noodles"]}}, "caption": "Easy pad thai",
+            "on_screen_text": ["20 minutes"], "note": "less sugar",
+            "transcript": [{"start_sec": 11.0, "text": "Rinse the noodles"}]}
+    ctx = discuss.reel_context(save, None, {"timezone": "America/New_York"})
+    for piece in ("Title: Pad thai", "@cook", "Soak noodles", "- 20 minutes", "[11] Rinse the noodles", "less sugar"):
+        assert piece in ctx
+    assert "Transcript: none" in discuss.reel_context({"title": "x"}, None, {"timezone": "UTC"})
+
+
+# ---------- Ask: moments and follow-ups ----------
+
+
+def test_a_snippet_said_in_the_video_gets_its_second():
+    from realize import search
+
+    lines = [{"start_sec": 0.0, "text": "Today we make pad thai"},
+             {"start_sec": 11.4, "text": "rinse the noodles in cold water"},
+             {"start_sec": 20.0, "text": "so"}]
+    assert search.moment("Then rinse the noodles in cold water so they don't stick.", "A pad thai recipe.", lines) == 11
+    assert search.moment("A pad thai recipe.", "A pad thai recipe.", lines) is None      # from the summary
+    assert search.moment("Buy a wok on sale", "A pad thai recipe.", lines) is None        # said nowhere
+    assert search.moment("", None, lines) is None
+    assert search.moment("Today we make pad thai", None, lines) is None                   # the opening line
+    assert search.moment("rinse the noodles in cold water", None, []) is None
+
+
+def test_follow_ups_are_short_and_distinct():
+    from realize import ask
+
+    assert ask.clean_follow_ups(["Plan it for Friday", "plan it for friday", "  What do I need to buy? "]) == [
+        "Plan it for Friday", "What do I need to buy?"]
+    assert ask.clean_follow_ups(["x", "y" * 80]) == []
+    assert ask.clean_follow_ups(None) == []
+    assert ask.clean_follow_ups(["a b c", "d e f", "g h i"]) == ["a b c", "d e f"]
+
+
+# ---------- taste boards ----------
+
+
+def test_board_meta_line_uses_only_what_the_reel_gave():
+    from realize import board
+
+    recipe = {"type": "recipe", "fields": {"recipe": {"total_time_min": 20, "ingredients": [{"item": "a"}] * 7}}}
+    assert board.meta_line(recipe) == "20 min · 7 ingredients"
+    assert board.meta_line({"type": "recipe", "fields": {"recipe": {"ingredients": [{"item": "a"}]}}}) == "1 ingredient"
+    assert board.meta_line({"type": "workout", "fields": {"workout": {"duration_min": 15, "exercises": [{}] * 6}}}) == "15 min · 6 moves"
+    place = {"type": "place", "fields": {"place": {"places": [{"name": "A", "city": "Lisbon"}, {"name": "B"}]}}}
+    assert board.meta_line(place) == "Lisbon · 2 places"
+    assert board.meta_line({"type": "product", "fields": {"product": {"items": [{}] * 6}}}) == "6 products"
+    # Nothing to say about it: who posted it, or nothing at all.
+    assert board.meta_line({"type": "other", "creator": {"handle": "ana"}}) == "@ana"
+    assert board.meta_line({"type": "recipe", "fields": {}}) == ""
+
+
+def test_board_tags_drop_the_dull_and_the_universal():
+    from realize import board
+
+    assert board.clean_tags({"tags": ["#Thai", "recipe", "thai", " noodles ", "fyp"]}) == ["thai", "noodles"]
+    chips = board.top_tags([["thai", "dinner"], ["thai", "dinner", "quick"], ["dinner", "baking"]])
+    assert [c["tag"] for c in chips] == ["thai", "baking", "quick"]      # "dinner" is on every save
+    assert board.meta_line({"type": "recipe", "fields": {"recipe": {"total_time_min": 250}}}) == "4 h 10 min"
+    assert board.meta_line({"type": "recipe", "fields": {"recipe": {"total_time_min": 120}}}) == "2 h"
+    assert chips[0] == {"tag": "thai", "count": 2}
+    assert board.top_tags([["solo"]]) == [{"tag": "solo", "count": 1}]    # one save: its tags still show
+
+
+# ---------- bundles: plans from several saves ----------
+
+
+def test_bundle_signature_ignores_order():
+    from realize import bundles
+
+    assert bundles.signature("recipe", ["b", "a"]) == bundles.signature("recipe", ["a", "b"])
+    assert bundles.signature("recipe", ["a", "b"]) != bundles.signature("workout", ["a", "b"])
+    assert bundles.signature("recipe", ["a", "b"]) != bundles.signature("recipe", ["a", "b", "c"])
+
+
+def test_groceries_merge_across_recipes():
+    from realize import bundles
+
+    out = bundles.merge_groceries([
+        {"save_id": "A", "ingredients": [
+            {"item": "Garlic, minced", "qty": 2, "unit": "cloves", "aisle": "Produce"},
+            {"item": "butter", "qty": 2, "unit": "tablespoons", "aisle": "Dairy & Eggs"},
+            {"item": "soy sauce", "aisle": "Pantry"}]},
+        {"save_id": "B", "ingredients": [
+            {"item": "garlic", "qty": 3, "unit": "cloves", "aisle": "Produce"},
+            {"item": "butter", "qty": 100, "unit": "g", "aisle": "Dairy & Eggs"},
+            {"item": "", "qty": 1}]},
+    ])
+    flat = {i["key"]: i for g in out for i in g["items"]}
+    assert flat["garlic"]["text"] == "5 cloves garlic" and flat["garlic"]["from"] == ["A", "B"]
+    assert flat["butter"]["text"] == "2 tablespoons + 100 g butter"       # units differ: both kept
+    assert flat["soy sauce"]["text"] == "soy sauce" and flat["soy sauce"]["from"] == ["A"]
+    assert [g["aisle"] for g in out] == ["Produce", "Dairy & Eggs", "Pantry"]   # store order
+    assert len(flat) == 3                                                 # the nameless line is dropped
+
+
+def test_bundle_words_from_the_model_are_checked():
+    from realize import bundles
+
+    ids = ["s1", "s2", "s3"]
+    good = bundles.checked_polish(
+        {"title": "Thai week — easy!", "blurb": "Three fast dinners.", "order": ["s3", "nope", "s3"],
+         "notes": [{"save_id": "s3", "note": "Quickest one"}, {"save_id": "zzz", "note": "invented"}],
+         "pick_save_id": "s1", "pick_name": "Anything", "pick_why": "because"},
+        "recipe", ids, {})
+    assert good["title"] == "Thai week, easy."
+    assert good["order"] == ["s3", "s1", "s2"]            # reordered, nothing dropped or invented
+    assert good["notes"] == {"s3": "Quickest one"}
+    assert good["pick"] is None                           # only product bundles have a pick
+
+    names = {"s1": ["Dyson Airwrap"], "s2": ["Shark FlexStyle"]}
+    pick = bundles.checked_polish({"title": "t", "blurb": "b", "order": [], "notes": [],
+                                   "pick_save_id": "s1", "pick_name": "dyson airwrap", "pick_why": "Six of 35 stood out"},
+                                  "product", ids, names)["pick"]
+    assert pick == {"save_id": "s1", "name": "dyson airwrap", "why": "Six of 35 stood out"}
+    assert bundles.checked_polish({"title": "t", "blurb": "b", "order": [], "notes": [],
+                                   "pick_save_id": "s1", "pick_name": "A made up iron"},
+                                  "product", ids, names)["pick"] is None
+    assert len(bundles.clean("x" * 200, 34)) == 34
+    assert bundles.count_label("recipe", 3) == "3 dinners" and bundles.count_label("workout", 1) == "1 workout"

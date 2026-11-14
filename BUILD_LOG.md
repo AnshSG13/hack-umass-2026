@@ -214,3 +214,50 @@ Checks: a live script against Atlas passed 17 of 17 (signup, duplicate email, ba
 - **No new dependencies.**
 
 Checks: 3 live reels labelled Dessert, Curry, Appetizers by the planner and kept by the video pass; 11 of 11 API checks on editing, snapping, filtering and clearing; the screens checked at 390x844; 77 unit tests, `tsc` and `eslint` pass. Steps to merge are in `docs/merge-subcategories.md`.
+
+## 2026-11-14: discussions on the Reel page
+
+The owner's ask: "Ask about this" sent you to the general chat, which had to find the reel again, repeated its summary back, and kept nothing. Now the Reel page has its own chat.
+
+- **A discussion knows its reel.** `server/realize/discuss.py` puts the reel (fields, caption, on-screen text, transcript with start seconds, the person's note, the plan) in the prompt. One structured-output call, no tools, no search. The prompt says the person can already see the page, so the answer starts with the answer. General knowledge is allowed and is labelled "Not from the reel."
+- **Saved with the reel.** New `discussions` collection (`user_id`, `save_id`, bounded `messages`, TTL for demo accounts; indexes in `create_indexes.py`). A question and its answer are written together, so a failed call leaves nothing. Deleting a save deletes its discussions.
+- **API:** `GET` and `POST /api/saves/{id}/discussions`, `GET` and `DELETE /api/discussions/{id}`. Demo chat limit now counts Ask and discussions together (`demo.chats_used`).
+- **The model may point at a spoken line; code checks it.** `at_sec` is snapped to a real transcript line within 3 s or dropped. The page shows "Said at 0:05", which opens the transcript at that line. `/s/{id}?t=5` does the same.
+- **Reel page:** "Ask about this" takes the orb's colours (deepened so white text passes 4.5:1) and opens the chat as a full layer. "Discussions" lists saved ones under the actions. The transcript, on-screen text and "How it was planned" sit behind one closed "Details" row.
+- New styles go in `web/app/v2.css`, so `mock.css` stays the port of the first mockup.
+
+Measured on the poutine reel (demo account, `gemini-3.5-flash`): three questions answered in 2.0 to 3.6 s. 97 unit tests pass (3 new). Checked in headless Chrome at 390x844: new discussion, reopening a saved one, a follow-up, "Said at 0:05" opening the transcript, Escape closing the layer, no console or network errors. Not checked: a real iPhone.
+
+## 2026-11-14: Home headings, Ask's answer, and the voice layer
+
+- **Section headings** on Home and Plans use the display face, so "Recently saved" no longer reads like a tile's title. A pill beside it says "1 saving" (with a pulsing dot) while a reel is being read and "1 new" after; "Your tastes" shows its count.
+- **Ask's answer** arrives word by word (`Streamed`: pacing only, the API still answers in one piece; whole text at once under reduced motion). Order is now answer, source reels, plan cards, then up to 2 next questions as buttons. The next questions come from the model through `respond.follow_ups`, cleaned in code (`ask.clean_follow_ups`).
+- **Moments.** When a card's snippet is a line spoken in the video, the card carries its second (`search.moment`, token overlap against the transcript, never the opening line) and the tile opens `/s/{id}?t={sec}`, which shows that transcript line.
+- **Voice.** Holding the orb already dictated through the browser's speech recognition. It now opens a full layer with the words as they are heard: settled words in ink, the tail in grey while it can still change. On release the question goes to Ask marked "Said out loud". No new dependency; browsers without speech recognition still treat a hold as a tap.
+
+99 unit tests pass (2 new). Checked in headless Chrome at 390x844 with a scripted speech recogniser: hold, words appearing, release, the spoken bubble, the streamed answer, next-question buttons. Not checked: a real microphone, or iOS Safari, where dictation needs https.
+
+## 2026-11-14: taste boards
+
+A taste tile on Home now opens a board (`/t/{type}`), not the plain saves list: two staggered columns of reel thumbnails, each with a short title and one line of facts. The saves list stays as the search screen and is one tap away from the board.
+
+- `GET /api/tastes/{type}` (`server/realize/board.py`), no model call. The facts line is built from fields the reel gave ("20 min · 7 ingredients", "Lisbon · 2 places", "6 products"); a save with none shows who posted it. Times of 90 minutes or more read as hours.
+- Filter chips are the tags the board's saves carry: shared tags first, never a tag that is on every save, never generic hashtags (`board.DULL_TAGS`).
+- Marks on a card: "New" for the last day, a pen for a save with your note.
+- Reel thumbnails all have one shape, so the board crops them to five heights chosen from the save's id (stable between visits), and fills the shorter column first so reading order stays left to right.
+
+101 unit tests pass (2 new). Checked in headless Chrome at 390x844 on a demo account: Food board with 3 saves, a chip narrowing it to 1, a board for another type, and an unknown type.
+
+## 2026-11-14: Actions and "Ready for you"
+
+The owner renamed Plans to Actions (the route stays `/plans`) and asked for plans built from several saves at once.
+
+- **Bundles** (`server/realize/bundles.py`, `bundles` collection): per type (recipes, workouts, places, products), up to 4 of the newest saves that aren't on the calendar yet. Code decides the grouping, every time (the same `find_free_slot` a single plan uses, each one reserving its slot for the next) and the merged grocery list (same item from two recipes is one line; quantities add when units match, both amounts kept when they don't). A bundle is keyed by a signature of its saves, so it is rebuilt only when they change, and "Not now" holds until they do.
+- **Gemini writes words only**, once per bundle, after the response: a name, one line, a note per save, an order, and for products the one the reels back most. `checked_polish` keeps the order a permutation of the real saves, drops notes for ids that aren't there, and drops a product pick that no reel names. Without the model the bundle still shows with plain code-made words.
+- **Start** accepts one plan per save through the existing `propose_plans` and `planops.accept`, one at a time, so they never collide. Nothing is added before the tap.
+- **API:** `GET /api/bundles` (grouping runs here, no model wait), `GET /api/bundles/{id}`, `POST .../start`, `POST .../dismiss`.
+- **Screens:** Actions has Ready for you, Waiting on you, Coming up, Started, Done. Home has a Ready for you rail. A taste board shows a strip when that taste has a ready plan. A plan's page (`/b/{id}`) has the reels with their times, one Start button, and either the merged grocery list (ticks, progress bar, the recipes each item is for) or products side by side.
+
+Measured on a demo account: listing 0.8 to 0.9 s, the model's words arrive within about 9 s. Start on a 2-workout bundle added both (Mon 7 am, Wed 7 am). 104 unit tests pass (3 new). Checked in headless Chrome at 390x844 with no console or network errors.
+
+Found while testing, not changed: a sample save is planned in a thread inside the API, so a dev reload (`--reload`) while one is planning leaves it in "planning" with no job to resume it. Production doesn't reload; locally, `demo.plan_sample` finishes it.

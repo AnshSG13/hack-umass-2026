@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import accounts, ask, db, demo, jobs, planops, ratelimit, search, subcats, thumbs, tickets
+from ... import accounts, ask, board, db, demo, jobs, planops, ratelimit, search, subcats, thumbs, tickets
 from ...config import get_settings
 from ...models import (
     ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
@@ -138,6 +138,14 @@ def tastes(user: dict = Depends(current_user)) -> dict:
     return {"total": total, "tastes": out}
 
 
+@router.get("/api/tastes/{type}")
+def taste_board(type: str, user: dict = Depends(current_user)) -> dict:
+    """One taste as a board: its saves as cards, and the tags that filter them."""
+    if type not in TYPES:
+        raise HTTPException(status_code=404, detail="That taste doesn't exist.")
+    return board.board(user, type)
+
+
 @router.get("/api/search")
 def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
                  user: dict = Depends(current_user)) -> dict:
@@ -166,8 +174,7 @@ def chat(body: ChatRequest, user: dict = Depends(current_user)):
     if not ratelimit.allow("chat", user["_id"]):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
     if user.get("is_demo"):
-        used = db.agent_runs().count_documents({"user_id": user["_id"], "kind": "ask"})
-        if used >= demo.CHAT_LIMIT:
+        if demo.chats_used(user) >= demo.CHAT_LIMIT:
             raise HTTPException(status_code=429, detail=demo.CHAT_LIMIT_MESSAGE)
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Type a question first.")
