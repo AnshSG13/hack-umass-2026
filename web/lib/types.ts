@@ -191,6 +191,7 @@ export interface Me {
   name: string; // "" when unset
   is_demo: boolean;
   is_judge: boolean;
+  email: string | null;
   timezone: string;
   prefs: Prefs;
   key_preview: string;

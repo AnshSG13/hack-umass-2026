@@ -31,6 +31,10 @@ def users() -> Collection:
     return get_db()["users"]
 
 
+def sessions() -> Collection:
+    return get_db()["sessions"]
+
+
 def saves() -> Collection:
     return get_db()["saves"]
 

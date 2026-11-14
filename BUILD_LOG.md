@@ -181,3 +181,12 @@ Checked by a subagent in headless Chromium at 390x844 and 1440x900 and again by 
 ## 2026-11-14: landing headline
 
 The owner asked for the line "Bring back intentional scrolling" somewhere strong. It is now the landing headline, the first thing anyone sees before the demo. "Every save becomes a plan." stays as the bold lead of the paragraph under it. The word "intentional" carries the same highlighter mark as a ticket's planned time, so the promise and the plan read as one idea. Checked at 375, 800 and 1280 px wide: two lines at each, no sideways scroll.
+
+## 2026-11-14: email and password accounts
+
+- **Why:** a key with no password was easy to lose and hard to use on a second device. People now create an account with an email and password and sign in anywhere.
+- **Server:** `POST /api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, and `/api/auth/credentials` (gives a key-only account an email and password). Passwords use stdlib `hashlib.scrypt` (no new dependency). Sign-in returns a session token (`rs_...`, 30 days, stored as sha256 in a new `sessions` collection with a TTL index). `accounts.find_by_key` accepts either a session token or an API key, so every existing route and its `user_id` filter is unchanged. Unique partial index on `users.email`. Login is rate limited per IP and per email; an unknown email still runs one scrypt check so timing doesn't reveal it.
+- **Web:** `/signup` and `/login`. The landing "Use it for real" goes to `/signup`, with a "Sign in" link. `/setup` no longer makes keyless accounts; for email accounts the QR code opens `/login` and no key is shown. Settings shows "Signed in as" and Sign out (ends the session on the server); key-only accounts get an "Add an email and password" form. The Shortcut key is still made in Settings and shown once.
+- **Kept:** API keys, `POST /api/users`, demo sessions and the judge user work as before.
+
+Checks: a live script against Atlas passed 17 of 17 (signup, duplicate email, bad email and short password refused, login with a case-changed email, wrong password, user B can't list or open user A's save, logout ends only that session, key account adds credentials and its key still works, login rate limit). In the browser at 390x844: sign up, Settings, sign out, wrong password message, sign in, setup QR. 70 unit tests, `tsc` and `eslint` pass.
