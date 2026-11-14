@@ -5,7 +5,8 @@ this module turns them into what the user taps and what lands on the device.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import re
+from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import quote, urlencode
 
 from .config import get_settings
@@ -19,6 +20,8 @@ LABEL_MAX = 38
 EXTRAS_ACTIONABLE = [{"id": "later", "label": "Not now"}, {"id": "none", "label": "Just vibes"}]
 EXTRAS_PASSIVE = [{"id": "none", "label": "Just save"}]
 CHECK_DATES = "Remind me to check dates"
+GUESS_TIME = time(19, 0)   # SPEC planner rule: a date with no time is planned for 7 pm, best guess
+LONG_RUN_DAYS = 3          # a run longer than this is a season, not a few performances
 IN_A_WEEK = "Remind me in a week"
 
 
@@ -103,6 +106,100 @@ def fix_event_year(fields: dict | None, posted_at: datetime | None) -> dict | No
     return fields
 
 
+_MONTH_NUM = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+_CLOCK = re.compile(r"\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)(?![a-z])|\b\d{1,2}:\d{2}\b", re.I)
+_ISO_DATE = re.compile(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b")
+_SLASH_DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b")
+_DATE_TOKEN = re.compile(
+    r"\b(?P<month>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|"
+    r"sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b"
+    r"|\b(?P<year>20\d{2})\b"
+    r"|\b(?P<day>\d{1,2})(?:st|nd|rd|th)?\b", re.I)
+
+
+_JOINS_DAYS = re.compile(r"^\.?\s*(?:,|and|&|[-–—]|to|through|thru|until|till|the)?\s*$", re.I)
+_BEFORE_MONTH = re.compile(r"^\s*(?:of)?\s*$", re.I)
+
+
+def event_date_range(fields: dict | None, today: date, posted_at: datetime | None = None,
+                     ) -> tuple[date, date] | None:
+    """First and last day named in an event's date_text ("November 13th and 14th",
+    "Nov 28 through Jan 3", "11/14"), or None when no day can be read.
+
+    Used when the event has no start_local. A date with no year is read in the year of the
+    post (or of today); if that lands more than 60 days before it, the next year is meant.
+    A later date that falls before an earlier one has crossed into the next year.
+    """
+    text = str(_f(fields, "event").get("date_text") or "")
+    if not text.strip():
+        return None
+    ref = as_utc(posted_at).date() if posted_at else today
+    found: list[tuple[int | None, int, int]] = []  # (year or None, month, day)
+
+    def take_iso(m: re.Match) -> str:
+        found.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+        return " "
+
+    def take_slash(m: re.Match) -> str:
+        year = int(m.group(3)) if m.group(3) else None
+        if year is not None and year < 100:
+            year += 2000
+        found.append((year, int(m.group(1)), int(m.group(2))))
+        return " "
+
+    text = _CLOCK.sub(" ", text)
+    text = _ISO_DATE.sub(take_iso, text)
+    text = _SLASH_DATE.sub(take_slash, text)
+
+    # A number is a day only when it sits right next to a month or is joined to another day
+    # ("13th and 14th", "13, 14"). That keeps "doors at 7" and "ages 12 and up" out.
+    month: int | None = None
+    waiting: list[int] = []  # days written before their month ("13 and 14 November")
+    year: int | None = None
+    named: list[tuple[int, int]] = []
+    prev_end: int | None = None  # where the last month or day token ended
+    for m in _DATE_TOKEN.finditer(text):
+        gap = text[prev_end:m.start()] if prev_end is not None else None
+        if m.group("month"):
+            if waiting and not _BEFORE_MONTH.match(gap or ""):
+                waiting = []
+            month = _MONTH_NUM[m.group("month")[:3].lower()]
+            named += [(month, d) for d in waiting]
+            waiting = []
+            prev_end = m.end()
+        elif m.group("year"):
+            year = year or int(m.group("year"))
+        else:
+            d = int(m.group("day"))
+            if not 1 <= d <= 31:
+                continue
+            joined = gap is not None and bool(_JOINS_DAYS.match(gap))
+            if month is not None and joined:
+                named.append((month, d))
+            else:
+                # Not attached to the month before it: maybe the start of "13 and 14 November".
+                waiting = waiting + [d] if (waiting and joined) else [d]
+                month = None
+            prev_end = m.end()
+    found += [(year, mo, d) for mo, d in named]
+
+    days: list[date] = []
+    for y, mo, d in found:
+        try:
+            day = date(y or ref.year, mo, d)
+            if y is None and day < ref - timedelta(days=60):
+                day = date(ref.year + 1, mo, d)
+            if y is None and days and day < days[-1]:
+                day = date(day.year + 1, mo, d)
+        except ValueError:
+            continue
+        days.append(day)
+    if not days:
+        return None
+    return min(days), max(days)
+
+
 def event_has_end(fields: dict | None) -> bool:
     return bool(_f(fields, "event").get("end_local"))
 
@@ -164,6 +261,7 @@ def build_options(
     slots: list[dict] | None = None,
     now: datetime | None = None,
     accepted: list[dict] | None = None,
+    posted_at: datetime | None = None,
 ) -> dict:
     """Options for a plan. Returns {options, actionable, why}; actionable and why
     are None unless the code has to override the planner (a past event)."""
@@ -211,7 +309,53 @@ def build_options(
     elif kind == "event":
         start, end = event_times(fields, user)
         ev = _f(fields, "event")
-        if start is None:
+        days = event_date_range(fields, now_l.date(), posted_at) if start is None else None
+        if start is None and days is not None:
+            # The video read the days but no start time ("November 13th and 14th"), so the
+            # code works from the days alone instead of asking to "check dates".
+            first, last = days
+            today = now_l.date()
+            venue = _clip(ev.get("venue") or "", 40)
+            span = month_day(first) if first == last else f"{month_day(first)} to {month_day(last)}"
+
+            def remind(due: datetime, why: str) -> dict:
+                moved = adjust_reminder(due, user, [])  # out of quiet hours
+                if moved.date() <= last:
+                    due = moved
+                out.append(_opt(1, "reminder", due, 15, f"Remind me {short_day(due, now_l)}",
+                                f"Remind me {long_day(due, now_l)}", big_time(due, now_l), venue or "Reminder"))
+                return {"actionable": None, "why": why}
+
+            if last < today:
+                override = {"actionable": False, "why": f"This was on {span}. It's passed."}
+            elif (last - first).days > LONG_RUN_DAYS:
+                # A long run (a market, a holiday show) has no single evening to book.
+                if first > today:
+                    due = datetime.combine(first - timedelta(days=1), time(18, 0), tzinfo=tz)
+                    if due < now_l + timedelta(hours=1):
+                        due = datetime.combine(first, time(9, 0), tzinfo=tz)
+                    override = remind(due, f"It runs {span}.")
+                else:
+                    due = local(rem("place"))  # next Saturday
+                    if due.date() > last:
+                        due = datetime.combine(today + timedelta(days=1), time(10, 0), tzinfo=tz)
+                    override = remind(due, f"It runs until {month_day(last)}.")
+            else:
+                # One to a few days: same rule the planner follows for a date with no time,
+                # 7 pm as a best guess, on the next of its days that is still ahead.
+                day = max(first, today)
+                guess = datetime.combine(day, GUESS_TIME, tzinfo=tz)
+                if guess <= now_l + timedelta(minutes=30):
+                    day += timedelta(days=1)
+                    guess = datetime.combine(day, GUESS_TIME, tzinfo=tz)
+                if day > last:
+                    override = {"actionable": False, "why": "Today was the last day."}
+                else:
+                    out.append(_opt(1, "event", guess, 120, f"Add {big_time(guess, now_l)}",
+                                    "Add to calendar", big_time(guess, now_l), venue))
+                    override = {"actionable": None,
+                                "why": f"It's on {span}. The reel gives no time, so 7 pm is a guess."}
+        elif start is None:
             due = local(rem("event_no_date"))
             out.append(_opt(1, "reminder", due, 15, CHECK_DATES, CHECK_DATES,
                             big_time(due, now_l), "Reminder"))

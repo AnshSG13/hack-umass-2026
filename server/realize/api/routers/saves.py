@@ -19,6 +19,8 @@ router = APIRouter()
 NOT_A_LINK = "That wasn't an Instagram post link. Share a reel from Instagram, or paste its link."
 RATE_LIMITED = "Slow down a little. Try again in a minute."
 EXPIRED = "That choice expired. Open Realize to pick again."
+TAKEN_SHORTCUT = "That time was just taken. Open Realize to pick another."
+TAKEN_WEB = "That time was just taken. Pick another."
 IN_FLIGHT = ("queued", "reading", "planning")
 
 
@@ -195,6 +197,13 @@ def confirm(save_id: str, body: ConfirmRequest, authorization: str | None = Head
             same = (plan["status"] == "accepted" and plan.get("chosen")
                     and plan["chosen"]["id"] == option["id"]
                     and as_utc(plan["chosen"]["start_utc"]) == as_utc(option["start_utc"]))
+            if not same and planops.slot_taken(plan, option, user):
+                # Another plan took this time after the options were shown. Offer new
+                # ones instead of double-booking.
+                if plan["status"] == "proposed":
+                    plan = planops.replan_code(save, plan, user)
+                return _confirm_response("error", plan, save, user,
+                                         _app(TAKEN_SHORTCUT) if body.source == "shortcut" else TAKEN_WEB)
             if not same:
                 plan = planops.accept(plan, save, option, user, body.source)
             msg = actions.accepted_message(plan, plan["chosen"], user, plan.get("confirmed_via") or body.source)

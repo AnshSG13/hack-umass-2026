@@ -21,7 +21,10 @@ written, including quantities and units. Describe what is physically shown, step
 in at most 120 words. Then fill type, title, summary, fields, entities and tags using only what
 appears in the video or the caption below. When they disagree, trust speech and on-screen text
 over the caption. Write card text in English; if the video is in another language, translate
-and set language to the original language code. If there is no speech, return an empty
+and set language to the original language code. Write the title and summary in plain words:
+say what the video is, the way a friend would. Never use the words leverage, leveraging,
+pivotal, intricate, showcasing, synergy, delve, realm, robust, streamlined, transformative,
+seamless or game-changer. If there is no speech, return an empty
 transcript and has_speech=false; if the audio is only music, set music_only=true.
 CAPTION: \"\"\"{caption}\"\"\""""
 

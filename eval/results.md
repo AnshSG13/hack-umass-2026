@@ -1,6 +1,6 @@
 # Search recall
 
-- Date: 2026-11-14 10:30 UTC
+- Date: 2026-11-14 17:15 UTC
 - Command: `python -m scripts.eval_recall` (from `server/`)
 - Hybrid mode: rankfusion (vector weight 0.6, text weight 0.4)
 - Embedding model: gemini-embedding-001, 768 dimensions

@@ -49,7 +49,9 @@ concrete plan that fits their week. They confirm or decline; you never act yours
 5. question: a short yes/no question, max 50 characters, action first ("Dinner Thursday?").
    why: one plain sentence, max 90 characters, naming the real reason
    ("You cook weeknights and Thursday is free."). confidence: sure when type and timing are
-   clear, best_guess otherwise.
+   clear, best_guess otherwise. title: plain words that say what the video is. Never use the
+   words leverage, leveraging, pivotal, intricate, showcasing, synergy, delve, realm, robust,
+   streamlined, transformative, seamless or game-changer.
 6. actionable is false for type other, for events that already happened, and when there is
    nothing a person could do with it.
 Do not write reasoning in text. Use the tools."""

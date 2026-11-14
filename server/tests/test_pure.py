@@ -2,13 +2,13 @@
 None of these touch Atlas, Gemini or Instagram."""
 from __future__ import annotations
 
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 from bson import ObjectId
 
-from realize import actions, ratelimit, search, slots, thumbs, urls, ytdlp
+from realize import actions, planops, ratelimit, search, slots, thumbs, urls, ytdlp
 from realize.models import default_prefs
 from realize.timeutil import big_time, fmt_text, fmt_time, long_day, short_day
 
@@ -445,3 +445,112 @@ def test_search_relevance_floor():
     assert search._relevant(dict(doc), "zebra unicycle", [0.7, 0.714])        # cosine 0.7 clears the floor
     assert not search._relevant(dict(doc), "zebra unicycle", [0.5, 0.866])    # 0.5 and no shared word
     assert search._relevant(dict(doc), "desserts for friday", [0.5, 0.866])   # shares "dessert"
+
+
+# ---------- event dates written as text ----------
+
+@pytest.mark.parametrize("text,first,last", [
+    ("November 13th and 14th", date(2026, 11, 13), date(2026, 11, 14)),
+    ("13 and 14 November", date(2026, 11, 13), date(2026, 11, 14)),
+    ("Nov 28 through Jan 3", date(2026, 11, 28), date(2027, 1, 3)),
+    ("Saturday, December 5 at 7:30 pm", date(2026, 12, 5), date(2026, 12, 5)),
+    ("Doors at 7, Dec 5", date(2026, 12, 5), date(2026, 12, 5)),
+    ("11/21", date(2026, 11, 21), date(2026, 11, 21)),
+    ("2026-12-01", date(2026, 12, 1), date(2026, 12, 1)),
+    ("January 10", date(2027, 1, 10), date(2027, 1, 10)),   # more than 60 days back means next year
+    ("March 3, 2027", date(2027, 3, 3), date(2027, 3, 3)),
+])
+def test_event_date_range(text, first, last):
+    assert actions.event_date_range({"event": {"date_text": text}}, date(2026, 11, 14)) == (first, last)
+
+
+@pytest.mark.parametrize("text", ["", "this weekend", "every Friday at 8 pm", "February 30"])
+def test_event_date_range_gives_up_without_a_day(text):
+    assert actions.event_date_range({"event": {"date_text": text}}, date(2026, 11, 14)) is None
+
+
+def test_event_date_range_uses_the_post_date_for_the_year():
+    # Saved in January 2027, posted in November 2026: "November 20" is the one just gone.
+    posted = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
+    got = actions.event_date_range({"event": {"date_text": "November 20"}}, date(2027, 1, 20), posted)
+    assert got == (date(2026, 11, 20), date(2026, 11, 20))
+
+
+def _event(date_text, now=NOW):
+    f = {"event": {"name": "Carrie: The Musical", "date_text": date_text, "venue": "Bowker Auditorium"}}
+    return actions.build_options("event", "Carrie", f, user(), now=now, accepted=[])
+
+
+def test_event_with_days_but_no_time_that_has_passed():
+    b = _event("November 10th to 12th")
+    assert b["options"] == [] and b["actionable"] is False
+    assert b["why"] == "This was on Nov 10 to Nov 12. It's passed."
+
+
+def test_event_with_days_but_no_time_gets_a_7_pm_guess():
+    b = _event("November 21")
+    o = b["options"][0]
+    assert o["action"] == "event" and o["label"] == "Add Nov 21, 7 pm" and o["duration_min"] == 120
+    assert b["actionable"] is None
+    assert b["why"] == "It's on Nov 21. The reel gives no time, so 7 pm is a guess."
+
+
+def test_event_on_its_last_day():
+    # 3:05 am on the 14th: tonight's show is still ahead.
+    b = _event("November 13th and 14th")
+    assert b["options"][0]["label"] == "Add Today 7 pm" and b["options"][0]["action"] == "event"
+    assert b["why"] == "It's on Nov 13 to Nov 14. The reel gives no time, so 7 pm is a guess."
+    # 6:45 pm: 7 pm is too close to plan for, and there is no later day.
+    late = _event("November 13th and 14th", now=ny(2026, 11, 14, 18, 45))
+    assert late["options"] == [] and late["actionable"] is False and late["why"] == "Today was the last day."
+    # With a day left, the guess moves to tomorrow.
+    more = _event("November 13th to 15th", now=ny(2026, 11, 14, 18, 45))
+    assert more["options"][0]["label"] == "Add Tomorrow 7 pm"
+
+
+def test_long_run_with_days_but_no_time_gets_a_reminder():
+    running = _event("Nov 13 through Jan 10")
+    assert running["options"][0]["action"] == "reminder" and running["options"][0]["label"] == "Remind me Nov 21"
+    assert running["why"] == "It runs until Jan 10."
+    coming = _event("Nov 28 through Jan 3")
+    assert coming["options"][0]["label"] == "Remind me Nov 27" and coming["options"][0]["big_time"] == "Nov 27, 6 pm"
+    assert coming["why"] == "It runs Nov 28 to Jan 3."
+
+
+# ---------- two plans can't take the same time ----------
+
+def test_slot_taken():
+    plan = {"_id": "p1", "kind": "recipe"}
+    opt = {"action": "event", "start_utc": ny(2026, 11, 18, 18, 30), "duration_min": 60}
+    other = {"plan_id": "p2", "start_utc": ny(2026, 11, 18, 18, 30), "end_utc": ny(2026, 11, 18, 19, 30)}
+    assert planops.slot_taken(plan, opt, user(), [other])
+    assert planops.slot_taken(plan, opt, user(), [{**other, "start_utc": ny(2026, 11, 18, 19, 0),
+                                                   "end_utc": ny(2026, 11, 18, 20, 0)}])       # partial overlap
+    assert not planops.slot_taken(plan, opt, user(), [])
+    assert not planops.slot_taken(plan, opt, user(), [{**other, "plan_id": "p1"}])               # its own booking
+    assert not planops.slot_taken(plan, opt, user(), [{**other, "start_utc": ny(2026, 11, 18, 19, 30),
+                                                       "end_utc": ny(2026, 11, 18, 20, 30)}])   # back to back
+    # A reminder takes no time, and an event keeps its own date.
+    assert not planops.slot_taken(plan, {**opt, "action": "reminder"}, user(), [other])
+    assert not planops.slot_taken({"_id": "p1", "kind": "event"}, opt, user(), [other])
+
+
+def test_slot_taken_at_the_daily_cap():
+    plan = {"_id": "p1", "kind": "recipe"}
+    opt = {"action": "event", "start_utc": ny(2026, 11, 18, 18, 30), "duration_min": 60}
+    morning = {"plan_id": "p2", "start_utc": ny(2026, 11, 18, 7, 0), "end_utc": ny(2026, 11, 18, 7, 45)}
+    noon = {"plan_id": "p3", "start_utc": ny(2026, 11, 18, 12, 0), "end_utc": ny(2026, 11, 18, 13, 0)}
+    assert not planops.slot_taken(plan, opt, user(), [morning])
+    assert planops.slot_taken(plan, opt, user(), [morning, noon])          # daily_cap is 2
+    assert not planops.slot_taken(plan, opt, user(daily_cap=3), [morning, noon])
+
+
+def test_search_puts_a_fresh_save_ahead_of_weaker_indexed_results(monkeypatch):
+    indexed = [{"_id": 1, "title": "Chickpea curry", "embedding": [1.0, 0.0]},
+               {"_id": 2, "title": "Pepper chicken", "embedding": [0.8, 0.6]}]
+    fresh = [{"_id": 3, "title": "Tiramisu", "embedding": [0.96, 0.28]},
+             {"_id": 4, "title": "Unrelated", "embedding": [0.0, 1.0]}]
+    monkeypatch.setattr(search, "_fresh", lambda uid, t, have: [dict(d) for d in fresh])
+    out = search._finish([dict(d) for d in indexed], "zzz", [1.0, 0.0], 10, "u_test", None)
+    assert [d["_id"] for d in out] == [1, 3, 2]          # 4 is under the relevance floor
+    assert all("embedding" not in d for d in out)

@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import timedelta
 
 from pymongo.errors import OperationFailure
 
 from . import db, gemini
 from .actions import ingredient_line
 from .config import get_settings
+from .timeutil import now_utc
 
 log = logging.getLogger("realize.search")
 
@@ -32,6 +34,11 @@ MIN_COSINE = 0.60
 STOP = {"the", "and", "for", "with", "that", "this", "what", "which", "from", "how", "can", "did",
         "you", "your", "should", "make", "one", "ever", "got", "are", "was", "where", "want", "reel"}
 EMBED_BUDGET = 6000
+# Atlas Search indexes a document a few seconds after it is written (about 5 s measured on
+# a fresh demo session). Saves newer than this are read straight from the collection, so a
+# reel saved a moment ago is already in its owner's search.
+FRESH_SECONDS = 120
+FRESH_LIMIT = 40
 
 _active_mode: str | None = None
 
@@ -127,12 +134,41 @@ def _relevant(doc: dict, query: str, qvec: list[float]) -> bool:
     return bool(words & have)
 
 
-def _finish(docs: list[dict], query: str, qvec: list[float], limit: int) -> list[dict]:
-    out = []
-    for d in docs:
-        if _relevant(d, query, qvec):
-            d.pop("embedding", None)
-            out.append(d)
+def _cosine(doc: dict, qvec: list[float]) -> float:
+    emb = doc.get("embedding")
+    if not emb or len(emb) != len(qvec):
+        return 0.0
+    return sum(a * b for a, b in zip(emb, qvec))
+
+
+def _fresh(uid: str, t: str | None, have: set) -> list[dict]:
+    """This user's saves written in the last FRESH_SECONDS that the index didn't return."""
+    cutoff = now_utc() - timedelta(seconds=FRESH_SECONDS)
+    q: dict = {"user_id": uid, "status": {"$in": SEARCHABLE},
+               "$or": [{"created_at": {"$gte": cutoff}}, {"planned_at": {"$gte": cutoff}},
+                       {"ready_at": {"$gte": cutoff}}]}
+    if t:
+        q["type"] = t
+    if have:
+        q["_id"] = {"$nin": list(have)}
+    return list(db.saves().find(q, PROJECT_FUSED).sort("created_at", -1).limit(FRESH_LIMIT))
+
+
+def _finish(docs: list[dict], query: str, qvec: list[float], limit: int,
+            uid: str | None = None, t: str | None = None) -> list[dict]:
+    """Drop results that aren't relevant, then add this user's just-written saves."""
+    out = [d for d in docs if _relevant(d, query, qvec)]
+    if uid:
+        fresh = [d for d in _fresh(uid, t, {d["_id"] for d in docs}) if _relevant(d, query, qvec)]
+        fresh.sort(key=lambda d: -_cosine(d, qvec))
+        for f in fresh:
+            # Indexed results keep their fused order; a fresh save goes ahead of the first
+            # one it beats on similarity.
+            score = _cosine(f, qvec)
+            at = next((i for i, d in enumerate(out) if _cosine(d, qvec) < score), len(out))
+            out.insert(at, f)
+    for d in out:
+        d.pop("embedding", None)
     return out[:limit]
 
 
@@ -159,7 +195,7 @@ def _rankfusion(uid: str, query: str, qvec: list[float], t: str | None, limit: i
                          "combination": {"weights": WEIGHTS}}},
         {"$limit": max(limit, 20)}, {"$project": PROJECT_FUSED},
     ]
-    return _finish(list(db.saves().aggregate(pipeline)), query, qvec, limit)
+    return _finish(list(db.saves().aggregate(pipeline)), query, qvec, limit, uid, t)
 
 
 def _manual(uid: str, query: str, qvec: list[float], t: str | None, limit: int) -> list[dict]:
@@ -175,7 +211,7 @@ def _manual(uid: str, query: str, qvec: list[float], t: str | None, limit: int) 
         except OperationFailure as e:
             log.warning("search leg %s failed: %s", name, str(e)[:160])
         ranked[name] = ids
-    return _finish([docs[i] for i in rrf_merge(ranked)], query, qvec, limit)
+    return _finish([docs[i] for i in rrf_merge(ranked)], query, qvec, limit, uid, t)
 
 
 def hybrid_search(user_id: str, query: str, type: str | None = None, limit: int = 10) -> tuple[list[dict], str]:
@@ -190,9 +226,14 @@ def hybrid_search(user_id: str, query: str, type: str | None = None, limit: int 
         log.warning("query embedding failed (%s); text search only", str(e)[:120])
         _, text = _pipelines(user_id, query, [0.0], type)
         try:
-            return list(db.saves().aggregate(text + [{"$limit": limit}, {"$project": PROJECT_OUT}])), "text"
+            found = list(db.saves().aggregate(text + [{"$limit": limit}, {"$project": PROJECT_OUT}]))
         except OperationFailure:
-            return [], "text"
+            found = []
+        # No query vector: just-written saves are matched on words alone.
+        recent = [d for d in _fresh(user_id, type, {d["_id"] for d in found}) if _relevant(d, query, [])]
+        for d in recent:
+            d.pop("embedding", None)
+        return (found + recent)[:limit], "text"
     mode = _active_mode or get_settings().hybrid_mode
     if mode in ("auto", "rankfusion"):
         try:

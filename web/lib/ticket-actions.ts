@@ -54,6 +54,11 @@ export function useTicketActions(
         const r = await api<ConfirmResponse>(`/api/saves/${saveId}/confirm`, { body });
         if (r.status === "error" || !r.ticket) {
           setError(r.message || "That choice expired. Pick again.");
+          // The server sends the ticket back with fresh options when a time was taken.
+          if (r.ticket) {
+            apply(r.ticket);
+            refresh();
+          }
           return null;
         }
         apply(r.ticket);

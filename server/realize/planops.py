@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from bson import ObjectId
 from pymongo import ReturnDocument
 
 from . import actions, db, slots
 from .models import SLOT_KINDS
-from .timeutil import as_utc, now_utc
+from .timeutil import as_utc, now_utc, tz_of
 
 
 class PlanError(Exception):
@@ -43,8 +43,10 @@ def code_options(kind: str, save: dict, user: dict, *, reserved: list[dict] | No
         if not chosen:
             chosen = fresh[:2]
     built = actions.build_options(kind, save.get("title") or "Saved reel", save.get("fields"), user,
-                                  slots=chosen, now=now, accepted=accepted)
-    if kind == "event" and built["why"] is None and built["options"]             and built["options"][0]["label"] == actions.CHECK_DATES:
+                                  slots=chosen, now=now, accepted=accepted,
+                                  posted_at=save.get("posted_at"))
+    if (kind == "event" and built["why"] is None and built["options"]
+            and built["options"][0]["label"] == actions.CHECK_DATES):
         # An event with no readable date gets a reminder, and the reason has to say so.
         built["why"] = "The date isn't clear yet, so this is a reminder to check."
     return built
@@ -90,6 +92,25 @@ def upsert_proposal(save: dict, user: dict, *, kind: str, actionable: bool, ques
         doc = found
     db.saves().update_one({"_id": save["_id"]}, {"$set": {"plan_id": doc["_id"]}})
     return doc
+
+
+def slot_taken(plan: dict, option: dict, user: dict, accepted: list[dict] | None = None) -> bool:
+    """True when another accepted plan already holds this option's time, or its day is at
+    the daily cap. Only cook, train and visit times are checked: an event keeps its own
+    date, and a reminder takes no time on the calendar."""
+    if plan.get("kind") not in SLOT_KINDS or option.get("action") != "event":
+        return False
+    if accepted is None:
+        accepted = slots.load_accepted(user["_id"])
+    others = [a for a in accepted if a.get("plan_id") != plan.get("_id")]
+    start = as_utc(option["start_utc"])
+    end = start + timedelta(minutes=int(option.get("duration_min") or 60))
+    if any(start < as_utc(a["end_utc"]) and end > as_utc(a["start_utc"]) for a in others):
+        return True
+    tz = tz_of(user)
+    day = start.astimezone(tz).date()
+    same_day = sum(1 for a in others if as_utc(a["start_utc"]).astimezone(tz).date() == day)
+    return same_day >= int(user["prefs"].get("daily_cap", 2))
 
 
 def accept(plan: dict, save: dict, option: dict, user: dict, source: str) -> dict:
@@ -182,6 +203,8 @@ def replan_code(save: dict, plan: dict, user: dict, *, reserved: list[dict] | No
     if built["actionable"] is False:
         extra["actionable"] = False
         extra["why"] = built["why"]
+    elif built["why"]:
+        extra["why"] = built["why"]  # the reason follows the options ("It runs until Jan 10.")
     if plan["status"] == "proposed":
         return db.plans().find_one_and_update(
             {"_id": plan["_id"]}, {"$set": {**extra, "intent": None, "updated_at": now_utc()}},
@@ -192,11 +215,16 @@ def replan_code(save: dict, plan: dict, user: dict, *, reserved: list[dict] | No
 
 
 def refresh_if_stale(plan: dict | None, save: dict, user: dict) -> dict | None:
-    """A proposed plan whose first option has passed gets fresh options, so
-    Waiting on you never offers a time in the past."""
+    """A proposed plan gets fresh options when its first one has passed, or when another
+    plan has since taken one of its times. Waiting on you never offers a time that is in
+    the past or already booked."""
     if not plan or plan["status"] != "proposed" or not plan.get("options"):
         return plan
     first = min(as_utc(o["start_utc"]) for o in plan["options"])
     if first > now_utc():
-        return plan
+        if plan.get("kind") not in SLOT_KINDS:
+            return plan
+        accepted = slots.load_accepted(user["_id"])
+        if not any(slot_taken(plan, o, user, accepted) for o in plan["options"]):
+            return plan
     return replan_code(save, plan, user)
