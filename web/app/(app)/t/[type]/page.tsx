@@ -81,9 +81,9 @@ export default function TasteBoardPage() {
   const head = (
     <header className="page-head with-back gutter">
       <div className="block-head" style={{ minHeight: 44 }}>
-        <Link href="/library" className="back-pill">
+        <Link href="/collection" className="back-pill">
           <Icon name="back" />
-          Folders
+          My collection
         </Link>
         <span style={{ display: "inline-flex", gap: 8 }}>
           {type && (
@@ -91,10 +91,6 @@ export default function TasteBoardPage() {
               <Icon name="search" />
             </Link>
           )}
-          <button type="button" className="add" onClick={openAdd}>
-            <Icon name="plus" />
-            Add
-          </button>
         </span>
       </div>
       <h1 className="page-title board-title" style={kind ? tint(kind.color) : undefined}>
@@ -114,9 +110,9 @@ export default function TasteBoardPage() {
       <>
         {head}
         <div className="gutter msg" role="alert">
-          <p>That folder doesn&apos;t exist.</p>
-          <Link href="/library" className="btn">
-            Back to Folders
+          <p>That taste doesn&apos;t exist.</p>
+          <Link href="/home" className="btn">
+            Back to Home
           </Link>
         </div>
       </>

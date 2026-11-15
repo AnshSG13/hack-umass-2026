@@ -215,8 +215,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const plain = isPlain(pathname);
   const bare = isBare(pathname);
   const onHome = pathname.startsWith("/home");
-  // Folders is the saves themselves: the list, each folder's board and the map of links.
-  const onFolders = pathname.startsWith("/library") || pathname.startsWith("/t/") || pathname.startsWith("/graph");
+  // My collection is the saves themselves: the boards, the full list and the map of links.
+  const onCollection = pathname.startsWith("/collection") || pathname.startsWith("/t/") || pathname.startsWith("/library") || pathname.startsWith("/graph");
 
   return (
     <AppContext.Provider value={app}>
@@ -253,9 +253,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onHeard={(text) => ask(text, true, true)}
               onProblem={(message) => toast.show(message)}
             />
-            <Link href="/library" className="tab" aria-current={onFolders ? "page" : undefined}>
-              <Icon name="folder" />
-              Folders
+            <Link href="/collection" className="tab" aria-current={onCollection ? "page" : undefined}>
+              <Icon name="grid" />
+              My collection
             </Link>
           </nav>
         )}

@@ -47,7 +47,7 @@ Think in this order.
 
 4. DELIVER. Pick the one way the app gives them that need, from what the app can do:
    cook       cook mode, step by step, with a shopping list. For a recipe.
-   shop       price research at real stores, plus cheaper alternatives. For a product.
+   shop       the best prices at real stores, plus similar products worth a look. For a product.
    itinerary  a trip plan with days, hours, prices and what's nearby. For a place or an event
               worth travelling for.
    calendar   one calendar entry at the event's own date and time. Only for an event with a
@@ -68,7 +68,7 @@ Think in this order.
      For keep, a line that brings the moment back, about this reel ("Remember this puppy
      growing up", "Remember this cat's face"), and pitch is empty.
    - pitch: one line, at most 90 characters, saying what is ready for them
-     ("7 ingredients, 15 minutes, step by step", "Prices from 4 stores, plus a cheaper pick").
+     ("7 ingredients, 15 minutes, step by step", "Prices from 4 stores, plus 3 similar picks").
      Only facts from the reel; never invent a number.
    - schedule: true only when the action itself needs a set time (an event, a long weekend
      cook). False otherwise.

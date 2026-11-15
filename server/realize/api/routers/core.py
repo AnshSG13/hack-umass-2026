@@ -127,6 +127,8 @@ def tastes(user: dict = Depends(current_user)) -> dict:
     week_ago = now_utc() - timedelta(days=visits.RECAP_DAYS)
     new_since: dict[str, int] = {}
     this_week: dict[str, int] = {}
+    done_ids = {p["save_id"] for p in db.plans().find({"user_id": user["_id"], "status": "done"}, {"save_id": 1})}
+    done: dict[str, int] = {}
     cursor = db.saves().find({"user_id": user["_id"]},
                              {"type": 1, "thumb_id": 1, "tags": 1, "created_at": 1}).sort("created_at", -1)
     for s in cursor:
@@ -136,6 +138,8 @@ def tastes(user: dict = Depends(current_user)) -> dict:
             continue  # still being read; it has no type yet
         e = by_type.setdefault(t, {"count": 0, "thumbs": [], "tags": {}})
         e["count"] += 1
+        if s["_id"] in done_ids:
+            done[t] = done.get(t, 0) + 1
         made = as_utc(s["created_at"])
         line = visits.new_line(prev, seen.get(t))
         if made > line:
@@ -153,12 +157,13 @@ def tastes(user: dict = Depends(current_user)) -> dict:
         top = sorted(e["tags"].items(), key=lambda kv: (-kv[1], kv[0]))[:3]
         out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
                     "tags": [{"tag": k, "count": n} for k, n in top],
-                    "subcategories": subs.get(t, []), "new": new_since.get(t, 0)})
+                    "subcategories": subs.get(t, []), "new": new_since.get(t, 0),
+                    "done": done.get(t, 0)})
     # The greeting says what was sorted for them: since last time if anything is new,
     # otherwise over the past week.
     fresh = visits.recap_parts({k: v for k, v in new_since.items()})
     parts, window = (fresh, "new") if fresh else (visits.recap_parts(this_week), "week")
-    return {"total": total, "tastes": out,
+    return {"total": total, "tastes": out, "done": sum(done.values()),
             "recap": {"window": window, "parts": parts, "text": visits.join_words(parts)} if parts else None}
 
 
@@ -216,7 +221,7 @@ def remember(user: dict = Depends(current_user)) -> dict:
 
 @router.get("/api/chips")
 def chips(user: dict = Depends(current_user)) -> dict:
-    return {"chips": ask.chips(user), "actions": ask.recommended(user)}
+    return {"chips": ask.chips(user)}
 
 
 @router.post("/api/chat")

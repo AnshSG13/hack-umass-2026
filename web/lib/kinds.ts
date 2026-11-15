@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import type { IconName } from "@/components/icons";
 import type { Deliver, SaveType } from "./types";
 
-export type KindColor = "peach" | "butter" | "sky" | "mint" | "rose" | "lavender";
+export type KindColor = "peach" | "butter" | "sky" | "mint" | "lime" | "rose" | "lavender";
 
 export interface Kind {
   label: string;
@@ -14,32 +14,32 @@ export interface Kind {
   icon: IconName;
 }
 
-// Six colours for seven types: places share mint with fitness, so that events and places,
-// which sit next to each other in Plans, stay apart.
+// Seven colours for seven types: every taste has its own, so no two categories look alike
+// side by side (filter chips, taste tiles, passes).
 export const KINDS: Record<SaveType, Kind> = {
   recipe: { label: "Food", color: "peach", icon: "food" },
   event: { label: "Events", color: "sky", icon: "cal" },
   place: { label: "Places", color: "mint", icon: "travel" },
-  workout: { label: "Fitness", color: "mint", icon: "fit" },
+  workout: { label: "Fitness", color: "lime", icon: "fit" },
   product: { label: "Products", color: "rose", icon: "scent" },
   tip: { label: "Learning", color: "lavender", icon: "learn" },
   other: { label: "Just vibes", color: "butter", icon: "spark" },
 };
 
 /** What each way of delivering an action is called on a tile, and its main button. */
-export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: string }> = {
-  cook: { label: "Cook mode", icon: "food", button: "Start cooking" },
-  shop: { label: "Prices", icon: "tag", button: "Check prices" },
-  itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary" },
-  calendar: { label: "Calendar", icon: "cal", button: "Add to calendar" },
-  workout: { label: "Workout", icon: "fit", button: "Start the workout" },
-  learn: { label: "Key points", icon: "learn", button: "See the key points" },
-  keep: { label: "Saved", icon: "bookmark", button: "" },
+export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: string; color: KindColor }> = {
+  cook: { label: "Cook mode", icon: "food", button: "Cook now", color: "peach" },
+  shop: { label: "Shop and compare", icon: "tag", button: "Shop and compare", color: "rose" },
+  itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary", color: "sky" },
+  calendar: { label: "Calendar", icon: "cal", button: "Add to calendar", color: "butter" },
+  workout: { label: "Gym routine", icon: "fit", button: "Start the workout", color: "lime" },
+  learn: { label: "Key points", icon: "learn", button: "Explore", color: "lavender" },
+  keep: { label: "Saved", icon: "bookmark", button: "", color: "butter" },
 };
 
-/** Where an action opens: the reel's page, told what to do on arrival. */
+/** Where an action opens: action mode, apart from the reel's details. */
 export function actionHref(saveId: string, deliver: Deliver): string {
-  return `/s/${saveId}?do=${deliver}`;
+  return deliver === "keep" ? `/s/${saveId}` : `/a/${saveId}`;
 }
 
 export const KIND_ORDER: SaveType[] = ["recipe", "event", "place", "workout", "product", "tip", "other"];

@@ -56,6 +56,25 @@ export function AskAboutButton({ onClick, disabled }: { onClick: () => void; dis
   );
 }
 
+/** The reel page's AI insights button: fixed at the lower right while the page scrolls,
+ *  opening the same chat about this reel. */
+export function AiInsightsButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      className="ai-fab"
+      onClick={onClick}
+      disabled={disabled}
+      aria-haspopup="dialog"
+      aria-label="AI insights about this reel"
+      title="AI insights"
+    >
+      <Icon name="sparkles" />
+      <span className="ai-fab-label">AI insights</span>
+    </button>
+  );
+}
+
 // ---- the list on the Reel page ----
 
 const REEL_FIRST = 3;

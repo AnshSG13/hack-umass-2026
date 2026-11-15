@@ -46,13 +46,13 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
       const r = await api<{ shop: Shop | null }>(key, { method: "POST" });
       await mutate(r, { revalidate: false });
     } catch (e) {
-      setProblem(e instanceof ApiError ? e.message : "Price research didn't start. Try again.");
+      setProblem(e instanceof ApiError ? e.message : "Shopping research didn't start. Try again.");
     } finally {
       setStarting(false);
     }
   }
 
-  // The action's "Check prices": run it once data has loaded and nothing is there yet.
+  // The action's "Shop and compare": run it once data has loaded and nothing is there yet.
   const handled = useRef(0);
   useEffect(() => {
     if (go === 0 || go === handled.current || data === undefined) return;
@@ -69,7 +69,7 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
     <section className="sec" id="shop" aria-labelledby="shop-h">
       <div className="sec-head">
         <h2 className="sec-title" id="shop-h">
-          Best price
+          Shop and compare
         </h2>
         {shop?.status === "ready" && (
           <button type="button" className="add" onClick={() => void run()} disabled={building}>
@@ -81,10 +81,10 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
 
       {!shop && !building && (
         <div className="shop-ask">
-          <p>Find where to buy this for less. It looks at the brand&apos;s own site, real stores big and small, and review sites, and skips coupon sites and anything that looks unsafe.</p>
+          <p>Find where to buy this for less, and similar products worth a look. It checks the brand&apos;s own site, real stores big and small, and review sites, and skips coupon sites and anything that looks unsafe.</p>
           <button type="button" className="btn btn-primary btn-block" onClick={() => void run()}>
             <Icon name="search" />
-            Find the best price
+            Shop and compare
           </button>
         </div>
       )}
@@ -102,7 +102,7 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
 
       {shop?.status === "failed" && !building && (
         <div role="alert" className="ask-error">
-          <p>{shop.error ?? "Price research didn't finish. Try again."}</p>
+          <p>{shop.error ?? "Shopping research didn't finish. Try again."}</p>
           <button type="button" className="btn" onClick={() => void run()}>
             <Icon name="redo" />
             Try again
@@ -152,7 +152,7 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
               })()}
               {shop.alternatives.length > 0 && (
                 <>
-                  <h3 className="aisle">Cheaper for the same job</h3>
+                  <h3 className="aisle">Similar products</h3>
                   <ul className="offers">
                     {shop.alternatives.map((o, i) => (
                       <Offer key={`a${i}`} o={o} />
@@ -163,7 +163,7 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
             </>
           )}
           <p className="nut-note">
-            Checked {shop.checked_on}. Prices change; the store&apos;s page has the current one.
+            Checked {shop.checked_on}. Prices marked out of stock are left out, but stock and prices change. Check the store&apos;s page before you buy.
             {shop.dropped > 0 ? ` ${plural(shop.dropped, "price", "prices")} ${shop.dropped === 1 ? "was" : "were"} left out: no readable price, or a coupon site or one that looked unsafe.` : ""}
           </p>
         </>
