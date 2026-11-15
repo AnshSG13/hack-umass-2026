@@ -277,6 +277,33 @@ export interface Me {
   shortcut_key?: boolean;
   expires_at: string | null;
   counts: { saves: number; by_type: Record<SaveType, number>; plans: Partial<Record<PlanStatus, number>> };
+  profile: Profile | null;
+  onboarded: boolean; // false: a real account that hasn't done the intro yet
+}
+
+// ---- the intro (/welcome) ----
+export interface Profile {
+  identity: string | null;
+  age_range: string | null;
+  ethnicity: string[];
+  interests: string[];
+  hobbies: string[];
+  starters?: Partial<Record<SaveType, string[]>>;
+}
+
+export interface OnboardingOptions {
+  identities: string[];
+  age_ranges: string[];
+  ethnicities: string[];
+  interests: string[];
+  hobbies: string[];
+}
+
+/** Starter sub-categories Gemini made inside one type at the end of the intro. */
+export interface StarterGroup {
+  type: Exclude<SaveType, "other">;
+  label: string;
+  subcategories: string[];
 }
 
 export interface AppConfig {

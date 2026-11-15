@@ -112,6 +112,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (key === null) router.replace("/");
   }, [key, router]);
 
+  // A real account that hasn't done the intro screens yet goes there first.
+  useEffect(() => {
+    if (me && !me.onboarded && !me.is_demo) router.replace("/welcome");
+  }, [me, router]);
+
   // A key the server no longer knows (rotated, or an expired demo) is the same as no key.
   useEffect(() => {
     if (meError instanceof ApiError && meError.status === 401) clearKey();

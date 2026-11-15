@@ -64,8 +64,29 @@ def counts(user_id: str, type: str | None = None) -> dict[str, list[dict]]:
     return out
 
 
+def _starters(user_id: str) -> dict[str, list[str]]:
+    from . import profile  # noqa: PLC0415 - profile imports this module
+
+    return profile.starters(user_id)
+
+
+def _merge(used: list[str], extra: list[str]) -> list[str]:
+    """Used labels first, then starters that aren't already there under another spelling."""
+    out = list(used)
+    keys = {key(n) for n in out}
+    for name in extra:
+        if key(name) not in keys:
+            keys.add(key(name))
+            out.append(name)
+    return out
+
+
 def existing(user_id: str, type: str | None) -> list[str]:
-    return [x["name"] for x in counts(user_id, type).get(type, [])] if type else []
+    """Labels this user has for a type: ones in use, then the intro's starters."""
+    if not type:
+        return []
+    used = [x["name"] for x in counts(user_id, type).get(type, [])]
+    return _merge(used, _starters(user_id).get(type, []))
 
 
 def resolve(user_id: str, type: str | None, label: object) -> str | None:
@@ -75,11 +96,18 @@ def resolve(user_id: str, type: str | None, label: object) -> str | None:
 
 def prompt_line(user_id: str) -> str:
     """The user's labels for the model, so it reuses them instead of inventing near-twins."""
-    by_type = counts(user_id)
+    from . import profile  # noqa: PLC0415
+
+    by_type = {t: [x["name"] for x in rows] for t, rows in counts(user_id).items()}
+    for t, names in _starters(user_id).items():
+        by_type[t] = _merge(by_type.get(t, []), names)
+    about = profile.about_line(user_id)
     if not by_type:
-        return "EXISTING SUB-CATEGORIES: none yet"
-    parts = [f"{t}: {', '.join(x['name'] for x in rows[:PROMPT_PER_TYPE])}" for t, rows in sorted(by_type.items())]
-    return "EXISTING SUB-CATEGORIES: " + "; ".join(parts)
+        line = "EXISTING SUB-CATEGORIES: none yet"
+    else:
+        parts = [f"{t}: {', '.join(names[:PROMPT_PER_TYPE])}" for t, names in sorted(by_type.items())]
+        line = "EXISTING SUB-CATEGORIES: " + "; ".join(parts)
+    return f"{about}\n{line}" if about else line
 
 
 GUIDE = (

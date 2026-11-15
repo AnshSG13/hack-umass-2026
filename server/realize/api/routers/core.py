@@ -74,7 +74,9 @@ def _me(user: dict) -> dict:
             # (for the Shortcut), making another replaces the one already pasted somewhere.
             "shortcut_key": bool(user.get("key_shown_at")) or not user.get("email"),
             "expires_at": as_utc(user["expires_at"]).isoformat() if user.get("expires_at") else None,
-            "counts": _counts(user)}
+            "counts": _counts(user),
+            "profile": user.get("profile"),
+            "onboarded": bool(user.get("onboarded_at")) or bool(user.get("is_demo"))}
 
 
 @router.get("/api/me")
