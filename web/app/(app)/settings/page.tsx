@@ -324,7 +324,7 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
           <Link href={STORY_REPLAY_HREF} className="set-row set-link">
             <span className="set-label">
               Watch the tour again
-              <span className="set-sub">The three pages from your first open</span>
+              <span className="set-sub">Three pages on what it does</span>
             </span>
             <ChevronRight aria-hidden="true" className="set-link-chev" />
           </Link>

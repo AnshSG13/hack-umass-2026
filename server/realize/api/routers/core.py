@@ -291,9 +291,9 @@ def demo_samples(user: dict | None = Depends(optional_user)) -> list[dict]:
 
 @router.get("/api/demo/story")
 def demo_story(user: dict = Depends(current_user)) -> dict:
-    """The guided first open's pieces for this demo session."""
-    if not user.get("is_demo"):
-        raise HTTPException(status_code=404, detail="Not found.")
+    """The guided first open's pieces: the sample reel to save and, if this account has
+    them, its own saves of that reel and of the trip reel. Demo sessions get it on first
+    open; any account can watch it again from Settings."""
     return demo.story(user)
 
 

@@ -1,6 +1,7 @@
 "use client";
 
-// The guided first open, after "Try the demo": full-screen pages, one idea each.
+// The guided first open, after "Try the demo": full-screen pages, one idea each. Any
+// account can watch it again from Settings ("Watch the tour again").
 // 1 The problem. 2 The moment: a saved reel becomes a plan with a time. 3 Three proofs of
 // what else it does. Swipe, the arrow keys or the pinned button move between them; Skip
 // goes Home. The one problem line is the only fixed copy that says anything about the
@@ -445,11 +446,14 @@ function MoreBeat({
   recipe,
   saveId,
   tripSaveId,
+  demo,
 }: {
   dir: number;
   recipe: Recipe | null;
   saveId: string | null;
   tripSaveId: string | null;
+  /** A demo session ends the story in the demo; a real account goes back Home. */
+  demo: boolean;
 }) {
   const canAsk = Boolean(saveId && recipe?.has_answer);
   const { data: disc } = useDiscussions(canAsk ? saveId : null);
@@ -551,7 +555,7 @@ function MoreBeat({
       </div>
       <div className="story-foot">
         <Link href="/home" className="btn btn-primary story-cta" onClick={markStorySeen}>
-          Explore the demo
+          {demo ? "Explore the demo" : "Back to Home"}
         </Link>
       </div>
 
@@ -584,17 +588,12 @@ function Story() {
   const search = useSearchParams();
   const { data: me } = useMe();
   const demo = me?.is_demo === true;
-  const story = useSWR<DemoStory>(demo ? "/api/demo/story" : null, fetcher, { revalidateOnFocus: false });
-  const saves = useSWR<SavesPage>(demo ? `/api/saves?limit=${PILE}` : null, fetcher, { revalidateOnFocus: false });
+  const story = useSWR<DemoStory>(me ? "/api/demo/story" : null, fetcher, { revalidateOnFocus: false });
+  const saves = useSWR<SavesPage>(me ? `/api/saves?limit=${PILE}` : null, fetcher, { revalidateOnFocus: false });
   const [asked] = useState(() => search.get("at"));
   const [savedId, setSavedId] = useState<string | null>(null);
   const [at, setAt] = useState<BeatId | null>(null);
   const [dir, setDir] = useState(1);
-
-  // The story is for demo accounts.
-  useEffect(() => {
-    if (me && !me.is_demo) router.replace("/home");
-  }, [me, router]);
 
   const settled = story.data !== undefined || story.error !== undefined;
   const recipe = story.data?.recipe ?? null;
@@ -758,7 +757,9 @@ function Story() {
               onNext={() => go(1)}
             />
           )}
-          {at === "more" && <MoreBeat key="more" dir={dir} recipe={recipe} saveId={saveId} tripSaveId={tripSaveId} />}
+          {at === "more" && (
+            <MoreBeat key="more" dir={dir} recipe={recipe} saveId={saveId} tripSaveId={tripSaveId} demo={demo} />
+          )}
         </AnimatePresence>
       </div>
     </div>
