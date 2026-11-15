@@ -354,7 +354,16 @@ export type ChatEvent =
   | { type: "step"; label: string }
   | { type: "cards"; cards: AskCard[] }
   | { type: "plans"; tickets: Ticket[] }
-  | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[]; follow_ups?: string[] }
+  | {
+      type: "answer";
+      text: string;
+      confidence: "high" | "low" | "none";
+      save_ids: string[];
+      follow_ups?: string[];
+      /** true: they asked for a web search; sources are the pages the [n] markers point at. */
+      web?: boolean;
+      sources?: { n: number; title: string; url: string }[];
+    }
   | { type: "done" }
   | { type: "error"; message: string }
   /** The answered turn was kept: the chat it went into (a new one on the first question). */

@@ -22,6 +22,14 @@ import type { AskCard, ChatEvent, Discussion } from "@/lib/types";
 const GENERIC_ERROR = "Ask didn't answer. Try again.";
 const CHAT_GONE = "That chat isn't here any more.";
 
+function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 /** A kept Ask chat as the page's turns: each question with the answer and reels it got. */
 function toTurns(d: Discussion): AskTurn[] {
   const turns: AskTurn[] = [];
@@ -30,7 +38,12 @@ function toTurns(d: Discussion): AskTurn[] {
       turns.push({ id: turns.length + 1, question: m.text, steps: [], cards: [], tickets: [], answer: null, error: null, done: true });
     } else if (turns.length > 0) {
       const t = turns[turns.length - 1];
-      t.answer = { text: m.text, confidence: m.confidence ?? "high", followUps: m.follow_ups ?? [] };
+      t.answer = {
+        text: m.text,
+        confidence: m.confidence ?? "high",
+        followUps: m.follow_ups ?? [],
+        sources: m.web ? (m.sources ?? []) : undefined,
+      };
       t.cards = m.cards ?? [];
     }
   }
@@ -53,7 +66,15 @@ function applyEvent(turn: AskTurn, e: ChatEvent): AskTurn {
     case "plans":
       return { ...turn, tickets: e.tickets };
     case "answer":
-      return { ...turn, answer: { text: e.text, confidence: e.confidence, followUps: e.follow_ups ?? [] } };
+      return {
+        ...turn,
+        answer: {
+          text: e.text,
+          confidence: e.confidence,
+          followUps: e.follow_ups ?? [],
+          sources: e.web ? (e.sources ?? []) : undefined,
+        },
+      };
     case "error":
       return { ...turn, error: e.message || GENERIC_ERROR, done: true };
     case "done":
@@ -146,7 +167,25 @@ function Turn({
           <p className="answer">
             <Streamed text={text} live={live} />
           </p>
-          {turn.answer.confidence === "low" && <p className="answer-note">Best match I found.</p>}
+          {turn.answer.confidence === "low" && !turn.answer.sources && <p className="answer-note">Best match I found.</p>}
+          {turn.done && turn.answer.sources && turn.answer.sources.length > 0 && (
+            <div className="web-sources">
+              <p className="web-label">
+                <Icon name="search" />
+                From the web.
+              </p>
+              <ol>
+                {turn.answer.sources.map((s) => (
+                  <li key={s.n}>
+                    <a href={s.url} target="_blank" rel="noopener noreferrer">
+                      <span className="web-n">{s.n}</span>
+                      {s.title || siteOf(s.url)}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
       )}
 
@@ -397,7 +436,7 @@ function AskInner() {
             </div>
           </div>
         )}
-        {empty && <p className="page-sub">Ask about anything you&apos;ve saved. Your chats are kept here.</p>}
+        {empty && <p className="page-sub">Ask about anything you&apos;ve saved, or say &ldquo;search the web&rdquo; to look something up. Your chats are kept here.</p>}
       </header>
 
       {empty ? (

@@ -352,3 +352,14 @@ The owner asked for a better chat flow, perhaps with saved chats. Before: Ask (t
 - **Next questions in reel chats.** The reel chat's answer now asks the model for up to 2 follow-ups in the same call (no extra request); code keeps them short, distinct and in sentence case. Web and nutrition answers have none.
 
 Checked live on a fresh demo session at 390 px (`scratchpad/chats_look.py`): one Ask question was kept and listed, reopened with its turn and 2 reel tiles; one reel question came back with 2 follow-ups, showed under "Pick up where you left off", on the reel page and in the Ask list; no page errors. `pytest`: 165 passed.
+
+## 2026-11-15: web search when you ask for it
+
+The owner asked for the chat to go to the internet when you explicitly ask for a web search.
+
+- **What counts as asking.** `server/realize/websearch.py` matches plain requests: "search the web for", "look it up online", "google how", "web search", "check online", "what does the internet say". Questions like "I bought it online" or "is it open on Mondays" don't count. The words are taken off the front of the search.
+- **Reel chat.** Such a question skips the reel-only answer and goes straight to the sourced web answer about that reel (its title is added to the search when missing). With no linkable source it says so instead of guessing.
+- **Ask.** Such a question gets a Google Search grounded answer instead of a search of the saves; the closest 3 saves go along as context so "the place I saved" means something. The answer shows its sources and is kept in the chat with them.
+- **One helper.** Both use `websearch.grounded`: [n] markers where the model cited, Google redirect links resolved to the real pages, and text that comes back twice kept once (seen live: a reel answer printed its sentence twice).
+
+Checked live on fresh demo sessions: Ask "Search the web for whether the NYBG holiday train show needs timed tickets" answered with 2 nybg.org sources, kept them when reopened; a plain Ask question still searched the saves; a reel chat "look it up online: is the pool open in December?" answered with 3 sources (the hotel's pool page first). pytest: 170 passed.

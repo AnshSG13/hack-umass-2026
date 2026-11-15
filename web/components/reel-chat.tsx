@@ -428,7 +428,8 @@ function ChatPanel({
           <div className="rc-empty">
             <p className="rc-lead">What do you want to know?</p>
             <p className="rc-sub">
-              Answers come from this reel, or the web when it doesn&apos;t say. Chats are kept with the reel and in Ask.
+              Answers come from this reel, or the web when it doesn&apos;t say. Say &ldquo;search the web&rdquo; to go
+              straight there. Chats are kept with the reel and in Ask.
             </p>
             <div className="rc-starters">
               {(STARTERS[type ?? "other"] ?? STARTERS.other).map((q) => (

@@ -24,7 +24,13 @@ export interface AskTurn {
   steps: StepLine[];
   cards: AskCard[];
   tickets: Ticket[];
-  answer: { text: string; confidence: "high" | "low" | "none"; followUps: string[] } | null;
+  answer: {
+    text: string;
+    confidence: "high" | "low" | "none";
+    followUps: string[];
+    /** A web search they asked for: the pages the answer used. */
+    sources?: { n: number; title: string; url: string }[];
+  } | null;
   error: string | null;
   done: boolean;
   /** The question was dictated with the orb, not typed. */
