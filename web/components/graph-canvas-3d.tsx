@@ -4,9 +4,9 @@
 // see what it touches. Loaded only in the browser (see app/(app)/graph/page.tsx).
 //
 // Flat and light, like the rest of the app (DESIGN.md: no gradients, no shadows). Every
-// node is a sprite, so it always faces the camera and stays crisp: a category is a flat
-// disc in its pastel, a sub-category a white disc with a ring in that pastel, both with a
-// name chip under them; reels
+// node is a sprite, so it always faces the camera and stays crisp: every category is a flat
+// lavender disc and every sub-category a white disc with a mint ring, whatever its kind,
+// both with a name chip under them; reels
 // are round thumbnails of the reel, interests are butter discs. Lines are hairlines;
 // "related" folders get a blue hairline (one colour for all of them, as in the key) with a
 // few particles drifting along it. A gentle pull toward the centre keeps separate tastes from drifting apart, so the
@@ -269,6 +269,12 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
       line: cssVar("--line", "#ece9e3"),
       lineStrong: cssVar("--line-strong", "#cfcbc2"),
       butter: cssVar("--butter", "#fff3c4"),
+      // One colour for every category and one for every sub-category, whatever their kind,
+      // so the key under the map can name both.
+      category: cssVar("--lavender", "#ece6ff"),
+      categoryInk: cssVar("--lavender-ink", "#5b46b8"),
+      subcategory: cssVar("--mint", "#dff5ea"),
+      subcategoryInk: cssVar("--mint-ink", "#1f6b47"),
       // Every "similar reels" line is this one colour, the one the key under the map shows.
       similar: cssVar("--sky-ink", "#1f5f9e"),
       butterInk: cssVar("--butter-ink", "#735700"),
@@ -348,9 +354,14 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
       const id = String(n.id);
       const on = lit(id);
       const opacity = on ? 1 : FADED;
-      const c = n.type ? colors.kinds[n.type] : undefined;
-      const fill = n.kind === "interest" ? colors.butter : (c?.fill ?? colors.line);
-      const ink = n.kind === "interest" ? colors.butterInk : (c?.ink ?? colors.ink);
+      const [fill, ink] =
+        n.kind === "type"
+          ? [colors.category, colors.categoryInk]
+          : n.kind === "sub"
+            ? [colors.subcategory, colors.subcategoryInk]
+            : n.kind === "interest"
+              ? [colors.butter, colors.butterInk]
+              : [colors.line, colors.muted]; // a reel: its picture, in a neutral ring
       const d = size(n) * (n.kind === "save" && id === selected ? 1.35 : 1);
       const group = new THREE.Group();
 

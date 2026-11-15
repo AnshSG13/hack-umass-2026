@@ -90,14 +90,22 @@ def sub_counts(user_id: str) -> dict[str, list[dict]]:
     rows = db.saves().aggregate([
         {"$match": {"user_id": user_id, "subcategory": {"$type": "string"}}},
         {"$group": {"_id": {"t": "$type", "c": "$category", "s": "$subcategory"}, "n": {"$sum": 1}}},
-        {"$sort": {"n": -1, "_id.s": 1}},
     ])
-    out: dict[str, list[dict]] = {}
-    for r in rows:
-        g = group({"type": r["_id"].get("t"), "category": r["_id"].get("c")})
-        if g:
-            out.setdefault(g, []).append({"name": r["_id"]["s"], "count": r["n"]})
-    return out
+    return merge_sub_rows(
+        (group({"type": r["_id"].get("t"), "category": r["_id"].get("c")}), r["_id"]["s"], r["n"]) for r in rows)
+
+
+def merge_sub_rows(rows) -> dict[str, list[dict]]:
+    """[(group, name, n), ...] -> {group: [{name, count}, ...]}, largest first, one entry per
+    name. Mongo groups a missing category apart from a null one, and a fixed kind ignores any
+    category left on a reel, so one sub-category can arrive as several rows; they are added
+    up here (two "Weeknight dinners" chips would otherwise pile up in the page)."""
+    totals: dict[str, dict[str, int]] = {}
+    for g, name, n in rows:
+        if g and name:
+            totals.setdefault(g, {})[name] = totals.get(g, {}).get(name, 0) + n
+    return {g: [{"name": k, "count": v} for k, v in sorted(names.items(), key=lambda kv: (-kv[1], kv[0]))]
+            for g, names in totals.items()}
 
 
 def seen_key(group_key: str) -> str:

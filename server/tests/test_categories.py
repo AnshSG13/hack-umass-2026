@@ -54,3 +54,13 @@ def test_graph_files_folders_under_their_category():
     assert np.allclose(dogs["vec"], v)
     assert graph.key_filter("other:Pets/Dogs") == {"type": "other", "category": "Pets", "subcategory": "Dogs"}
     assert graph.key_filter("recipe/Dessert") == {"type": "recipe", "subcategory": "Dessert"}
+
+
+def test_sub_counts_add_up_rows_for_the_same_name():
+    # Mongo groups a missing category apart from a null one: one folder, two rows.
+    rows = [("recipe", "Weeknight dinners", 2), ("recipe", "Dessert", 1), ("recipe", "Weeknight dinners", 1),
+            ("other:Comedy", "Memes", 6), (None, "Lost", 1)]
+    assert categories.merge_sub_rows(rows) == {
+        "recipe": [{"name": "Weeknight dinners", "count": 3}, {"name": "Dessert", "count": 1}],
+        "other:Comedy": [{"name": "Memes", "count": 6}],
+    }

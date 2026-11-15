@@ -16,7 +16,7 @@ import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { useMediaQuery } from "@/lib/hooks";
-import { KINDS, tint, type KindColor } from "@/lib/kinds";
+import { KINDS, tint } from "@/lib/kinds";
 import type { GraphNode, KnowledgeGraph } from "@/lib/types";
 
 const GraphCanvas = dynamic(() => import("@/components/graph-canvas-3d"), {
@@ -282,13 +282,7 @@ export default function GraphPage() {
           )}
           <div aria-live="polite">{sel?.kind === "save" && sel.save_id ? reelCard(sel) : null}</div>
         </div>
-        <GraphKey
-          reels={showSaves}
-          interests={showInterests && Boolean(data?.counts.interests)}
-          colours={(data?.nodes ?? [])
-            .filter((n) => n.kind === "type" && n.type)
-            .map((n) => ({ label: n.label, color: KINDS[n.type!].color }))}
-        />
+        <GraphKey reels={showSaves} interests={showInterests && Boolean(data?.counts.interests)} />
 
         {sel && sel.kind !== "save" ? (
           details(sel)
@@ -342,27 +336,19 @@ export default function GraphPage() {
 }
 
 /** What each shape and line on the map means, drawn the way the map draws it. */
-function GraphKey({
-  reels,
-  interests,
-  colours,
-}: {
-  reels: boolean;
-  interests: boolean;
-  /** One per category on the map, in its colour ("Comedy" on yellow). */
-  colours: { label: string; color: KindColor }[];
-}) {
+/** What each shape, colour and line on the map means, drawn the way the map draws it: every
+ *  category is lavender and every sub-category mint, whatever its kind. */
+function GraphKey({ reels, interests }: { reels: boolean; interests: boolean }) {
   const disc = (r: number, fill: string, ring: string) => (
     <svg viewBox="0 0 28 16" width="28" height="16" aria-hidden="true">
       <circle cx="14" cy="8" r={r} fill={`var(${fill})`} stroke={`var(${ring})`} strokeOpacity="0.45" strokeWidth="1.2" />
     </svg>
   );
-  // The shapes are drawn in grey: colour says which category, shape says what it is.
   const ring = (
     <svg viewBox="0 0 28 16" width="28" height="16" aria-hidden="true">
       <circle cx="14" cy="8" r="6.4" fill="#fff" />
-      <circle cx="14" cy="8" r="4.9" fill="none" stroke="var(--line-strong)" strokeWidth="2.6" />
-      <circle cx="14" cy="8" r="6.6" fill="none" stroke="var(--muted)" strokeOpacity="0.55" strokeWidth="0.8" />
+      <circle cx="14" cy="8" r="4.9" fill="none" stroke="var(--mint)" strokeWidth="2.6" />
+      <circle cx="14" cy="8" r="6.6" fill="none" stroke="var(--mint-ink)" strokeOpacity="0.55" strokeWidth="0.8" />
     </svg>
   );
   const line = (color: string, dot: boolean) => (
@@ -375,7 +361,7 @@ function GraphKey({
     <>
     <ul className="kg-key-list" aria-label="Key">
       <li>
-        {disc(7, "--line-strong", "--muted")}
+        {disc(7, "--lavender", "--lavender-ink")}
         Category
       </li>
       <li>
@@ -406,16 +392,6 @@ function GraphKey({
         </li>
       )}
     </ul>
-    {colours.length > 0 && (
-      <ul className="kg-colours" aria-label="Colours">
-        {colours.map((c) => (
-          <li key={c.label} style={tint(c.color)}>
-            <span className="kg-colour-dot" aria-hidden="true" />
-            {c.label}
-          </li>
-        ))}
-      </ul>
-    )}
     </>
   );
 }

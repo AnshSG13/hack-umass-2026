@@ -3,7 +3,7 @@
 // The saves list: search (what was said or shown), filter by kind, rows that open the Reel
 // page. Home sends people here with ?focus=1 (the search box) or ?type=recipe (a taste).
 
-import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
@@ -44,7 +44,12 @@ function SavesList() {
   const sub = type ? params.get("sub") : null;
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
   const picked = key ? tastes.data?.tastes.find((t) => (t.key ?? t.type) === key) : undefined;
-  const subs = picked?.subcategories ?? [];
+  // One chip per name, even if the server ever sends a name twice: React keeps a stale chip
+  // for each repeated key, and they piled up as people switched categories.
+  const subs = useMemo(() => {
+    const seen = new Set<string>();
+    return (picked?.subcategories ?? []).filter((x) => !seen.has(x.name) && (seen.add(x.name), true));
+  }, [picked]);
   const pickedLabel = picked?.label ?? category ?? (type ? KINDS[type].label : "");
   const wantsFocus = params.get("focus") === "1";
   const [query, setQuery] = useState("");
