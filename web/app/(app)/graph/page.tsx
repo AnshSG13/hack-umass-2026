@@ -3,10 +3,12 @@
 // "How your saves connect": the knowledge graph. Kinds, their sub-categories, reels and the
 // interests from the intro, with "related" links between sub-categories whose reels are
 // alike. Under the canvas, the same connections as text, and details for whatever is tapped.
+// Tapping a reel opens its page, as a reel tile does in My collection.
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Icon } from "@/components/icons";
 import { useApp } from "@/components/shell";
@@ -25,6 +27,7 @@ const SAVES_ON_BY_DEFAULT = 60; // past this many reels the dots crowd the pictu
 
 export default function GraphPage() {
   const { openAdd } = useApp();
+  const router = useRouter();
   const { data, error, mutate } = useSWR<KnowledgeGraph>("/api/graph", fetcher, { revalidateOnFocus: false });
   const [selected, setSelected] = useState<string | null>(null);
   const [savesChoice, setSavesChoice] = useState<boolean | null>(null);
@@ -98,6 +101,16 @@ export default function GraphPage() {
   }
 
   const sel = selected ? byId.get(selected) : undefined;
+
+  // A reel goes straight to its page; anything else is selected to show its details.
+  function onNodeTap(id: string | null) {
+    const node = id ? byId.get(id) : undefined;
+    if (node?.kind === "save" && node.save_id) {
+      router.push(`/s/${node.save_id}`);
+      return;
+    }
+    setSelected(id);
+  }
   const neighbourIds = (id: string, kind?: string) =>
     (data?.links ?? [])
       .filter((l) => (l.source === id || l.target === id) && (!kind || l.kind === kind))
@@ -227,7 +240,7 @@ export default function GraphPage() {
             showSaves={showSaves}
             showInterests={showInterests}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={onNodeTap}
             height={wide ? 560 : 500}
           />
         ) : (
