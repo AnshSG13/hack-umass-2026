@@ -32,22 +32,25 @@ function ReadyFilter({
 }) {
   const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
   const kinds = KIND_ORDER.filter((k) => counts.has(k));
-  // One line if it can be: the chips get smaller step by step until they fit, and only wrap
-  // when even the smallest don't. Measured, so it holds for any labels and screen width.
+  // One line if it can be: the chips get smaller step by step until they fit. When even the
+  // smallest don't, they split evenly over two full-width rows (icons dropped only if a chip
+  // still wouldn't fit). Measured, so it holds for any labels and screen width.
   const row = useRef<HTMLDivElement>(null);
   const signature = kinds.map((k) => `${k}${counts.get(k)}`).join(",");
   useLayoutEffect(() => {
     const el = row.current;
     if (!el) return;
     const fit = () => {
-      const oneLine = () => {
-        const chips = el.children;
-        return chips.length < 2 || (chips[chips.length - 1] as HTMLElement).offsetTop === (chips[0] as HTMLElement).offsetTop;
-      };
+      const chips = Array.from(el.children) as HTMLElement[];
+      el.dataset.icons = "on";
+      el.style.removeProperty("--cols");
       for (const size of ["roomy", "snug", "tight"]) {
         el.dataset.fit = size;
-        if (oneLine()) return;
+        if (chips.length < 2 || chips[chips.length - 1].offsetTop === chips[0].offsetTop) return;
       }
+      el.dataset.fit = "two";
+      el.style.setProperty("--cols", String(Math.ceil(chips.length / 2)));
+      if (chips.some((c) => c.scrollWidth > c.clientWidth + 1)) el.dataset.icons = "off";
     };
     fit();
     const ro = new ResizeObserver(fit);

@@ -2575,6 +2575,54 @@ article.panel {
   height: 14px;
 }
 
+/* Too many for one line: two even rows. The first holds half (rounded up), the second
+   stretches its chips to the same full width, so both rows end flush. */
+.rfilter[data-fit="two"] {
+  gap: 8px;
+}
+.rfilter[data-fit="two"] .rchip {
+  flex: 1 0 calc((100% - (var(--cols) - 1) * 8px) / var(--cols) - 0.5px);
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  gap: 5px;
+  justify-content: center;
+  font-size: 13px;
+  overflow: hidden;
+}
+.rfilter[data-icons="off"] .rchip .i {
+  display: none;
+}
+
+/* Every taste chip wears its own pastel; the chosen one fills with its ink. All is neutral. */
+.rchip:not(.is-all) {
+  background: var(--p);
+  border-color: transparent;
+  color: var(--d);
+}
+.rchip:not(.is-all) .i,
+.rchip:not(.is-all) b {
+  color: var(--d);
+}
+.rchip:not(.is-all) b {
+  opacity: 0.72;
+}
+.rchip:not(.is-all)[aria-pressed="true"] {
+  background: var(--d);
+  border-color: transparent;
+  box-shadow: 0 6px 14px -8px var(--d);
+  color: #ffffff;
+}
+.rchip:not(.is-all)[aria-pressed="true"] .i,
+.rchip:not(.is-all)[aria-pressed="true"] b {
+  color: #ffffff;
+  opacity: 1;
+}
+.rchip.is-all {
+  background: var(--surface);
+  border-color: transparent;
+}
+
 /* ---------- Home rails ----------
    Recently saved: one row, three at a time, sliding. Ready for you: one row, two passes at a
    time (bigger, with bigger prints), sliding. All actions: the same passes, two per row. */

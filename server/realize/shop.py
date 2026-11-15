@@ -25,7 +25,7 @@ log = logging.getLogger("realize.shop")
 STALE_BUILD_S = 150
 MAX_PRODUCTS = 4
 MAX_PRICES = 4          # the lowest prices for what the reel shows, one per store
-MAX_ALTERNATIVES = 2    # cheaper picks for the same job
+MAX_ALTERNATIVES = 3    # similar products worth a look (some cheaper)
 
 # Stores and review sites a person would recognise. Matched on the end of the host name.
 STORES = {
@@ -101,8 +101,9 @@ Accuracy matters more than coverage:
 
 Report short factual lines, one per price found, in this form:
 PRODUCT | STORE | PRICE | what is notable (sale, size, bundle, refurbished, in stock)
-For each product, also report up to two cheaper alternatives that review sites recommend for the same
-use, in the same form, starting the note with "Alternative:".
+For each product, also report up to three similar products that review sites recommend for the same
+use (rivals at a similar price, and at least one cheaper if there is a good one), each with an in-stock
+price, in the same form, starting the note with "Alternative:" and saying in a few words how it compares.
 Only report prices the search results show. Write "not found" when you find none. No introduction."""
 
 OFFER_SCHEMA: dict = {
@@ -115,7 +116,7 @@ OFFER_SCHEMA: dict = {
                 "store": {"type": "string"},
                 "price_text": {"type": "string", "description": "The price exactly as the notes give it, e.g. $49.99"},
                 "note": {"type": "string", "description": "At most 60 characters, or empty. Say \"out of stock\" when the notes say the item isn't available"},
-                "alternative": {"type": "boolean", "description": "true for a cheaper alternative, not the reel's product"},
+                "alternative": {"type": "boolean", "description": "true for a similar product, not the reel's product"},
                 "source": {"type": "integer", "description": "The [n] that backs this price, or 0"},
             },
             "required": ["product", "store", "price_text", "alternative", "source"]}},
@@ -292,7 +293,7 @@ def build(save_id, user_id: str) -> None:
     except Exception as e:  # noqa: BLE001
         log.warning("shop research failed: %s", str(e)[:200])
         db.saves().update_one({"_id": save_id, "user_id": user_id},
-                              {"$set": {"shop.status": "failed", "shop.error": "Price research didn't finish. Try again."}})
+                              {"$set": {"shop.status": "failed", "shop.error": "Shopping research didn't finish. Try again."}})
 
 
 def view(save: dict, user: dict) -> dict | None:
