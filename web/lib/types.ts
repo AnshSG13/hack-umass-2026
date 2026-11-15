@@ -499,6 +499,19 @@ export interface Nutrition {
   assumed: number; // lines with no amount in the reel, so a typical amount was assumed
   servings_from: "reel" | "estimate";
 }
+/** The recipe's own published nutrition, once the reel's chat has found it. It replaces the
+ * estimate everywhere, so a recipe only ever shows one number. */
+export interface PublishedNutrition {
+  per: "serving" | "recipe";
+  servings: number | null;
+  values: Partial<Record<"calories" | "protein_g" | "carbs_g" | "fat_g" | "fiber_g" | "sugar_g" | "sodium_mg", number>>;
+  split_pct: { protein?: number; carbs?: number; fat?: number };
+  sources: { n: number; title: string; url: string }[];
+}
+export interface NutritionResponse {
+  nutrition: Nutrition | null;
+  published: PublishedNutrition | null;
+}
 
 // ---- GET/POST /api/saves/{id}/shop: price research ----
 export interface ShopOffer {

@@ -184,7 +184,7 @@ function Macros({ macros }: { macros: NonNullable<DiscussionMessage["macros"]> }
               <dd>
                 {v.value}
                 {r.unit}
-                <sup aria-label={`source ${v.source}`}>{v.source}</sup>
+                {v.source > 0 && <sup aria-label={`source ${v.source}`}>{v.source}</sup>}
               </dd>
             </div>
           );
