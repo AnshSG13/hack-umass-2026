@@ -1,0 +1,37 @@
+#cloud-config
+# First boot of the Vultr VPS (Ubuntu 24.04). deploy/vultr.py sends this as user_data.
+# Installs Docker with the compose plugin, opens only 22/80/443, adds swap so
+# `next build` doesn't run out of memory on a small plan, and makes /opt/realize.
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - ufw
+  - fail2ban
+
+swap:
+  filename: /swapfile
+  size: 2G
+  maxsize: 2G
+
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "3" }
+      }
+
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw allow 443/udp
+  - ufw --force enable
+  - mkdir -p /opt/realize/secrets
+  - chmod 700 /opt/realize/secrets
+  - touch /var/lib/cloud/realize-ready

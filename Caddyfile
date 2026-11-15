@@ -1,4 +1,16 @@
+{
+	# HTTP/3 (QUIC) off: the iOS Shortcuts runner drops HTTP/3 connections
+	# with "The network connection was lost"; h1/h2 work everywhere.
+	servers {
+		protocols h1 h2
+	}
+}
+
 {$DOMAIN} {
+	log {
+		output stdout
+		format console
+	}
 	handle /api/* {
 		reverse_proxy api:8000 {
 			flush_interval -1
