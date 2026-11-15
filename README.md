@@ -98,10 +98,14 @@ You need Python 3.12 or newer, Node 22 or newer, a MongoDB Atlas cluster (the fr
 
 ## Deploy (Vultr VPS, Docker Compose, Caddy)
 
-1. Create a VPS, install Docker, clone the repo, and point a DNS A record at the server.
-2. Put `.env` on the server with `DOMAIN=<your domain>`, `PUBLIC_BASE_URL=https://<your domain>` and the same Atlas and Gemini settings. If you use Instagram cookies from a throwaway account, save them as `secrets/instagram_cookies.txt` and set `INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt`.
-3. `docker compose up -d --build`. Caddy gets the HTTPS certificate on its own.
-4. Run once: `docker compose exec api python -m scripts.create_indexes` and `docker compose exec worker python -m scripts.build_samples`.
+`deploy/vultr.py` does the whole thing from your laptop with Python and the `ssh` that ships with Windows. It needs no packages.
+
+1. Get an API key from the Vultr dashboard (Account, API), allow your IP there, and set `VULTR_API_KEY` in your shell or in `.env`. You also need an SSH key (`ssh-keygen -t ed25519` if `~/.ssh/id_ed25519.pub` doesn't exist).
+2. `python deploy/vultr.py provision` creates an Ubuntu 24.04 VPS (`vc2-2c-4gb` in `ewr` by default; change them with `--plan` and `--region`). It uploads your SSH key, and `deploy/cloud-init.yaml` installs Docker, opens only ports 22, 80 and 443, and adds 2 GB of swap for the Next.js build. The IP is saved to `deploy/.host`. Running it again reuses the existing `realize` instance.
+3. By hand: add a DNS A record from your domain to that IP, and add `<ip>/32` under Atlas Network Access.
+4. In `.env`, set `DOMAIN=<your domain>` and `PUBLIC_BASE_URL=https://<your domain>`. If you use Instagram cookies from a throwaway account, save them as `secrets/instagram_cookies.txt` and set `INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt`.
+5. `python deploy/vultr.py deploy --init` checks `.env`, uploads the last commit (`git archive HEAD`), `.env` and `secrets/` to `/opt/realize`, runs `docker compose up -d --build`, creates the Atlas indexes, builds the demo samples (skip with `--skip-samples`), and waits for `https://<domain>/api/health`. Caddy gets the HTTPS certificate on its own.
+6. After that, every update is `python deploy/vultr.py deploy`. `status` shows health (`--containers` adds `docker compose ps`), `logs [api|worker|web|caddy]` shows logs, and `ssh` prints the login command.
 5. If Instagram starts blocking the server's IP: `docker compose stop worker` and run `python -m realize.worker` on a laptop with the same `.env`. The API, the web app and the Shortcut don't change.
 6. yt-dlp is unpinned on purpose: `docker compose build --no-cache worker` picks up Instagram fixes.
 

@@ -4,6 +4,12 @@ services:
     command: uvicorn realize.api.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*
     env_file: .env
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
   worker:
     build: ./server
     command: python -m realize.worker
@@ -17,6 +23,7 @@ services:
     build: ./web
     environment:
       API_INTERNAL_URL: http://api:8000
+    depends_on: [api]
     restart: unless-stopped
   caddy:
     image: caddy:2

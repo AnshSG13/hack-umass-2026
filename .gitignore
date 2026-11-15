@@ -27,3 +27,6 @@ web/.next/
 *.tsbuildinfo
 .claude/launch.json
 .claude/settings.local.json
+
+# Vultr server address written by deploy/vultr.py
+deploy/.host
