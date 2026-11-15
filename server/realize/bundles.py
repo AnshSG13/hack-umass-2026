@@ -69,7 +69,7 @@ WORDS = {
                 "done": ""},
 }
 
-POLISH_PROMPT = """You name small plans inside Realize, an app that turns saved reels into plans.
+POLISH_PROMPT = """You name small plans inside Reelize, an app that turns saved reels into plans.
 Below are {n} {type} reels one person saved. Code has already grouped them. Write the words.
 
 - title: a call to action for what is ready, in at most 30 characters, verb first and specific

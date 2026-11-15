@@ -1,6 +1,6 @@
 """The action for a save: what the person wants from the reel, and how the app gives it to them.
 
-Realize is an action app, not a reminder app. A recipe reel wants cooking, so the action opens
+Reelize is an action app, not a reminder app. A recipe reel wants cooking, so the action opens
 cook mode. A product reel wants a good one at a good price, so the action finds the best prices and similar products worth a look.
 A travel reel wants an itinerary. A calendar entry is offered only when the reel itself is tied
 to a time (an event with a date still ahead).

@@ -1,6 +1,6 @@
 # The iOS Shortcut
 
-The Shortcut is optional. Realize is a web app: you can save any reel by copying its link and pasting it on the Save tab (see the main README). The Shortcut adds a one-step path from Instagram's share sheet, which a web app on iOS can't offer by itself.
+The Shortcut is optional. Reelize is a web app: you can save any reel by copying its link and pasting it on the Save tab (see the main README). The Shortcut adds a one-step path from Instagram's share sheet, which a web app on iOS can't offer by itself.
 
 **On the live site, use `https://reelize.boston` wherever these steps say your address** (so the save-only URL is `https://reelize.boston/api/save`), and a key from that site's `/setup`. The main README's "Use it on your iPhone" section has the steps for the live site. The laptop addresses below (`http://<YOUR-LAN-IP>:3200`, `http://10.0.0.11:3100`) are for local testing only.
 
@@ -20,22 +20,22 @@ iOS only imports Shortcut files signed on a Mac, so the file is made here and si
    ```
    git fetch origin
    git checkout feature/shortcut-key
-   python3 shortcut/build_shortcut.py --base https://reelize.boston
+   python3 shortcut/build_shortcut.py --base https://reelize.boston --name Reelize
    ```
-   It writes `shortcut/Realize.shortcut`. A copy built for https://reelize.boston is already committed, so you can skip the python step if the address is the same.
-2. Sign it. The output file's name becomes the Shortcut's name, and it must be **Realize**, because `/connect` runs it by that name.
+   It writes `shortcut/Reelize.shortcut`. A copy built for https://reelize.boston is already committed, so you can skip the python step if the address is the same.
+2. Sign it. The file's name becomes the Shortcut's name. It must match the site's `APP_NAME`, because `/connect` runs the Shortcut by that name. The script names the file after `APP_NAME` (`--name` to change it), so keep the name when signing.
    ```
    mkdir -p ~/Desktop/signed
-   shortcuts sign --mode anyone --input shortcut/Realize.shortcut --output ~/Desktop/signed/Realize.shortcut
+   shortcuts sign --mode anyone --input shortcut/Reelize.shortcut --output ~/Desktop/signed/Reelize.shortcut
    ```
    `shortcuts` is built into macOS 12 and later. Sign in to iCloud on the Mac first if it asks.
-3. AirDrop `~/Desktop/signed/Realize.shortcut` to the iPhone and tap **Add Shortcut**. If an older Shortcut named Realize is already there, choose **Replace**. Alternatively, open it on the Mac in the Shortcuts app.
+3. AirDrop `~/Desktop/signed/Reelize.shortcut` to the iPhone and tap **Add Shortcut**. If an older Shortcut named Reelize is already there, choose **Replace**. Alternatively, open it on the Mac in the Shortcuts app.
 4. On the iPhone, open the Shortcut and check two things:
    - In **Get Contents of URL**, there is exactly one header, `Authorization`.
    - Under ⓘ, **Show in Share Sheet** is on.
 5. Test it:
    1. In Safari, open `https://reelize.boston/setup` signed in, and tap **Add the Shortcut**. This copies your key. Close the iCloud page.
-   2. In Instagram, tap **Share** on a reel, then **Share to…**, then **Realize**.
+   2. In Instagram, tap **Share** on a reel, then **Share to…**, then **Reelize**.
    3. Tap **Allow** for paste and for files.
    4. A notification says "Saved. Still reading it...".
 6. Share it: open the Shortcut, tap **Share**, then **Copy iCloud Link**.
@@ -62,7 +62,7 @@ The file format isn't documented by Apple. The script follows the format other S
 
 ## The other versions
 
-There are three more versions. Start with the first: it is the one from the original prototype (`prototype/README.md`), which was tested on a real iPhone over plain http on Wi-Fi, with the address and body changed for Realize.
+There are three more versions. Start with the first: it is the one from the original prototype (`prototype/README.md`), which was tested on a real iPhone over plain http on Wi-Fi, with the address and body changed for Reelize.
 
 ## Save only (one action, the prototype's Shortcut)
 
@@ -82,9 +82,9 @@ It posts the reel's link and you are done. The plan waits in the app under Waiti
       source  (Text)   → shortcut
       wait    (Number) → 0
    ```
-4. Optional: add **Get Dictionary Value** for `message`, then **Show Notification** with it. It says "Saved. Still reading it. Your plan will be waiting in Realize."
-5. Name the Shortcut **Realize**.
-6. In Instagram, open a reel, **Share**, **Share to…** (or **More**), **Realize**. Tap **Allow** the first time iOS asks to connect.
+4. Optional: add **Get Dictionary Value** for `message`, then **Show Notification** with it. It says "Saved. Still reading it. Your plan will be waiting in Reelize."
+5. Name the Shortcut **Reelize**.
+6. In Instagram, open a reel, **Share**, **Share to…** (or **More**), **Reelize**. Tap **Allow** the first time iOS asks to connect.
 
 The server reads this request loosely, because it is typed on a phone: field names and `shortcut` in any letter case (the iOS keyboard writes `Input`, `Source`, `Shortcut`), `wait` as text, the body left on Form instead of JSON, and the key with or without the word `Bearer` all work. A wrong key or a missing link still gets an error message, and the API logs one "save attempt" line per try saying which of the two was wrong.
 
@@ -94,7 +94,7 @@ If the Shortcut seems to do nothing, add **Show Result** with **Contents of URL*
 
 What changed from the prototype: the path is `/api/save` instead of `/share`, the body field is `input` instead of `url`, and the key goes in the `Authorization` header instead of a `token` field. Your key is on the app's `/setup` page ("Copy key"). Leave `wait` out and the Shortcut waits up to 20 seconds and gets the plan back (`prompt` and `menu`), which is what the full version below builds on.
 
-Checked on 2026-11-14 with the same request sent by curl to the laptop's Wi-Fi address: HTTP 200 in 0.2 s with the message above, and the plan was there 5 seconds later. Not yet run from a real iPhone against Realize.
+Checked on 2026-11-14 with the same request sent by curl to the laptop's Wi-Fi address: HTTP 200 in 0.2 s with the message above, and the plan was there 5 seconds later. Not yet run from a real iPhone against Reelize.
 
 ## Open in the app (one action)
 
@@ -103,10 +103,10 @@ It opens the web app's Save page with the reel's link. It needs no key, and the 
 1. In the Shortcuts app, tap **+**.
 2. Add the action **Open URLs**. In its URL field type your site's address followed by `/save?url=`, for example `http://10.0.0.11:3100/save?url=`.
 3. With the cursor right after the `=`, tap **Shortcut Input** in the row above the keyboard, so the reel's link follows the `=`.
-4. Tap the ⓘ button, turn on **Show in Share Sheet**, and name the Shortcut **Realize**. Under Share Sheet Types, **URLs** is enough.
-5. In Instagram, open a reel, tap **Share**, open the iOS share sheet and tap **Realize**. Safari opens the app and the reel is saved.
+4. Tap the ⓘ button, turn on **Show in Share Sheet**, and name the Shortcut **Reelize**. Under Share Sheet Types, **URLs** is enough.
+5. In Instagram, open a reel, tap **Share**, open the iOS share sheet and tap **Reelize**. Safari opens the app and the reel is saved.
 
-It uses the account that is signed in to Realize in Safari, so create your account in Safari first (`/setup`). If the laptop's address changes, edit the address in step 2.
+It uses the account that is signed in to Reelize in Safari, so create your account in Safari first (`/setup`). If the laptop's address changes, edit the address in step 2.
 
 Checked on 2026-11-14 in a browser by opening `/save?url=` followed by a raw Instagram link with its `?igsh=...&utm_source=...` tail: the reel saved and its ticket appeared. Not yet run from a real iPhone.
 
@@ -123,13 +123,13 @@ Nothing is added to Calendar or Reminders unless you pick an option from the men
 
 ## Build it
 
-Shortcut details (the ⓘ button): name **Realize**, turn on **Show in Share Sheet**, and under Share Sheet Types keep only **URLs** and **Text**.
+Shortcut details (the ⓘ button): name **Reelize**, turn on **Show in Share Sheet**, and under Share Sheet Types keep only **URLs** and **Text**.
 
 Add these actions in order:
 
 1. **Text**: `https://<your domain>`, then **Set Variable** `BASE`.
 2. **Text**: `<your key>`, then **Set Variable** `KEY`.
-   In the Setup tab, add an Import Question on this Text action: "Paste your Realize key".
+   In the Setup tab, add an Import Question on this Text action: "Paste your Reelize key".
 3. **If** `Shortcut Input` *has any value*: **Set Variable** `INPUT` to `Shortcut Input`.
    **Otherwise**: **Get Clipboard**, then **Set Variable** `INPUT`. **End If**.
 4. **Get Contents of URL**
@@ -160,7 +160,7 @@ For each variable in a URL, header or JSON field, pick the blue variable token. 
 
 ## Use it
 
-In Instagram, open a reel, tap **Share**, scroll the action list and tap **Realize**. (Edit Actions lets you pin it as a favorite.) The first time, iOS asks to allow the network connection, Calendar and Reminders. Tap Allow.
+In Instagram, open a reel, tap **Share**, scroll the action list and tap **Reelize**. (Edit Actions lets you pin it as a favorite.) The first time, iOS asks to allow the network connection, Calendar and Reminders. Tap Allow.
 
 You wait up to 20 seconds, then a menu appears, for example:
 
@@ -172,7 +172,7 @@ Gochujang butter squash. Dinner Thursday?
   Just vibes
 ```
 
-If reading takes longer than the wait, you get "Saved. Still reading it. Your plan will be waiting in Realize." and the ticket is in the app under Waiting on you.
+If reading takes longer than the wait, you get "Saved. Still reading it. Your plan will be waiting in Reelize." and the ticket is in the app under Waiting on you.
 
 ## The judge version
 
@@ -214,7 +214,7 @@ These first two come from the original prototype's testing on a real iPhone (`pr
 
 - **"That wasn't an Instagram post link."** The Shortcut ran with no input. Run it from Instagram's share menu, not with the play button in Shortcuts, and check that `input` is set to the `INPUT` variable token.
 - **Can't connect.** The phone has to reach `BASE`. On a laptop, use a tunnel (`cloudflared tunnel --url http://localhost:3000`) and put its https address in step 1 and in `PUBLIC_BASE_URL`.
-- **"Your Realize key doesn't work."** Paste the key again in step 2. Making a new key in Settings stops the old one.
+- **"Your Reelize key doesn't work."** Paste the key again in step 2. Making a new key in Settings stops the old one.
 - **The event lands at the wrong time.** If Get Dates misreads `event_start_text`, use `event_start_iso` and `event_end_iso` instead (and `due_iso` for reminders). They carry the timezone offset.
 - **A second share of the same reel** answers "You saved this on Nov 14. Plan: Thu 6:30 pm." and adds nothing.
 - **Undoing a plan in the app** doesn't remove what the Shortcut already added. The app says so: "If it's on your phone's calendar, delete it there too."

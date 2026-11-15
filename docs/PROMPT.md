@@ -1,4 +1,4 @@
-Build Realize end to end from SPEC.md and DESIGN.md, following CLAUDE.md. The product name is Realize; all user-facing text uses APP_NAME.
+Build Reelize end to end from SPEC.md and DESIGN.md, following CLAUDE.md. The product name is Reelize; all user-facing text uses APP_NAME.
 
 Already in place: .env at the repo root (Atlas URI, Gemini key, model names, cookies path set or blank), fixtures/reels.csv, fixtures/queries.csv (may be partial), and five skills in .claude/skills.
 

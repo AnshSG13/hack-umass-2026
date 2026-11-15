@@ -56,8 +56,12 @@ export function Orb({
   function lightUp() {
     if (flashTimer.current) window.clearTimeout(flashTimer.current);
     setFlash((n) => n + 1);
-    flashTimer.current = window.setTimeout(() => setFlash(0), 650);
+    flashTimer.current = window.setTimeout(() => setFlash(0), 1300);
+    // A small tap of feedback where the phone supports it (Android; iPhone has no web vibration).
+    navigator.vibrate?.(10);
   }
+  // Under the finger, before it is a tap or a hold: the orb gives a little.
+  const [pressing, setPressing] = useState(false);
   // What has been heard so far: words that are settled, and the tail that may still change.
   const [words, setWords] = useState({ settled: "", tail: "" });
   const pressed = useRef(false);
@@ -163,10 +167,22 @@ export function Orb({
           document.body,
         )}
       <span className="orb-slot">
+        {/* On a tap: two pastel rings ripple out from the orb. */}
+        {flash > 0 && !listening && (
+          <span key={`r${flash}`} className="orb-ripple" aria-hidden="true">
+            <span />
+            <span />
+          </span>
+        )}
         <button
           type="button"
           key={flash ? `f${flash}` : "orb"}
-          className={cn("orb", listening && "is-listening", flash > 0 && !listening && "is-tapped")}
+          className={cn(
+            "orb",
+            listening && "is-listening",
+            pressing && !listening && "is-pressed",
+            flash > 0 && !listening && !pressing && "is-tapped",
+          )}
           aria-label={`Ask ${appName}. Hold to speak.`}
           onPointerDown={(e) => {
             if (e.button) return;
@@ -176,12 +192,14 @@ export function Orb({
               /* older browsers */
             }
             pressed.current = true;
+            setPressing(true);
             holdTimer.current = window.setTimeout(() => {
               holdTimer.current = null;
               if (startListening()) setListening(true);
             }, HOLD_MS);
           }}
           onPointerUp={() => {
+            setPressing(false);
             if (!pressed.current) return;
             pressed.current = false;
             if (holdTimer.current !== null) {
@@ -196,6 +214,7 @@ export function Orb({
             else if (!listening) cb.current.onOpen();
           }}
           onPointerCancel={() => {
+            setPressing(false);
             pressed.current = false;
             if (holdTimer.current !== null) {
               window.clearTimeout(holdTimer.current);
@@ -217,6 +236,10 @@ export function Orb({
           }}
         />
       </span>
+      {/* And as Ask opens, a soft glow runs around the edge of the screen, the way Siri does. */}
+      {flash > 0 &&
+        !listening &&
+        createPortal(<div key={`g${flash}`} className="ask-glow" aria-hidden="true" />, document.body)}
       <span className="vh" role="status">
         {listening ? "Listening. Release to send." : ""}
       </span>

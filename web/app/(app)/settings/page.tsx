@@ -1,7 +1,7 @@
 "use client";
 
-// Settings, kept to what is needed: your profile, pings (plans a day, quiet hours), time
-// zone and the iPhone Shortcut key. Every change saves itself and answers with the toast "Saved".
+// Settings, kept to what is needed: your profile, plans and reminders (plans per day, quiet
+// hours, time zone) and the iPhone Shortcut key. Every change saves itself and answers with the toast "Saved".
 // The routine (cook and workout days) keeps its saved values; the app still plans with them.
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -28,6 +28,13 @@ function timezones(current: string): string[] {
   set.add(current);
   set.add(browserTimezone());
   return Array.from(set).sort();
+}
+
+/** "America/New_York" reads "New York (America)": the city first, so it fits the row. */
+function zoneLabel(zone: string): string {
+  const parts = zone.split("/");
+  const city = parts[parts.length - 1].replace(/_/g, " ");
+  return parts.length > 1 ? `${city} (${parts[0].replace(/_/g, " ")})` : city;
 }
 
 function TimeField({
@@ -170,6 +177,12 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                // Leaving the field keeps the change, the same as Save or Enter.
+                onBlur={(e) => {
+                  const into = e.relatedTarget as HTMLElement | null;
+                  if (into?.classList.contains("set-save")) return; // Save is about to do it
+                  if (name.trim() !== (me.name ?? "") && !savingName) void saveName();
+                }}
               />
               <span className="set-sub">{me.email ?? (me.is_demo ? "Demo account" : "Signed in with a key")}</span>
             </span>
@@ -185,13 +198,13 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
 
       <section className="set-group" aria-labelledby="pings-h">
         <h2 id="pings-h" className="set-head">
-          Pings
+          Plans and reminders
         </h2>
         <div className="set-card">
           <div className="set-row">
             <span className="set-label">
-              Plans a day
-              <span className="set-sub">The most it will suggest for one day</span>
+              Plans per day
+              <span className="set-sub">The most it suggests for one day</span>
             </span>
             <span className="set-stepper">
               <button type="button" aria-label="Fewer plans a day" disabled={cap <= 1} onClick={() => update({ ...draft, daily_cap: Math.max(1, cap - 1) })}>
@@ -206,7 +219,7 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
           <div className="set-row is-stack">
             <span className="set-label">
               Quiet hours
-              <span className="set-sub">Nothing reaches you in between</span>
+              <span className="set-sub">No plans or reminders between these times</span>
             </span>
             <span className="set-times">
               <TimeField inline label="Quiet hours start" value={draft.quiet_start} onChange={(v) => update({ ...draft, quiet_start: v })} />
@@ -214,17 +227,10 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
               <TimeField inline label="Quiet hours end" value={draft.quiet_end} onChange={(v) => update({ ...draft, quiet_end: v })} />
             </span>
           </div>
-        </div>
-      </section>
-
-      <section className="set-group" aria-labelledby="general-h">
-        <h2 id="general-h" className="set-head">
-          General
-        </h2>
-        <div className="set-card">
           <div className="set-row">
             <label htmlFor={tzId} className="set-label">
               Time zone
+              <span className="set-sub">Plan times use it</span>
             </label>
             <select
               id={tzId}
@@ -237,7 +243,7 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
             >
               {zones.map((z) => (
                 <option key={z} value={z}>
-                  {z.replace(/_/g, " ")}
+                  {zoneLabel(z)}
                 </option>
               ))}
             </select>
@@ -247,14 +253,16 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
 
       <section className="set-group" aria-labelledby="shortcut-h">
         <h2 id="shortcut-h" className="set-head">
-          iPhone Shortcut
+          Save from Instagram
         </h2>
         <details className="set-card set-more">
           <summary className="set-row">
             <span className="set-label">
               Shortcut key
               <span className="set-sub">
-                {hasKey ? `Ending ${me.key_preview}. Only the Shortcut needs it.` : "You don't have one yet. The Shortcut needs it to save from Instagram."}
+                {hasKey
+                  ? `Ends in ${me.key_preview}. The iPhone Shortcut uses it.`
+                  : "The iPhone Shortcut needs one to save reels to you."}
               </span>
             </span>
             <span className="set-chev" aria-hidden="true">
@@ -315,23 +323,23 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
         <div className="set-card">
           <Link href={STORY_REPLAY_HREF} className="set-row set-link">
             <span className="set-label">
-              Replay the story
-              <span className="set-sub">The short tour from the first open</span>
+              Watch the tour again
+              <span className="set-sub">The three pages from your first open</span>
             </span>
             <ChevronRight aria-hidden="true" className="set-link-chev" />
           </Link>
           <Link href="/graph" className="set-row set-link">
             <span className="set-label">
               How your saves connect
-              <span className="set-sub">A map of your folders and the links between reels</span>
+              <span className="set-sub">A 3D map of your saves</span>
             </span>
             <ChevronRight aria-hidden="true" className="set-link-chev" />
           </Link>
           {!me.is_demo && (
             <Link href="/welcome" className="set-row set-link">
               <span className="set-label">
-                Redo the intro
-                <span className="set-sub">Pick your interests again; they shape your folders</span>
+                Change your interests
+                <span className="set-sub">They decide how your saves are sorted</span>
               </span>
               <ChevronRight aria-hidden="true" className="set-link-chev" />
             </Link>

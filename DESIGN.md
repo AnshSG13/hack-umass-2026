@@ -1,4 +1,4 @@
-# Realize: design
+# Reelize: design
 
 Source of truth for UI. If a skill's defaults disagree, this wins.
 
@@ -23,7 +23,7 @@ Measured: ink on highlighter 10.8:1. Light theme only: `color-scheme: light`, th
 ## 3. Type
 Archivo through next/font/google as a variable font with `axes: ["wdth"]`.
 - Stub time ("Thu 6:30 pm"): Archivo, `font-stretch: 125%` (wdth 125), weight 600, 28px/1.1, tabular numbers. Printed large, like a ticket.
-- Wordmark "Realize": wdth 125, weight 600, 20px.
+- Wordmark "Reelize": wdth 125, weight 600, 20px.
 - Landing headline: wdth 125, weight 600, 34px/1.1.
 - Page title: weight 600, 24px. Ticket title: 600, 17px/1.3, 2-line clamp.
 - Body 16px/1.5 weight 400. Small 14px. Meta 13px muted (minimum size anywhere). Inputs 16px (prevents iOS zoom).
@@ -71,14 +71,14 @@ Toast (custom component, bottom, above the tab bar, opacity 120 ms, 6 s): "Added
 ## 7. Screens
 ### 7.1 Landing `/` (no key)
 - Headline "Every save becomes a plan."
-- Sub: "Share a reel from Instagram. Realize reads it, checks your week, and asks before it adds anything."
+- Sub: "Share a reel from Instagram. Reelize reads it, checks your week, and asks before it adds anything."
 - Hero: a real Ticket in the proposed state built from the first sample (GET /api/demo/samples); if /landing.mp4 exists, a muted looping clip (playsinline, poster) instead.
 - Primary "Try the demo" → creates a demo session → /demo. Loading: "Starting the demo". Error: "The demo didn't start. Try again."
 - Secondary "Use it for real" → /setup.
 - Footer (13px muted): "Built at HackUMass XIV."
 ### 7.2 Samples `/demo` (demo users)
 - Intro: "This is what happens when you share a reel from Instagram."
-- Sample cards: thumbnail, creator, caption excerpt (2 lines), "Sample" tag, button "Save to Realize" (outline, ink border). After tapping, the card becomes a ticket that prints, then proposes.
+- Sample cards: thumbnail, creator, caption excerpt (2 lines), "Sample" tag, button "Save to Reelize" (outline, ink border). After tapping, the card becomes a ticket that prints, then proposes.
 - After the first Add: links "See it in Plans", "Ask about your saves".
 - Paste box: label "Paste your own reel link", button "Read it", helper "Runs live. Takes 10 to 30 seconds."
 - End card (after the first Add): "Want this on your phone? Set it up in 1 minute." button "Set up on iPhone" → /setup.
@@ -91,8 +91,8 @@ Toast (custom component, bottom, above the tab bar, opacity 120 ms, 6 s): "Added
   1. "Copy your key" (Copy key).
   2. "Add the Shortcut" (button → shortcut_url). Helper: "When it asks for your key, paste it." If shortcut_url is empty: "Shortcut link isn't ready yet."
   3. "The first time, iOS asks to allow network, Calendar and Reminders. Tap Allow."
-  4. "Try it: open this reel, tap Share, then Realize." (button "Open the reel" → first_save_reel_url). Polls for a save newer than page load; then "Got your first save!" and its ticket.
-- Android: "Realize works on iPhone for now. Paste reel links here instead." + paste box.
+  4. "Try it: open this reel, tap Share, then Reelize." (button "Open the reel" → first_save_reel_url). Polls for a save newer than page load; then "Got your first save!" and its ticket.
+- Android: "Reelize works on iPhone for now. Paste reel links here instead." + paste box.
 - Demo users also see: "Judges: use the judge Shortcut, no key needed." (→ judge_shortcut_url).
 ### 7.4 Home `/home` (doing; `/plans` redirects here)
 - Greeting, "This week, Nov 14 to Nov 20" (muted), and a full-width "Save a reel" button.
@@ -124,9 +124,9 @@ Toast (custom component, bottom, above the tab bar, opacity 120 ms, 6 s): "Added
 - Error: "Ask didn't answer. Try again." + "Try again".
 - Composer: textarea (16px), placeholder "Ask about your saves", send icon button (aria-label "Send"), 44 px.
 ### 7.7 Plan page `/p/[id]?t=`
-- Ticket in its accepted or follow-up state. Primary "Done", text button "Skipped it", link "Open Realize".
+- Ticket in its accepted or follow-up state. Primary "Done", text button "Skipped it", link "Open Reelize".
 - After Done: tear motion, then "Nice. Marked done." After Skipped: "Marked skipped."
-- Bad token: "This link doesn't open a plan. Open Realize to see your plans."
+- Bad token: "This link doesn't open a plan. Open Reelize to see your plans."
 ### 7.8 Settings `/settings`
 - "Your week": cook nights (Mon to Sun toggle chips) + time; workout days + time; weekend time.
 - "Fewer pings": stepper "At most {n} plans a day" (1 to 5); "No reminders between {from} and {to}"; switches per type ("Recipes", "Events", …) with helper "Off means saves of this type go to your library with no plan."

@@ -121,7 +121,7 @@ def set_status(plan_id: str, body: PlanStatusRequest, user: dict = Depends(curre
 def _public_plan(plan_id: str, t: str | None) -> tuple[dict, dict, dict]:
     _id = db.oid(plan_id)
     plan = db.plans().find_one({"_id": _id}) if _id else None
-    if not plan or not t or not hmac.compare_digest(str(plan.get("share_token") or ""), str(t)):
+    if not plan or not t or not hmac.compare_digest(str(plan.get("share_token") or "").encode(), str(t).encode()):
         raise HTTPException(status_code=404, detail="This link doesn't open a plan.")
     # user_id comes from the plan the token unlocked, never from the request.
     user = db.users().find_one({"_id": plan["user_id"]})

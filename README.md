@@ -1,8 +1,8 @@
-# Realize
+# Reelize
 
 Every save becomes a plan.
 
-People save reels on autopilot and rarely act on them. Realize turns a saved reel into one small, concrete plan: share a reel from Instagram, an agent reads it, checks your week and asks "Cook Thu 6:30 pm + 3 groceries?". You confirm with one tap. Nothing is added to your calendar or reminders without that tap. Later it asks whether you did it.
+People save reels on autopilot and rarely act on them. Reelize turns a saved reel into one small, concrete plan: share a reel from Instagram, an agent reads it, checks your week and asks "Cook Thu 6:30 pm + 3 groceries?". You confirm with one tap. Nothing is added to your calendar or reminders without that tap. Later it asks whether you did it.
 
 - Demo video: TODO
 - Live: https://reelize.boston (Vultr). The landing page has a "Try the demo" button that needs no login. On an iPhone, see [Use it on your iPhone](#use-it-on-your-iphone).
@@ -12,9 +12,9 @@ Built at HackUMass XIV.
 
 ## What it does
 
-Realize is a web app you add to your iPhone's Home Screen. An iOS Shortcut is an optional extra for saving straight from Instagram's share sheet.
+Reelize is a web app you add to your iPhone's Home Screen. An iOS Shortcut is an optional extra for saving straight from Instagram's share sheet.
 
-1. **Save.** Copy a reel's link in Instagram, open Realize, tap Save and paste. No Instagram API and no Instagram login for the user. (With the Shortcut, Share then Realize sends the link in one step.)
+1. **Save.** Copy a reel's link in Instagram, open Reelize, tap Save and paste. No Instagram API and no Instagram login for the user. (With the Shortcut, Share then Reelize sends the link in one step.)
 2. **Plan.** A planner agent reads the caption and thumbnail, works out what the reel is (recipe, event, place, workout, product, tip or just vibes), files it under a sub-category ("Food > Dessert"), looks at your week and proposes one action. It shows up as a ticket.
 3. **Act.** The action is what the reel is for, not just a reminder: a recipe opens cook mode, a product runs price research, a place or event gets a trip plan, and only a reel tied to a date gets a calendar slot. One tap confirms it. Calendar entries come as "Add to Apple Calendar" (an .ics file with alerts) or "Add to Google Calendar"; the Shortcut path writes a native Calendar event and Reminders instead.
 4. **Watch.** In the background a second pass watches the actual video with Gemini: full transcript with timestamps, on-screen text, ingredients, steps. Facts that aren't in the video or caption are dropped or flagged.
@@ -123,7 +123,7 @@ The live site is **https://reelize.boston**. The old address, https://140-82-6-1
 1. **Open it in Safari** (only Safari can add a web app to the Home Screen): https://reelize.boston/setup
 2. **Make an account.** Sign up with email and password, or create a key-only account. Accounts from a laptop setup don't carry over: the server has its own database.
 3. **Add it to your Home Screen.** Tap Share, then **Add to Home Screen**. It opens full screen like an app. If you added it before from a laptop address (`http://10.0.0...`), delete that icon first.
-4. **Save a reel.** In Instagram, open a reel, tap Share, **Copy link**. Open Realize, tap Save and paste (or tap "Paste the link I copied"). The plan appears in a few seconds and the video is read in the background.
+4. **Save a reel.** In Instagram, open a reel, tap Share, **Copy link**. Open Reelize, tap Save and paste (or tap "Paste the link I copied"). The plan appears in a few seconds and the video is read in the background.
 
 ### Optional: save straight from Instagram's share menu
 
@@ -142,12 +142,12 @@ Request Body   JSON
    wait    (Number)  -> 0
 ```
 
-Tap the ⓘ button, turn on **Show in Share Sheet**, set it to receive **URLs** and **Text**, and name it **Realize**. In Instagram: reel, Share, **Share to…** or **More**, **Realize**.
+Tap the ⓘ button, turn on **Show in Share Sheet**, set it to receive **URLs** and **Text**, and name it **Reelize**. In Instagram: reel, Share, **Share to…** or **More**, **Reelize**.
 
 If you already built the Shortcut against a laptop, change only two things: the URL (it must start with `https://` and have no `:3200` or other port) and the key after `Bearer` (a laptop key doesn't exist on the server).
 
 **If it doesn't work:**
-- Add **Show Result** as the last action to see the server's answer. "Your Realize key doesn't work" means the key; anything about the link means the input field.
+- Add **Show Result** as the last action to see the server's answer. "Your Reelize key doesn't work" means the key; anything about the link means the input field.
 - "The network connection was lost": open https://reelize.boston/api/health in Safari on the phone. If it shows `"ok":true`, the phone can reach the server; check that the Shortcut's URL is exactly the one above and that no other action in the Shortcut sets a different address. Toggling Airplane Mode clears connections iOS kept from before.
 - Every save that reaches the server is logged as `save attempt: source=shortcut key=ok link=ok` (or which part was wrong): `python deploy/vultr.py logs api`.
 
@@ -159,9 +159,9 @@ Open **https://reelize.boston/stand** on a laptop or tablet at the table. It sho
 
 1. scans it with the iPhone camera, which opens sign up in Safari, and makes an account (the intro follows, then `/setup`);
 2. taps **Add the Shortcut** at the top of `/setup`, then **Add Shortcut**. There is nothing to type;
-3. in Instagram, taps Share on a reel, then **Realize**. Safari opens `/save?url=<reel>` and the reel is saved to the account signed in there.
+3. in Instagram, taps Share on a reel, then **Reelize**. Safari opens `/save?url=<reel>` and the reel is saved to the account signed in there.
 
-The Shortcut has one action, **Open URLs** with `https://reelize.boston/save?url=` followed by **Shortcut Input**, so it carries no key and one iCloud link works for everyone. To make that link: build the Shortcut once (Show in Share Sheet on, receives URLs and Text, named Realize), then long-press it, **Share**, **Copy iCloud Link**. Put the link in the server's `.env` as `QUICK_SHORTCUT_URL=` and run `python deploy/vultr.py deploy` once from a laptop. Until it is set, `/setup` shows the build-it-yourself steps instead of the button.
+The Shortcut has one action, **Open URLs** with `https://reelize.boston/save?url=` followed by **Shortcut Input**, so it carries no key and one iCloud link works for everyone. To make that link: build the Shortcut once (Show in Share Sheet on, receives URLs and Text, named Reelize), then long-press it, **Share**, **Copy iCloud Link**. Put the link in the server's `.env` as `QUICK_SHORTCUT_URL=` and run `python deploy/vultr.py deploy` once from a laptop. Until it is set, `/setup` shows the build-it-yourself steps instead of the button.
 
 Visitors should stay in Safari: a Home Screen web app keeps its own sign in on iOS, and the Shortcut always opens Safari.
 
@@ -250,7 +250,7 @@ No accuracy number appears in this README. The measured ones live in `eval/resul
 
 ## Privacy and limits
 
-- The Shortcut sends only the reel's link. Realize reads public reels with yt-dlp; private reels are saved but can't be read.
+- The Shortcut sends only the reel's link. Reelize reads public reels with yt-dlp; private reels are saved but can't be read.
 - Videos are deleted from disk and from Gemini's file storage right after processing. Every save links back to the creator's post.
 - Keys and session tokens are random and stored as a hash; a key is shown once. Passwords are hashed with scrypt. A key-only account has no password: the key is the account.
 - The intro's optional ethnicity answer is stored but never sent to Gemini.

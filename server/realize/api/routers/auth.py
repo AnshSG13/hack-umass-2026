@@ -47,10 +47,13 @@ def signup(body: SignupRequest, request: Request) -> dict:
 @router.post("/api/auth/login")
 def login(body: LoginRequest, request: Request) -> dict:
     email = accounts.normalize_email(body.email)
-    if not (ratelimit.allow("login", client_ip(request)) and ratelimit.allow("login_email", email)):
+    ip = client_ip(request)
+    tries = f"{ip}|{email}"
+    if not ratelimit.allow("login", ip) or ratelimit.full("login_fail", tries):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
     user = accounts.authenticate(email, body.password)
     if not user:
+        ratelimit.hit("login_fail", tries)
         raise HTTPException(status_code=401, detail=BAD_LOGIN)
     return {"user_id": user["_id"], "token": accounts.create_session(user)}
 

@@ -10,13 +10,39 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
+from datetime import timedelta
 
 from . import actions, db, gemini
-from .timeutil import now_utc
+from .timeutil import as_utc, now_utc
 
 log = logging.getLogger("realize.nutrition")
 
 TIMEOUT_S = 30
+# After a failed estimate, how long before the same ingredients are tried again.
+FAILED_RETRY = timedelta(minutes=30)
+
+
+class _Busy:
+    """Save ids whose estimate is being made right now, so two opens make one call."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._ids: set[str] = set()
+
+    def acquire(self, key: str) -> bool:
+        with self._lock:
+            if key in self._ids:
+                return False
+            self._ids.add(key)
+            return True
+
+    def release(self, key: str) -> None:
+        with self._lock:
+            self._ids.discard(key)
+
+
+_building = _Busy()
 NUTRIENTS = ["kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g", "sodium_mg"]
 # A single ingredient line above these is a misread, not a recipe.
 CEILING = {"kcal": 6000, "protein_g": 400, "carbs_g": 800, "fat_g": 600, "fiber_g": 150,
@@ -104,7 +130,22 @@ def get_or_build(save: dict) -> dict | None:
     fp = fingerprint(ings)
     have = save.get("nutrition") or {}
     if have.get("fingerprint") == fp:
-        return have.get("value")
+        if have.get("value") is not None:
+            return have.get("value")
+        # It failed for these ingredients a little while ago: don't pay to fail again on
+        # every open of cook mode. After FAILED_RETRY it is tried once more.
+        failed = have.get("failed_at")
+        if failed and now_utc() - as_utc(failed) < FAILED_RETRY:
+            return None
+    if not _building.acquire(str(save["_id"])):
+        return None  # the same estimate is being made by another request right now
+    try:
+        return _build(save, ings, fp)
+    finally:
+        _building.release(str(save["_id"]))
+
+
+def _build(save: dict, ings: list, fp: str) -> dict | None:
     recipe = (save.get("fields") or {}).get("recipe") or {}
     servings = int(recipe.get("servings") or 0)
     lines = "\n".join(f"{i}. {actions.ingredient_line(x)}" for i, x in enumerate(ings))
@@ -116,10 +157,13 @@ def get_or_build(save: dict) -> dict | None:
                 servings_hint=f"the reel says {servings}" if servings else "the reel doesn't say; estimate it"))])
     except Exception as e:  # noqa: BLE001
         log.warning("nutrition failed: %s", str(e)[:200])
-        return None
-    value = total(out.get("lines") or [], len(ings), servings or int(out.get("servings") or 1))
+        out = None
+    value = total(out.get("lines") or [], len(ings), servings or int(out.get("servings") or 1)) if out else None
     if value:
         value["servings_from"] = "reel" if servings else "estimate"
         db.saves().update_one({"_id": save["_id"], "user_id": save["user_id"]},
                               {"$set": {"nutrition": {"fingerprint": fp, "value": value, "at": now_utc()}}})
+    else:
+        db.saves().update_one({"_id": save["_id"], "user_id": save["user_id"]},
+                              {"$set": {"nutrition": {"fingerprint": fp, "value": None, "failed_at": now_utc()}}})
     return value

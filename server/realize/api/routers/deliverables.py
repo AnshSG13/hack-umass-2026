@@ -60,7 +60,7 @@ def public(deliverable_id: str, t: str | None = None) -> dict:
     """The page someone opens from the message. The link's own token stands in for a key."""
     _id = db.oid(deliverable_id)
     d = db.deliverables().find_one({"_id": _id}) if _id else None
-    if not d or not t or not hmac.compare_digest(str(d.get("share_token") or ""), str(t)):
+    if not d or not t or not hmac.compare_digest(str(d.get("share_token") or "").encode(), str(t).encode()):
         raise HTTPException(status_code=404, detail="This link doesn't open anything.")
     # user_id comes from the document the token unlocked, never from the request.
     save = db.saves().find_one({"_id": d["save_id"], "user_id": d["user_id"]},

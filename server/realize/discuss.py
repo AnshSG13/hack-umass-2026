@@ -38,7 +38,7 @@ ALL_LIMIT = 40              # chats listed on the Ask page
 SNAP_SEC = 3.0              # how far a named second may be from a real line's start
 NO_ANSWER = "Ask didn't answer. Try again."
 
-SYSTEM_PROMPT = """You are Ask, inside Realize, talking with someone about one reel they saved.
+SYSTEM_PROMPT = """You are Ask, inside Reelize, talking with someone about one reel they saved.
 Today is {today_local} ({timezone}).
 
 They have the reel's page open. They can already see its title, summary, the plan, and the
@@ -81,7 +81,7 @@ ANSWER_SCHEMA: dict = {
 
 CITE_MARK = re.compile(r"\s*\[\d+(?:\s*[,–-]\s*\d+)*\]")
 
-WEB_PROMPT = """You are Ask, inside Realize, talking with someone about one reel they saved.
+WEB_PROMPT = """You are Ask, inside Reelize, talking with someone about one reel they saved.
 Today is {today_local} ({timezone}). They asked something the reel doesn't answer, so search
 the web for it.
 - Answer the question, first sentence first, in 1 to 4 short sentences, specific to this
@@ -193,7 +193,7 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
     s = get_settings()
     tz = tz_of(user)
     plan = planops.get_for_save(save["_id"])
-    system = SYSTEM_PROMPT.replace("Realize", s.app_name).format(
+    system = SYSTEM_PROMPT.replace("Reelize", s.app_name).format(
         today_local=prompt_date(now_utc().astimezone(tz)), timezone=str(tz),
         reel=reel_context(save, plan, user))
     lines = []
@@ -264,7 +264,7 @@ def web_answer(user: dict, save: dict, plan: dict | None, text: str, query: str,
     source to link, so nothing unsourced is shown as found on the web."""
     s = get_settings()
     tz = tz_of(user)
-    system = WEB_PROMPT.replace("Realize", s.app_name).format(
+    system = WEB_PROMPT.replace("Reelize", s.app_name).format(
         today_local=prompt_date(now_utc().astimezone(tz)), timezone=str(tz),
         reel=reel_context(save, plan, user)[:6000])
     with run.step("web_search", {"query": query[:200]}) as h:

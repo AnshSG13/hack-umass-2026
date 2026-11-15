@@ -22,14 +22,14 @@ log = logging.getLogger("realize.api.saves")
 
 NOT_A_LINK = "That wasn't an Instagram post link. Share a reel from Instagram, or paste its link."
 RATE_LIMITED = "Slow down a little. Try again in a minute."
-EXPIRED = "That choice expired. Open Realize to pick again."
-TAKEN_SHORTCUT = "That time was just taken. Open Realize to pick another."
+EXPIRED = "That choice expired. Open Reelize to pick again."
+TAKEN_SHORTCUT = "That time was just taken. Open Reelize to pick another."
 TAKEN_WEB = "That time was just taken. Pick another."
 IN_FLIGHT = ("queued", "reading", "planning")
 
 
 def _app(text: str) -> str:
-    return text.replace("Realize", get_settings().app_name)
+    return text.replace("Reelize", get_settings().app_name)
 
 
 def _save_response(status: str, *, ask: str = "no", save_id: str = "", prompt: str = "",
@@ -72,7 +72,7 @@ def _respond(save: dict, user: dict, *, prefix: str = "") -> dict:
     if save["status"] in IN_FLIGHT or not plan:
         return _save_response(
             "pending", save_id=sid,
-            message=_app("Saved. Still reading it. Your plan will be waiting in Realize."),
+            message=_app("Saved. Still reading it. Your plan will be waiting in Reelize."),
             ticket=tickets.ticket(save, plan, user, with_steps=True))
     plan = planops.refresh_if_stale(plan, save, user)
     prompt = f"{prefix}{save.get('title') or 'Saved reel'}. {plan.get('question') or ''}".strip()
@@ -222,7 +222,7 @@ def confirm(save_id: str, body: ConfirmRequest = Depends(confirm_request),
             return _confirm_response("accepted", plan, save, user, msg)
         if kind == "later":
             plan = planops.later(plan)
-            return _confirm_response("later", plan, save, user, _app("Okay. It's waiting in Realize."))
+            return _confirm_response("later", plan, save, user, _app("Okay. It's waiting in Reelize."))
         if kind == "none":
             plan = planops.decline(plan)
             return _confirm_response("declined", plan, save, user, "Saved to your library.")
@@ -302,6 +302,8 @@ def reanalyze(save_id: str, user: dict = Depends(current_user)) -> dict:
         raise HTTPException(status_code=409, detail="This one couldn't be read. Use Try again instead.")
     if not ratelimit.allow("reanalyze", user["_id"]):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
+    if not ratelimit.demo_spend(user):
+        raise HTTPException(status_code=429, detail=ratelimit.DEMO_BUILD_MESSAGE)
     edited = [f for f in (save.get("user_edited") or []) if f not in ("type", "subcategory")]
     db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]},
                           {"$set": {"status": "planned", "user_edited": edited, "enrich_error": None}})
@@ -447,6 +449,9 @@ def research_prices(save_id: str, user: dict = Depends(current_user)) -> dict:
     if user.get("is_demo") and db.saves().count_documents(
             {"user_id": user["_id"], "shop.status": {"$exists": True}}) >= demo.SHOP_LIMIT:
         raise HTTPException(status_code=429, detail=demo.SHOP_LIMIT_MESSAGE)
+    # Running it again on a reel that already has prices counts too (the line above doesn't).
+    if not ratelimit.demo_spend(user):
+        raise HTTPException(status_code=429, detail=ratelimit.DEMO_BUILD_MESSAGE)
     if shop.start(save):
         background.submit(shop.build, save["_id"], user["_id"])
     return {"shop": shop.view(db.saves().find_one({"_id": save["_id"], "user_id": user["_id"]}), user)}

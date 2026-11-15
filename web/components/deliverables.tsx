@@ -8,6 +8,7 @@
 // (GET and POST /api/saves/{id}/deliverables).
 
 import { useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { StepLines } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
@@ -428,12 +429,14 @@ export function DeliverableCard({
             <Icon name="copy" />
             Copy
           </button>
-          <a className="btn" href={d.share_path} target="_blank" rel="noopener noreferrer">
+          {/* In the same tab: the Home Screen app has no tabs to come back from, and the
+              page's own Back and X return here. */}
+          <Link className="btn" href={d.share_path}>
             <Icon name="out" />
             <span>
-              Open<span className="vh"> what they will see, in a new tab</span>
+              Open<span className="vh"> what they will see</span>
             </span>
-          </a>
+          </Link>
         </div>
       </div>
       {/* Read out by screen readers either way; shown only when something didn't work. */}

@@ -7,7 +7,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { PublicBack } from "@/components/public-back";
+import { PublicBack, PublicClose } from "@/components/public-back";
 import { Ticket, TicketPlaceholder } from "@/components/ticket";
 import { ToastViewport } from "@/components/toast";
 import { ApiError, fetcher } from "@/lib/api";
@@ -85,11 +85,12 @@ function PlanPage() {
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-[440px] px-4 pb-10">
-      <header className="flex h-14 items-center gap-2">
+      <header className="public-head flex h-14 items-center gap-2">
         <PublicBack />
         <Link href="/" className="wide inline-flex min-h-11 items-center rounded-[4px] text-[20px] leading-none text-ink">
           {appName}
         </Link>
+        <PublicClose />
       </header>
       <main className="pt-2">{body}</main>
       <ToastViewport />

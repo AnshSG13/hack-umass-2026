@@ -25,8 +25,8 @@ export function useKey(): string | null | undefined {
 
 export function useConfig(): { config: AppConfig | undefined; appName: string } {
   const { data } = useSWR<AppConfig>("/api/config", fetcher, { revalidateOnFocus: false });
-  // "Realize" is only the loading fallback; the real name is GET /api/config app_name.
-  return { config: data, appName: data?.app_name ?? "Realize" };
+  // "Reelize" is only the loading fallback; the real name is GET /api/config app_name.
+  return { config: data, appName: data?.app_name ?? "Reelize" };
 }
 
 export function useMe(enabled = true) {

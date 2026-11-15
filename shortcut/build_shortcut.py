@@ -1,4 +1,4 @@
-"""Write the key-saving Realize Shortcut as an unsigned .shortcut file.
+"""Write the key-saving Reelize Shortcut as an unsigned .shortcut file.
 
 iOS only imports signed Shortcut files, and only a Mac can sign one, so this file is the
 input to `shortcuts sign` on a Mac (shortcut/README.md, "Build the key-saving Shortcut on
@@ -14,8 +14,9 @@ What the Shortcut does when a reel is shared to it:
      Otherwise show the server's message as a notification.
 
 Usage:
-  python shortcut/build_shortcut.py --base https://reelize.boston
-  (or leave out --base to use PUBLIC_BASE_URL from the environment or .env)
+  python shortcut/build_shortcut.py --base https://reelize.boston --name Reelize
+  (left out, --base and --name come from PUBLIC_BASE_URL and APP_NAME in the environment
+  or .env). The name must match the site's APP_NAME: /connect runs the Shortcut by it.
 """
 from __future__ import annotations
 
@@ -35,13 +36,19 @@ OBJ = "￼"  # where a variable sits inside a text field
 IS, BEGINS_WITH, HAS_NO_VALUE = 4, 8, 101
 
 
-def base_url(arg: str | None) -> str:
-    value = arg or os.environ.get("PUBLIC_BASE_URL", "")
+def setting(name: str, arg: str | None) -> str:
+    """--arg, else the environment, else the repo's .env."""
+    value = arg or os.environ.get(name, "")
     env = ROOT / ".env"
     if not value and env.exists():
         for line in env.read_text(encoding="utf-8").splitlines():
-            if line.startswith("PUBLIC_BASE_URL="):
+            if line.startswith(name + "="):
                 value = line.split("=", 1)[1].strip().strip('"')
+    return value
+
+
+def base_url(arg: str | None) -> str:
+    value = setting("PUBLIC_BASE_URL", arg)
     if not value.startswith("https://"):
         sys.exit("Give the site's https address: --base https://your.domain")
     return value.rstrip("/")
@@ -195,15 +202,17 @@ def build(base: str) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", help="the site's https address, for example https://reelize.boston")
-    ap.add_argument("--out", default=str(ROOT / "shortcut" / "Realize.shortcut"),
-                    help="where to write the unsigned file (its name becomes the Shortcut's name)")
+    ap.add_argument("--name", help="the Shortcut's name, the site's APP_NAME (default from .env, else Reelize)")
+    ap.add_argument("--out", help="where to write the unsigned file (default shortcut/<name>.shortcut)")
     args = ap.parse_args()
     base = base_url(args.base)
-    out = Path(args.out)
+    name = setting("APP_NAME", args.name) or "Reelize"
+    # The file's name becomes the Shortcut's name when it is imported.
+    out = Path(args.out) if args.out else ROOT / "shortcut" / f"{name}.shortcut"
     data = build(base)
     out.write_bytes(plistlib.dumps(data, fmt=plistlib.FMT_BINARY))
     plistlib.loads(out.read_bytes())  # fails loudly if the file isn't a readable plist
-    print(f"Wrote {out} ({len(data['WFWorkflowActions'])} actions, site {base}). Sign it on a Mac next.")
+    print(f"Wrote {out} ({len(data['WFWorkflowActions'])} actions, site {base}, name {name}). Sign it on a Mac next.")
 
 
 if __name__ == "__main__":
