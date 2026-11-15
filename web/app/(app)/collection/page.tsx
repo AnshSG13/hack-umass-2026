@@ -37,15 +37,18 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const label = taste.label || kind.label;
   const count = [plural(taste.count, "save", "saves"), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
   const href = `/t/${taste.type}`;
+  // New reels since the last look: a bright pill on the corner, and the tile itself glows.
   const fresh = taste.new > 0 ? (
-    <span className="taste-new" aria-label={`${taste.new} new`}>
-      {taste.new > 9 ? "9+" : taste.new}
+    <span className="taste-new" aria-label={`${taste.new} new ${taste.new === 1 ? "reel" : "reels"}`}>
+      <span className="taste-new-dot" aria-hidden="true" />
+      {taste.new > 9 ? "9+" : taste.new} new
     </span>
   ) : null;
+  const tileClass = taste.new > 0 ? " has-new" : "";
 
   if (wide) {
     return (
-      <Link href={href} className="taste taste-wide" style={tint(kind.color)}>
+      <Link href={href} className={`taste taste-wide${tileClass}`} style={tint(kind.color)}>
         {fresh}
         <span className="taste-row">
           <span className="taste-text">
@@ -78,7 +81,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
     );
   }
   return (
-    <Link href={href} className="taste" style={tint(kind.color)}>
+    <Link href={href} className={`taste${tileClass}`} style={tint(kind.color)}>
       {fresh}
       <span className="taste-top">
         <Icon name={kind.icon} />
@@ -154,12 +157,27 @@ export default function CollectionPage() {
         .join(" ") + (data.done ? ` · ${data.done} done` : "")
     : null;
   const empty = data !== undefined && data.total === 0;
+  // What is new since the last look, across tastes: said once at the top of the page.
+  const newTastes = tastes.filter((t) => t.new > 0);
+  const newTotal = newTastes.reduce((n, t) => n + t.new, 0);
 
   return (
     <>
       <header className="page-head gutter">
         <h1 className="page-title">My collection</h1>
         {sub && !empty && <p className="page-sub">{sub}</p>}
+        {newTotal > 0 && (
+          <p className="collection-new" role="status">
+            <span className="collection-new-dot" aria-hidden="true" />
+            <span>
+              <b>{plural(newTotal, "new reel", "new reels")}</b> since you last looked
+              {" "}
+              <span className="collection-new-where">
+                in {newTastes.map((t) => t.label || KINDS[t.type].label).join(", ")}
+              </span>
+            </span>
+          </p>
+        )}
         {!empty && (
           <Link href="/graph" className="text-btn collection-map">
             <Icon name="spark" />
@@ -197,7 +215,7 @@ export default function CollectionPage() {
                 {tastes.length > 0 && <span className="pill">{tastes.length}</span>}
               </h2>
               <Link href="/library" className="see-all">
-                Every save
+                Your saves
                 <Icon name="right" />
               </Link>
             </div>

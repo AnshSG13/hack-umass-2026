@@ -1807,22 +1807,57 @@
 /* ---------- Home: badges on tastes, the greeting's recap ---------- */
 .taste-new {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  z-index: 1;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 7px;
+  top: -9px;
+  right: -7px;
+  z-index: 2;
+  height: 28px;
+  padding: 0 11px 0 9px;
   border-radius: 999px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--d);
   color: #ffffff;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
+  letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 0 0 3px #ffffff;
+  white-space: nowrap;
+  box-shadow: 0 0 0 3px #ffffff, 0 8px 18px -6px rgba(30, 31, 36, 0.45);
   animation: badge-in 0.5s var(--ease) both;
+}
+/* a small light that breathes, so the eye finds it */
+.taste-new-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+.taste-new-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  animation: new-pulse 1.8s ease-out infinite;
+}
+@keyframes new-pulse {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+/* the tile with new reels glows in its own colour */
+.taste.has-new {
+  box-shadow: 0 0 0 2px var(--d), 0 14px 30px -12px var(--d);
+}
+.taste.has-new .taste-name {
+  font-weight: 700;
 }
 @keyframes badge-in {
   from {
@@ -1874,7 +1909,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .orb.is-tapped,
-  .taste-new {
+  .taste-new,
+  .taste-new-dot::after,
+  .collection-new-dot::after {
     animation: none;
   }
 }
@@ -4011,4 +4048,41 @@ article.panel {
 .act-pitch .act-cta + span {
   display: block;
   margin-top: 2px;
+}
+
+/* My collection: what is new since the last look, said once under the title */
+.collection-new {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 16px;
+  background: var(--lavender);
+  color: var(--lavender-ink);
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+.collection-new b {
+  font-weight: 700;
+}
+.collection-new-where {
+  color: var(--ink-2);
+}
+.collection-new-dot {
+  position: relative;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--focus);
+}
+.collection-new-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--focus);
+  animation: new-pulse 1.8s ease-out infinite;
 }
