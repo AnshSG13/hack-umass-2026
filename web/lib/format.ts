@@ -178,3 +178,11 @@ export function localInputValue(plusMinutes = 0): string {
 export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+/** The app keeps no calendar of its own: picking a time makes a plan, and the calendar entry
+ *  goes to the person's own Google or Apple calendar. So the server's "Add to Wednesday"
+ *  reads "Plan it for Wednesday" here. */
+export function planLabel(webLabel: string): string {
+  if (webLabel === "Add to calendar") return "Plan to go";
+  return webLabel.replace(/^Add to /, "Plan it for ");
+}

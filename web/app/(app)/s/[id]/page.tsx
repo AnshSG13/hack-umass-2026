@@ -16,6 +16,7 @@ import { PlanCard } from "@/components/plan-card";
 import { ShopResearch } from "@/components/shop-research";
 import { AiInsightsButton, Discussions, ReelChat } from "@/components/reel-chat";
 import { ReelSections } from "@/components/reel-sections";
+import { ScrollBack } from "@/components/scroll-back";
 import { useApp } from "@/components/shell";
 import { useToast } from "@/components/toast";
 import { SEEDED_SAMPLE_NOTE } from "@/components/trace";
@@ -479,6 +480,7 @@ export default function ReelPage() {
 
   return (
     <>
+      <ScrollBack />
       <div className="hero">
         {ticket.thumb_url ? (
           // eslint-disable-next-line @next/next/no-img-element

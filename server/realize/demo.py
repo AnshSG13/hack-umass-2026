@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from pymongo.errors import DuplicateKeyError
@@ -140,62 +141,77 @@ def story(user: dict) -> dict:
     }
 
 
-def create_session(timezone: str | None) -> tuple[dict, str]:
-    """A demo user that deletes itself in 24 hours, holding every featured sample.
+# The demo library, newest first: (shortcode, hours since it was saved, what became of it).
+# It reads like an account someone has used for two weeks: a few reels from today, most
+# ready to act on, one with a time, two already done, and old just-vibes reels for
+# "Remember this". The story's recipe is left out (the story saves it live), and two samples
+# stay out so the demo page still has reels to try saving.
+LIBRARY: list[tuple[str, float, str]] = [
+    ("DfmpjJVNa85", 2, "ready"),        # Somssi, a place
+    ("DfTLDelM0PL", 5, "planned"),      # chicken au poivre, on a weeknight
+    ("DfkqMXeyo3S", 9, "ready"),        # sculpt workout
+    ("DffyhrWijBQ", 30, "ready"),       # rolling tote, a product
+    (STORY_TRIP, 49, "ready"),          # the Rockaway, with its trip plan built
+    ("Dfik_KdjOO5", 98, "ready"),       # curling iron, a product
+    ("DfYBJN-yVsl", 123, "ready"),      # focus and learning, a tip
+    ("Dfppln1HOfa", 146, "ready"),      # holiday train show, an event
+    ("DfiT7-QxmY-", 171, "done:50"),    # walking cardio, done two days ago
+    ("DfYi19kRNT0", 194, "done:118"),   # tiramisu, done five days ago
+    ("Dfq1HqRsMUn", 240, "kept"),       # puppy with big ears
+    ("Dfdq6Vvjm1U", 265, "kept"),       # Carrie, an event that has passed
+    ("DfqZ2hUzlea", 318, "kept"),       # mountain dog growing up
+]
 
-    The first two actionable recipe or workout samples are accepted into the first
-    free slots, one other actionable sample stays proposed, and the rest are declined.
-    """
-    expires = now_utc() + timedelta(hours=DEMO_HOURS)
-    user, key = accounts.create_user(timezone, is_demo=True, expires_at=expires)
-    samples = list(db.sample_cache().find({"featured": True}).sort("order", 1))
-    made: list[tuple[dict, dict, dict]] = []
-    base = now_utc() - timedelta(minutes=len(samples) + 1)
-    for i, sample in enumerate(samples):
+
+def create_session(timezone: str | None) -> tuple[dict, str]:
+    """A demo user that deletes itself in 24 hours, holding LIBRARY. Free: every plan comes
+    from the sample cache with times computed in code, and nothing is asked of a model."""
+    now = now_utc()
+    user, key = accounts.create_user(timezone, is_demo=True, expires_at=now + timedelta(hours=DEMO_HOURS))
+    samples = {s["_id"]: s for s in db.sample_cache().find({"_id": {"$in": [c for c, _, _ in LIBRARY]}})}
+    made: list[tuple[dict, dict, str]] = []
+    for code, hours, fate in LIBRARY:
+        sample = samples.get(code)
+        if not sample:
+            continue
         doc = save_doc_from_sample(user, sample, status="ready", source="sample")
-        doc["created_at"] = base + timedelta(minutes=i)  # stable library order
-        doc["planned_at"] = doc["created_at"]
+        doc["created_at"] = doc["planned_at"] = doc["ready_at"] = now - timedelta(hours=hours)
         try:
             doc["_id"] = db.saves().insert_one(doc).inserted_id
         except DuplicateKeyError:
             continue
-        made.append((doc, sample, {}))
+        made.append((doc, sample, fate))
 
-    def actionable(sample: dict) -> bool:
-        return bool((sample.get("cached_plan") or {}).get("actionable"))
-
-    accept_ids, waiting_id = [], None
-    for doc, sample, _ in made:
-        t = (sample.get("enrichment") or {}).get("type")
-        if t in ("recipe", "workout") and actionable(sample) and len(accept_ids) < 2:
-            accept_ids.append(doc["_id"])
-    for doc, sample, _ in made:
-        if doc["_id"] not in accept_ids and actionable(sample):
-            waiting_id = doc["_id"]
-            break
-
-    # Accept first so later proposals see those slots as taken.
-    ordered = sorted(made, key=lambda m: 0 if m[0]["_id"] in accept_ids else 1)
-    for doc, sample, _ in ordered:
+    def settle(item: tuple[dict, dict, str]) -> None:
+        doc, sample, fate = item
         plan = planner.cached_plan_fallback(doc, user, sample.get("cached_plan") or {})
-        if doc["_id"] in accept_ids and plan.get("options"):
-            planops.accept(plan, doc, plan["options"][0], user, "web")
-        elif doc["_id"] != waiting_id:
-            planops.decline(plan)
+        actionable = bool(plan.get("actionable")) and bool(plan.get("options"))
+        try:
+            if fate == "planned" and actionable:
+                planops.accept(plan, doc, plan["options"][0], user, "web")
+            elif fate.startswith("done:") and plan.get("status") == "proposed":
+                done = planops.set_status(plan, "done")
+                db.plans().update_one({"_id": done["_id"]},
+                                      {"$set": {"done_at": now - timedelta(hours=float(fate[5:]))}})
+            elif fate == "kept" or not actionable:
+                planops.decline(plan)
+        except Exception as e:  # noqa: BLE001 - one odd sample must not break the demo
+            log.warning("demo plan for %s left as it was: %s", doc.get("shortcode"), str(e)[:120])
+        if doc["shortcode"] == STORY_TRIP:
+            attach_story(doc, user, sample)  # "Make it a trip" opens on a finished plan
 
-    # The story's trip reel, with its prebuilt trip plan, so "Make it a trip" opens ready.
-    trip_sample = sample_for(STORY_TRIP)
-    if trip_sample and not db.saves().find_one({"user_id": user["_id"], "shortcode": STORY_TRIP}):
-        doc = save_doc_from_sample(user, trip_sample, status="ready", source="sample")
-        doc["created_at"] = doc["planned_at"] = base - timedelta(minutes=1)
-        doc["_id"] = db.saves().insert_one(doc).inserted_id
-        planner.cached_plan_fallback(doc, user, trip_sample.get("cached_plan") or {})
-        attach_story(doc, user, trip_sample)
+    # The one with a time goes first, so the others' options see that slot as taken; the rest
+    # are independent, so they run side by side and "Try the demo" opens quickly.
+    for item in made:
+        if item[2] == "planned":
+            settle(item)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(settle, [m for m in made if m[2] != "planned"]))
     return user, key
 
 
 def list_samples(user: dict | None) -> list[dict]:
-    """Non-featured samples for the demo feed."""
+    """Samples for the demo page's "try saving one" feed, each marked if it is already saved."""
     saved: set[str] = set()
     if user:
         saved = {s["shortcode"] for s in db.saves().find({"user_id": user["_id"]}, {"shortcode": 1})}

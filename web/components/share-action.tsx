@@ -15,6 +15,7 @@ import { copyText } from "@/lib/clipboard";
 import { ingredientLine } from "@/lib/format";
 import { useConfig } from "@/lib/hooks";
 import { tint, type KindColor } from "@/lib/kinds";
+import { useTicketActions } from "@/lib/ticket-actions";
 import type { Deliver, Fields, Shop, Ticket, TripState } from "@/lib/types";
 
 function dose(ex: { sets?: number; reps?: string; duration_sec?: number }): string {
@@ -92,6 +93,21 @@ function fileName(title: string): string {
 
 export function ShareAction({ deliver, ticket, fields }: { deliver: Deliver; ticket: Ticket; fields: Fields }) {
   const [open, setOpen] = useState(false);
+  // "calendar": the sheet's second page, Apple or Google Calendar (after picking a time).
+  const [view, setView] = useState<"main" | "calendar">("main");
+  // The ticket as this sheet last saw it: picking a time here updates it at once.
+  const [cur, setCur] = useState(ticket);
+  const [seen, setSeen] = useState(ticket);
+  if (ticket !== seen) {
+    // The page loaded a newer ticket: start from that.
+    setSeen(ticket);
+    setCur(ticket);
+  }
+  const actions = useTicketActions(cur, { apply: setCur });
+  const plan = cur.plan;
+  const planned = plan?.status === "accepted" && Boolean(plan.ics_url || plan.gcal_url);
+  const times = plan && plan.status === "proposed" && plan.actionable ? plan.options.slice(0, 3) : [];
+  const canCalendar = planned || times.length > 0;
   const toast = useToast();
   const { appName } = useConfig();
   // The same keys the price list and the trip plan use, so this reads their cached data.
@@ -135,6 +151,14 @@ export function ShareAction({ deliver, ticket, fields }: { deliver: Deliver; tic
   }
 
   const rows: { icon: IconName; name: string; note: string; color: KindColor; run: () => void; show: boolean }[] = [
+    {
+      icon: "cal",
+      name: "Add to calendar",
+      note: planned ? `Apple or Google Calendar, ${plan?.big_time ?? "at its time"}` : "Pick a time, then Apple or Google Calendar",
+      color: "rose",
+      run: () => setView("calendar"),
+      show: canCalendar,
+    },
     { icon: "share", name: "Share", note: "Messages, WhatsApp, Notes and more", color: "lavender", run: () => void nativeShare(), show: canShare },
     { icon: "copy", name: "Copy as text", note: "Paste it anywhere", color: "sky", run: () => void copy(), show: true },
     { icon: "mail", name: "Email it", note: "Opens your mail app", color: "peach", run: email, show: true },
@@ -147,8 +171,27 @@ export function ShareAction({ deliver, ticket, fields }: { deliver: Deliver; tic
       <button type="button" className="round act-share" aria-label="Share or export" aria-haspopup="dialog" onClick={() => setOpen(true)}>
         <Icon name="share" />
       </button>
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setView("main");
+        }}
+      >
         <SheetContent aria-describedby={undefined}>
+          {view === "calendar" ? (
+            <CalendarPage
+              ticket={cur}
+              planned={planned}
+              times={times}
+              busy={actions.busy}
+              error={actions.error}
+              onPick={(id) => void actions.confirm(id)}
+              onBack={() => setView("main")}
+              onDone={() => setOpen(false)}
+            />
+          ) : (
+          <>
           <SheetHead>Share or export</SheetHead>
           {notReady && <p className="plan-meta" style={{ marginTop: 0 }}>It finishes in a moment; until then only the basics are included.</p>}
           <ul className="opts">
@@ -168,8 +211,109 @@ export function ShareAction({ deliver, ticket, fields }: { deliver: Deliver; tic
                 </li>
               ))}
           </ul>
+          </>
+          )}
         </SheetContent>
       </Sheet>
+    </>
+  );
+}
+
+/** The share sheet's calendar page. Once the plan has a time: Apple Calendar (a calendar file)
+ *  or Google Calendar (its add-event page), as real links so the phone opens them. Before that,
+ *  the suggested times; picking one plans it, and the two calendars appear. */
+function CalendarPage({
+  ticket,
+  planned,
+  times,
+  busy,
+  error,
+  onPick,
+  onBack,
+  onDone,
+}: {
+  ticket: Ticket;
+  planned: boolean;
+  times: NonNullable<Ticket["plan"]>["options"];
+  busy: string | null;
+  error: string | null;
+  onPick: (id: string) => void;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const plan = ticket.plan;
+  return (
+    <>
+      <button type="button" className="back-pill cal-back" onClick={onBack}>
+        <Icon name="back" />
+        Share or export
+      </button>
+      <SheetHead>Add to calendar</SheetHead>
+      {planned && plan ? (
+        <>
+          <p className="cal-when">
+            <Icon name="cal" />
+            <span>
+              <b>{plan.big_time ?? "Planned"}</b>
+              {ticket.title ? ` · ${ticket.title}` : ""}
+            </span>
+          </p>
+          <ul className="opts">
+            {plan.ics_url && (
+              <li>
+                <a className="opt" href={plan.ics_url} target="_blank" rel="noopener noreferrer" onClick={onDone}>
+                  <span className="opt-ico" style={tint("sky")}>
+                    <Icon name="cal" />
+                  </span>
+                  <span className="opt-text">
+                    <span className="opt-name">Apple Calendar</span>
+                    <span className="opt-note">Adds it on this iPhone, with its alerts</span>
+                  </span>
+                </a>
+              </li>
+            )}
+            {plan.gcal_url && (
+              <li>
+                <a className="opt" href={plan.gcal_url} target="_blank" rel="noopener noreferrer" onClick={onDone}>
+                  <span className="opt-ico" style={tint("mint")}>
+                    <Icon name="cal" />
+                  </span>
+                  <span className="opt-text">
+                    <span className="opt-name">Google Calendar</span>
+                    <span className="opt-note">Opens Google Calendar to save it</span>
+                  </span>
+                </a>
+              </li>
+            )}
+          </ul>
+        </>
+      ) : (
+        <>
+          <p className="plan-meta" style={{ marginTop: 0 }}>
+            Pick a time first. It goes on your week, then you choose Apple or Google Calendar.
+          </p>
+          <ul className="opts">
+            {times.map((o) => (
+              <li key={o.id}>
+                <button type="button" className="opt" disabled={busy !== null} onClick={() => onPick(o.id)}>
+                  <span className="opt-ico" style={tint("rose")}>
+                    <Icon name="clock" />
+                  </span>
+                  <span className="opt-text">
+                    <span className="opt-name">{busy === o.id ? "Planning it" : o.big_time}</span>
+                    <span className="opt-note">{o.secondary || o.web_label}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {error && (
+            <p role="alert" className="plan-error">
+              {error}
+            </p>
+          )}
+        </>
+      )}
     </>
   );
 }

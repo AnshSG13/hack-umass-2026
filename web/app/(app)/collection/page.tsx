@@ -37,15 +37,18 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const label = taste.label || kind.label;
   const count = [plural(taste.count, "save", "saves"), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
   const href = `/t/${taste.type}`;
+  // New reels since the last look: a bright pill on the corner, and the tile itself glows.
   const fresh = taste.new > 0 ? (
-    <span className="taste-new" aria-label={`${taste.new} new`}>
-      {taste.new > 9 ? "9+" : taste.new}
+    <span className="taste-new" aria-label={`${taste.new} new ${taste.new === 1 ? "reel" : "reels"}`}>
+      <span className="taste-new-dot" aria-hidden="true" />
+      {taste.new > 9 ? "9+" : taste.new} new
     </span>
   ) : null;
+  const tileClass = taste.new > 0 ? " has-new" : "";
 
   if (wide) {
     return (
-      <Link href={href} className="taste taste-wide" style={tint(kind.color)}>
+      <Link href={href} className={`taste taste-wide${tileClass}`} style={tint(kind.color)}>
         {fresh}
         <span className="taste-row">
           <span className="taste-text">
@@ -78,7 +81,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
     );
   }
   return (
-    <Link href={href} className="taste" style={tint(kind.color)}>
+    <Link href={href} className={`taste${tileClass}`} style={tint(kind.color)}>
       {fresh}
       <span className="taste-top">
         <Icon name={kind.icon} />
@@ -116,21 +119,39 @@ function RememberCard() {
       // Private mode: it stays closed for this visit only.
     }
   }
+  const asked = /[?!.]$/.test(item.line) ? item.line : `${item.line}?`;
   return (
     <div className="gutter">
+      {/* A memory, not a notice: the reel as a print with tape on it, and when it was. */}
       <div className="remember" style={tint("butter")}>
         <Link href={`/s/${item.save_id}`} className="remember-main">
-          {item.thumb_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.thumb_url} alt="" className="remember-thumb" />
-          ) : (
-            <span className="remember-thumb" aria-hidden="true">
-              <Icon name="spark" />
-            </span>
-          )}
+          <span className="remember-print" aria-hidden="true">
+            <span className="remember-tape" />
+            {item.thumb_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.thumb_url} alt="" />
+            ) : (
+              <span className="remember-blank">
+                <Icon name="spark" />
+              </span>
+            )}
+          </span>
           <span className="remember-text">
-            <span className="remember-line">{item.line}</span>
-            <span className="remember-meta">You saved this {item.saved_on}</span>
+            <span className="remember-when">
+              <Icon name="clock" />
+              {item.ago ? `From ${item.ago}` : "From a while back"}
+            </span>
+            <span className="remember-line">{asked}</span>
+            {/* A line that doesn't name the reel gets the reel's own name under it. */}
+            {/^remember this one/i.test(item.line) && <span className="remember-title">{item.title}</span>}
+            <span className="remember-meta">
+              You saved it {item.weekday ? `on a ${item.weekday}, ` : ""}
+              {item.saved_on}
+            </span>
+            <span className="remember-go">
+              Look again
+              <Icon name="right" />
+            </span>
           </span>
         </Link>
         <button type="button" className="remember-x" aria-label="Close" onClick={close}>
@@ -154,12 +175,27 @@ export default function CollectionPage() {
         .join(" ") + (data.done ? ` · ${data.done} done` : "")
     : null;
   const empty = data !== undefined && data.total === 0;
+  // What is new since the last look, across tastes: said once at the top of the page.
+  const newTastes = tastes.filter((t) => t.new > 0);
+  const newTotal = newTastes.reduce((n, t) => n + t.new, 0);
 
   return (
     <>
       <header className="page-head gutter">
         <h1 className="page-title">My collection</h1>
         {sub && !empty && <p className="page-sub">{sub}</p>}
+        {newTotal > 0 && (
+          <p className="collection-new" role="status">
+            <span className="collection-new-dot" aria-hidden="true" />
+            <span>
+              <b>{plural(newTotal, "new reel", "new reels")}</b> since you last looked
+              {" "}
+              <span className="collection-new-where">
+                in {newTastes.map((t) => t.label || KINDS[t.type].label).join(", ")}
+              </span>
+            </span>
+          </p>
+        )}
         {!empty && (
           <Link href="/graph" className="text-btn collection-map">
             <Icon name="spark" />
@@ -197,7 +233,7 @@ export default function CollectionPage() {
                 {tastes.length > 0 && <span className="pill">{tastes.length}</span>}
               </h2>
               <Link href="/library" className="see-all">
-                Every save
+                Your saves
                 <Icon name="right" />
               </Link>
             </div>

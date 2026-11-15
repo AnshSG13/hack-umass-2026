@@ -1,7 +1,7 @@
 "use client";
 
 // The guided first open, after "Try the demo": full-screen pages, one idea each.
-// 1 The problem. 2 The moment: a saved reel becomes a plan on your week. 3 Three proofs of
+// 1 The problem. 2 The moment: a saved reel becomes a plan with a time. 3 Three proofs of
 // what else it does. Swipe, the arrow keys or the pinned button move between them; Skip
 // goes Home. The one problem line is the only fixed copy that says anything about the
 // person; everything else on screen comes from the API.
@@ -19,7 +19,7 @@ import { useDiscussions } from "@/components/reel-chat";
 import { PunchHole } from "@/components/ticket";
 import { Sheet, SheetContent, SheetDescription, SheetHead } from "@/components/ui/sheet";
 import { api, ApiError, fetcher } from "@/lib/api";
-import { ticketState, ticketTitle, type TicketState } from "@/lib/format";
+import { planLabel, ticketState, ticketTitle, type TicketState } from "@/lib/format";
 import { useElapsed, useMe, useRefresh, useSaveDetail } from "@/lib/hooks";
 import { tint, type KindColor } from "@/lib/kinds";
 import { markStorySeen, type DemoStory } from "@/lib/story";
@@ -253,8 +253,16 @@ function PlanFace({ ticket, fresh }: { ticket: Ticket; fresh: boolean }) {
         {secondary && !quiet && <p className="story-plan-sec">{secondary}</p>}
         {planned ? (
           <>
-            <p className="story-plan-line">Added to {plan?.long_day ?? "your week"}</p>
+            <p className="story-plan-line">Planned for {plan?.long_day ?? "this week"}</p>
             {plan?.reminders_preview[0] && <p className="story-plan-why">Reminder: {plan.reminders_preview[0]}</p>}
+            {/* The app keeps no calendar of its own: the entry goes to the person's own. */}
+            {plan?.gcal_url && (
+              <a className="story-gcal" href={plan.gcal_url} target="_blank" rel="noopener noreferrer">
+                <Icon name="cal" />
+                Add to Google Calendar
+                <Icon name="out" />
+              </a>
+            )}
           </>
         ) : (
           plan?.why && <p className="story-plan-why">{plan.why}</p>
@@ -295,7 +303,7 @@ function MomentAction({
         disabled={busy}
         onClick={() => void actions.confirm(first.id)}
       >
-        {first.web_label}
+        {planLabel(first.web_label)}
       </button>
     );
   } else if (state === "failed" && (ticket.failure_reason === "processing_error" || ticket.failure_reason === null)) {

@@ -30,7 +30,7 @@ export function useStartBundle(): { start: (b: Bundle) => Promise<Bundle | null>
     setBusyId(b.id);
     try {
       const r = await api<{ bundle: Bundle; message: string }>(`/api/bundles/${b.id}/start`, { method: "POST" });
-      toast.show(r.message || "Added to your week.");
+      toast.show(r.message || "Planned.");
       refresh();
       return r.bundle;
     } catch (e) {

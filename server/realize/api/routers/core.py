@@ -195,6 +195,18 @@ def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
     return {"items": items, "mode": mode}
 
 
+def ago_words(days: int) -> str:
+    """How long ago, the way a person says it: "yesterday", "9 days ago", "3 weeks ago"."""
+    if days <= 1:
+        return "yesterday"
+    if days < 14:
+        return f"{days} days ago"
+    if days < 60:
+        return f"{days // 7} weeks ago"
+    months = days // 30
+    return "a year ago" if months >= 12 else f"{months} months ago"
+
+
 @router.get("/api/remember")
 def remember(user: dict = Depends(current_user)) -> dict:
     """One just-vibes reel saved before today, to bring back on Home: a different one each
@@ -215,8 +227,10 @@ def remember(user: dict = Depends(current_user)) -> dict:
     s = docs[seed % len(docs)]
     a = intent.view(planops.get_for_save(s["_id"]), {"type": "other"}) or {}
     line = a.get("cta") if a.get("deliver") == "keep" else None
+    saved_l = as_utc(s["created_at"]).astimezone(tz)
     return {"item": {"save_id": str(s["_id"]), "title": s.get("title") or "Saved reel",
                      "thumb_url": tickets.thumb_url(s), "saved_on": tickets.saved_on(s, user),
+                     "ago": ago_words((today - saved_l.date()).days), "weekday": saved_l.strftime("%A"),
                      "line": line or intent.WORDS["keep"]["cta"], "day": today.isoformat()}}
 
 

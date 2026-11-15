@@ -77,6 +77,8 @@ export interface RememberItem {
   thumb_url: string | null;
   saved_on: string;
   line: string; // "Remember this puppy growing up"
+  ago?: string; // "9 days ago", in words, worked out by the server
+  weekday?: string; // "Thursday": the day it was saved
   day: string; // YYYY-MM-DD: a different reel each day
 }
 

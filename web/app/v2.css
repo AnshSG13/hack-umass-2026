@@ -1690,6 +1690,12 @@
   margin-inline: auto;
   padding: max(18px, env(safe-area-inset-top, 0px)) var(--gutter-r) calc(56px + var(--safe-b)) var(--gutter-l);
 }
+.dpage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
 .dpage-brand {
   display: block;
   font-size: 18px;
@@ -1807,22 +1813,57 @@
 /* ---------- Home: badges on tastes, the greeting's recap ---------- */
 .taste-new {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  z-index: 1;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 7px;
+  top: -9px;
+  right: -7px;
+  z-index: 2;
+  height: 28px;
+  padding: 0 11px 0 9px;
   border-radius: 999px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--d);
   color: #ffffff;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
+  letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 0 0 3px #ffffff;
+  white-space: nowrap;
+  box-shadow: 0 0 0 3px #ffffff, 0 8px 18px -6px rgba(30, 31, 36, 0.45);
   animation: badge-in 0.5s var(--ease) both;
+}
+/* a small light that breathes, so the eye finds it */
+.taste-new-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+.taste-new-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  animation: new-pulse 1.8s ease-out infinite;
+}
+@keyframes new-pulse {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+/* the tile with new reels glows in its own colour */
+.taste.has-new {
+  box-shadow: 0 0 0 2px var(--d), 0 14px 30px -12px var(--d);
+}
+.taste.has-new .taste-name {
+  font-weight: 700;
 }
 @keyframes badge-in {
   from {
@@ -1874,7 +1915,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .orb.is-tapped,
-  .taste-new {
+  .taste-new,
+  .taste-new-dot::after,
+  .collection-new-dot::after {
     animation: none;
   }
 }
@@ -2266,19 +2309,19 @@
 
 /* ---------- Home: Remember this (a vibes reel, back for a moment; not a reminder) ---------- */
 .remember {
+  position: relative;
   margin-top: 22px;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 6px 10px 10px;
-  border-radius: 22px;
-  background: var(--p);
+  align-items: flex-start;
+  padding: 16px 4px 16px 16px;
+  border-radius: 24px;
+  background: radial-gradient(120% 140% at 0% 0%, #fff9e2 0%, var(--p) 58%);
   animation: remember-in 0.5s var(--ease) both;
 }
 @keyframes remember-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
 }
 .remember-main {
@@ -2286,42 +2329,105 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   color: var(--ink);
 }
-.remember-thumb {
-  width: 52px;
-  height: 68px;
+/* the reel as an instant print: white frame with a deeper foot, a little crooked, taped on */
+.remember-print {
+  position: relative;
   flex: none;
-  border-radius: 14px;
-  object-fit: cover;
+  width: 84px;
+  padding: 5px 5px 16px;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 1px 1px rgba(30, 31, 36, 0.08), 0 14px 22px -12px rgba(92, 70, 0, 0.55);
+  transform: rotate(-4deg);
+  transition: transform 0.35s var(--ease);
+}
+.remember-main:active .remember-print {
+  transform: rotate(-1deg) scale(1.03);
+}
+.remember-print img,
+.remember-blank {
   display: grid;
   place-items: center;
-  background: #ffffff;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border-radius: 2px;
+  object-fit: cover;
+  background: var(--surface);
   color: var(--d);
-  transform: rotate(-3deg);
-  box-shadow: 0 6px 14px -8px rgba(30, 31, 36, 0.45);
+  /* a touch faded, the way an old print is */
+  filter: sepia(0.22) saturate(0.92) contrast(0.97);
+}
+.remember-tape {
+  position: absolute;
+  z-index: 1;
+  top: -9px;
+  left: 50%;
+  width: 40px;
+  height: 17px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 1px 2px rgba(92, 70, 0, 0.16);
+  transform: translateX(-50%) rotate(5deg);
 }
 .remember-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+}
+.remember-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--d);
+}
+.remember-when .i {
+  width: 13px;
+  height: 13px;
 }
 .remember-line {
   font-family: var(--display);
-  font-size: 19px;
-  line-height: 1.2;
+  font-style: italic;
+  font-size: 21px;
+  line-height: 1.16;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+}
+.remember-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .remember-meta {
   font-size: 13px;
   color: var(--d);
 }
+.remember-go {
+  margin-top: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.remember-go .i {
+  width: 15px;
+  height: 15px;
+}
 .remember-x {
   width: 44px;
   height: 44px;
+  margin-top: -10px;
   flex: none;
   border-radius: 50%;
   display: grid;
@@ -2336,6 +2442,35 @@
   .remember {
     animation: none;
   }
+  .remember-print {
+    transition: none;
+  }
+}
+
+/* the story's plan card: the calendar entry goes to the person's own calendar */
+.story-gcal {
+  align-self: flex-start;
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(30, 31, 36, 0.08);
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.story-gcal .i {
+  width: 16px;
+  height: 16px;
+}
+.story-gcal:active {
+  transform: scale(0.97);
 }
 
 /* ---------- Actions: Missed (waiting events whose dates have passed), kept quiet ---------- */
@@ -4011,4 +4146,144 @@ article.panel {
 .act-pitch .act-cta + span {
   display: block;
   margin-top: 2px;
+}
+
+/* My collection: what is new since the last look, said once under the title */
+.collection-new {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 16px;
+  background: var(--lavender);
+  color: var(--lavender-ink);
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+.collection-new b {
+  font-weight: 700;
+}
+.collection-new-where {
+  color: var(--ink-2);
+}
+.collection-new-dot {
+  position: relative;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--focus);
+}
+.collection-new-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--focus);
+  animation: new-pulse 1.8s ease-out infinite;
+}
+
+/* Reel chat: where a web answer was found, shaped like "Said at 0:12" but blue */
+.web-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.web-chip {
+  max-width: 100%;
+  background: var(--sky);
+  color: var(--sky-ink);
+  text-decoration: none;
+}
+.web-chip .i {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+.web-chip:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.web-chip:nth-child(3) {
+  animation-delay: 0.12s;
+}
+
+/* Back, kept reachable on long pages once the page's own Back has scrolled away */
+.scroll-back {
+  position: fixed;
+  z-index: 40;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: max(12px, calc(50% - 220px + 12px));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: var(--ink);
+  box-shadow: 0 6px 18px -6px rgba(30, 31, 36, 0.45);
+  opacity: 0;
+  transform: translateY(-8px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.25s var(--ease);
+}
+.scroll-back[data-shown] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.scroll-back:active {
+  transform: scale(0.94);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-back {
+    transition: opacity 0.01s;
+    transform: none;
+  }
+}
+
+/* Stop, in place of Send while an answer is being written */
+.send.is-stop {
+  background: var(--ink);
+  color: #ffffff;
+  opacity: 1;
+}
+.send.is-stop svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+  border-radius: 3px;
+}
+.send.is-stop:active {
+  transform: scale(0.94);
+}
+
+/* Share sheet: the Add to calendar page */
+.cal-back {
+  margin-bottom: 4px;
+}
+.cal-when {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+}
+.cal-when .i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.cal-when b {
+  color: var(--ink);
+  font-weight: 600;
+}
+a.opt {
+  color: inherit;
+  text-decoration: none;
 }

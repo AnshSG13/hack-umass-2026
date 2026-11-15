@@ -151,7 +151,7 @@ export function ChangeSheet({
             </p>
           )}
           <button type="submit" className={`${btnPrimary} mt-2`} disabled={busy || !loaded}>
-            {longDay ? `Add to ${longDay}` : "Add to your week"}
+            {longDay ? `Plan it for ${longDay}` : "Plan it"}
           </button>
           <button type="button" className={`${btnText} mt-1 w-full`} onClick={() => onOpenChange(false)}>
             Keep it as is

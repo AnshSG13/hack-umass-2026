@@ -60,3 +60,50 @@ def test_views_tell_ask_chats_from_reel_chats():
         {"role": "assistant", "text": "Yes.", "at": at, "at_sec": 4}]}
     r = discuss.view(reel_chat)
     assert r["kind"] == "reel" and "cards" not in r["messages"][0] and r["messages"][0]["follow_ups"] == []
+
+
+def _reel_answer(monkeypatch, model_out, message):
+    """Run discuss.answer with the model and the web search stubbed. Returns (reply, queries)."""
+    queries = []
+    monkeypatch.setattr(discuss.planops, "get_for_save", lambda sid: None)
+    monkeypatch.setattr(discuss, "reel_context", lambda save, plan, user: "REEL")
+    monkeypatch.setattr(discuss.gemini, "generate_json", lambda **k: model_out)
+
+    class R:
+        def __init__(self, *a, **k):
+            pass
+
+        def finish(self, *a, **k):
+            pass
+
+        def step(self, *a, **k):
+            raise AssertionError("not used")
+
+    monkeypatch.setattr(discuss, "Run", R)
+
+    def web(user, save, plan, text, query, run):
+        queries.append(query)
+        return {"text": "The reel doesn't say, but use day-old rice.", "at_sec": None, "from_reel": False,
+                "web": True, "sources": [{"n": 1, "title": "x", "url": "https://example.com/rice"}], "macros": None}
+
+    monkeypatch.setattr(discuss, "web_answer", web)
+    save = {"_id": 1, "type": "recipe", "title": "Spam egg fried rice"}
+    return discuss.answer({"_id": "u", "timezone": "America/New_York"}, save, [], message), queries
+
+
+def test_an_answer_not_from_the_reel_is_looked_up_on_the_web(monkeypatch):
+    out = {"text": "The reel doesn't share that. Usually day-old rice works.", "at_sec": -1, "from_reel": False,
+           "needs_web": False, "follow_ups": ["Can I add kimchi?"]}
+    reply, queries = _reel_answer(monkeypatch, out, "What rice works best for this?")
+    assert reply["web"] and reply["sources"][0]["url"] == "https://example.com/rice"
+    assert reply["follow_ups"] == ["Can I add kimchi?"]
+    assert queries == ["Spam egg fried rice: What rice works best for this?"]
+
+
+def test_small_talk_and_reel_answers_do_not_search(monkeypatch):
+    reply, queries = _reel_answer(monkeypatch, {"text": "Glad it helped!", "at_sec": -1, "from_reel": False,
+                                                "needs_web": False}, "thanks!")
+    assert queries == [] and reply["text"] == "Glad it helped!"
+    reply, queries = _reel_answer(monkeypatch, {"text": "Fry the spam first.", "at_sec": -1, "from_reel": True,
+                                                "needs_web": False}, "What goes in first?")
+    assert queries == [] and not reply.get("web")
