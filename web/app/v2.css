@@ -4261,3 +4261,29 @@ article.panel {
 .send.is-stop:active {
   transform: scale(0.94);
 }
+
+/* Share sheet: the Add to calendar page */
+.cal-back {
+  margin-bottom: 4px;
+}
+.cal-when {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+}
+.cal-when .i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.cal-when b {
+  color: var(--ink);
+  font-weight: 600;
+}
+a.opt {
+  color: inherit;
+  text-decoration: none;
+}
