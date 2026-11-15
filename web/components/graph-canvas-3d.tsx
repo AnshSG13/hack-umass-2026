@@ -3,11 +3,14 @@
 // The knowledge graph in 3D: drag with one finger to turn it, pinch to zoom, tap a node to
 // see what it touches. Loaded only in the browser (see app/(app)/graph/page.tsx).
 //
-// Same picture as the flat map: kinds are big pastel spheres, sub-categories medium ones,
-// reels small dots in their kind's ink, interests butter-coloured. Labels float under the
-// spheres. "Related" sub-categories are joined by a coloured line with a few particles
-// drifting along it. After the layout settles the graph turns slowly by itself, so it
-// reads as 3D; the first touch stops that. Without WebGL the flat map is shown instead.
+// Flat and light, like the rest of the app (DESIGN.md: no gradients, no shadows). Every
+// node is a sprite, so it always faces the camera and stays crisp: kinds and folders are
+// flat discs in their kind's pastel with a thin ink ring and a name chip under them, reels
+// are round thumbnails of the reel, interests are butter discs. Lines are hairlines;
+// "related" folders get a hairline in a softened kind ink with a few particles drifting
+// along it. A gentle pull toward the centre keeps separate tastes from drifting apart, so the
+// whole picture fills the frame. After the layout settles the graph turns slowly by itself
+// so it reads as 3D; the first touch stops that. Without WebGL the flat map is shown.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -22,20 +25,29 @@ const GraphCanvas2D = dynamic(() => import("@/components/graph-canvas"), { ssr: 
 type N = NodeObject<GraphNode>;
 type L = LinkObject<GraphNode, GraphLink>;
 
+const FADED = 0.14; // what isn't touching the selected node
+const PULL = 0.09; // strength of the pull toward the centre
+
 function cssVar(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+/** A colour mixed toward white, for lines that should stay quiet. */
+function soften(color: string, amount: number): string {
+  return `#${new THREE.Color(color).lerp(new THREE.Color("#ffffff"), amount).getHexString()}`;
 }
 
 function endId(end: string | number | N | undefined): string {
   return typeof end === "object" && end ? String(end.id) : String(end ?? "");
 }
 
-function radius(n: GraphNode): number {
-  if (n.kind === "type") return 7 + Math.sqrt(n.count ?? 1) * 1.8;
-  if (n.kind === "sub") return 3.6 + Math.sqrt(n.count ?? 1) * 1.2;
-  if (n.kind === "interest") return 3.2;
-  return 1.8;
+/** Diameter in scene units. */
+function size(n: GraphNode): number {
+  if (n.kind === "type") return 15 + Math.sqrt(n.count ?? 1) * 2.4;
+  if (n.kind === "sub") return 8 + Math.sqrt(n.count ?? 1) * 1.4;
+  if (n.kind === "interest") return 7;
+  return 10;
 }
 
 function hasWebGL(): boolean {
@@ -47,31 +59,109 @@ function hasWebGL(): boolean {
   }
 }
 
-/** A text label as a sprite: always faces the camera, crisp at phone pixel density. */
-function labelSprite(text: string, color: string, weight: number, height: number): THREE.Sprite {
-  const px = 56;
-  const pad = 18;
+function spriteFrom(tex: THREE.Texture, diameter: number, opacity: number): THREE.Sprite {
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, opacity, depthWrite: false }),
+  );
+  sprite.scale.set(diameter, diameter, 1);
+  return sprite;
+}
+
+/** A flat disc: the kind's pastel with a thin ring in its ink. */
+function discTexture(fill: string, ring: string): THREE.CanvasTexture {
+  const px = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = px;
+  const ctx = canvas.getContext("2d")!;
+  ctx.beginPath();
+  ctx.arc(px / 2, px / 2, px / 2 - 8, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = ring;
+  ctx.globalAlpha = 0.45;
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * A reel as a round thumbnail with a white edge and a thin ring in its kind's ink. Until the
+ * picture arrives (or if there is none) it is a flat dot in the kind's pastel.
+ */
+function thumbTexture(url: string | null | undefined, fill: string, ring: string): THREE.CanvasTexture {
+  const px = 192;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = px;
+  const ctx = canvas.getContext("2d")!;
+  const r = px / 2 - 6;
+  const edge = () => {
+    ctx.beginPath();
+    ctx.arc(px / 2, px / 2, r, 0, Math.PI * 2);
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px / 2, px / 2, r + 3, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = ring;
+    ctx.stroke();
+  };
+  ctx.beginPath();
+  ctx.arc(px / 2, px / 2, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  edge();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  if (url) {
+    const img = new Image();
+    img.onload = () => {
+      // Cover the circle with the middle of the picture.
+      const s = Math.min(img.naturalWidth, img.naturalHeight);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px / 2, px / 2, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, px, px);
+      ctx.restore();
+      edge();
+      tex.needsUpdate = true;
+    };
+    img.src = url;
+  }
+  return tex;
+}
+
+/** A name chip: white pill with a hairline border, always facing the camera. */
+function labelTexture(text: string, color: string, border: string, weight: number): { tex: THREE.CanvasTexture; aspect: number } {
+  const px = 60;
+  const padX = 26;
+  const padY = 16;
   const font = `${weight} ${px}px Figtree, system-ui, sans-serif`;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d")!;
   ctx.font = font;
-  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-  canvas.width = w;
-  canvas.height = px + pad;
+  const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+  const h = px + padY * 2;
+  canvas.width = w + 6;
+  canvas.height = h + 6;
   ctx.font = font;
-  ctx.fillStyle = "rgba(255, 255, 255, 0.82)";
   ctx.beginPath();
-  ctx.roundRect(0, 0, w, canvas.height, canvas.height / 2);
+  ctx.roundRect(3, 3, w, h, h / 2);
+  ctx.fillStyle = "#ffffff";
   ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = border;
+  ctx.stroke();
   ctx.fillStyle = color;
   ctx.textBaseline = "middle";
-  ctx.fillText(text, pad, canvas.height / 2 + 2);
+  ctx.fillText(text, 3 + padX, 3 + h / 2 + 3);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  sprite.scale.set((height * w) / canvas.height, height, 1);
-  return sprite;
+  return { tex, aspect: canvas.width / canvas.height };
 }
 
 export default function GraphCanvas3D(props: GraphCanvasProps) {
@@ -86,6 +176,10 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
   const [width, setWidth] = useState(360);
   const fitted = useRef(false);
   const touched = useRef(false);
+  // Textures are drawn once per node look and reused, so a tap (which rebuilds the nodes to
+  // fade the rest) doesn't reload every thumbnail.
+  const textures = useRef(new Map<string, THREE.CanvasTexture>());
+  const labels = useRef(new Map<string, { tex: THREE.CanvasTexture; aspect: number }>());
   const still = useMemo(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     [],
@@ -97,6 +191,18 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
     const ro = new ResizeObserver(([e]) => setWidth(Math.max(280, Math.floor(e.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  // Free the GPU copies when the graph goes away.
+  useEffect(() => {
+    const tex = textures.current;
+    const lab = labels.current;
+    return () => {
+      tex.forEach((t) => t.dispose());
+      lab.forEach((l) => l.tex.dispose());
+      tex.clear();
+      lab.clear();
+    };
   }, []);
 
   const data = useMemo(() => {
@@ -131,7 +237,8 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
       kinds: out,
       ink: cssVar("--ink", "#1e1f24"),
       muted: cssVar("--muted", "#6e717c"),
-      line: cssVar("--line-strong", "#cfcbc2"),
+      line: cssVar("--line", "#ece9e3"),
+      lineStrong: cssVar("--line-strong", "#cfcbc2"),
       butter: cssVar("--butter", "#fff3c4"),
       butterInk: cssVar("--butter-ink", "#735700"),
     };
@@ -142,15 +249,43 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
     [selected, neighbours],
   );
 
-  // The same spacing as the flat map, plus a little depth.
+  const texture = useCallback((key: string, make: () => THREE.CanvasTexture) => {
+    let t = textures.current.get(key);
+    if (!t) {
+      t = make();
+      textures.current.set(key, t);
+    }
+    return t;
+  }, []);
+
+  const label = useCallback((key: string, make: () => { tex: THREE.CanvasTexture; aspect: number }) => {
+    let l = labels.current.get(key);
+    if (!l) {
+      l = make();
+      labels.current.set(key, l);
+    }
+    return l;
+  }, []);
+
+  // Spacing, plus a gentle pull toward the centre so separate tastes stay in one picture.
   useEffect(() => {
     const f = fg.current;
     if (!f) return;
-    // Weaker push than the flat map: in 3D the separate tastes otherwise drift far apart and
-    // everything ends up tiny once the camera fits them all in.
-    f.d3Force("charge")?.strength(-38);
+    f.d3Force("charge")?.strength(-42);
     const link = f.d3Force("link") as unknown as { distance?: (fn: (l: L) => number) => void } | undefined;
-    link?.distance?.((l: L) => (l.kind === "holds" ? 12 : l.kind === "has" ? 26 : l.kind === "likes" ? 46 : 40));
+    link?.distance?.((l: L) => (l.kind === "holds" ? 14 : l.kind === "has" ? 26 : l.kind === "likes" ? 34 : 36));
+    let nodes: N[] = [];
+    const pull = Object.assign(
+      (alpha: number) => {
+        for (const n of nodes) {
+          n.vx = (n.vx ?? 0) - (n.x ?? 0) * PULL * alpha;
+          n.vy = (n.vy ?? 0) - (n.y ?? 0) * PULL * alpha;
+          n.vz = (n.vz ?? 0) - (n.z ?? 0) * PULL * alpha;
+        }
+      },
+      { initialize: (ns: N[]) => (nodes = ns) },
+    );
+    (f.d3Force as unknown as (name: string, force: unknown) => void)("pull", pull);
     f.d3ReheatSimulation();
   }, [data]);
 
@@ -179,57 +314,63 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
   const nodeObject = useCallback(
     (node: N) => {
       const n = node as N & GraphNode;
-      const on = lit(String(n.id));
+      const id = String(n.id);
+      const on = lit(id);
+      const opacity = on ? 1 : FADED;
       const c = n.type ? colors.kinds[n.type] : undefined;
-      const r = radius(n);
+      const fill = n.kind === "interest" ? colors.butter : (c?.fill ?? colors.line);
+      const ink = n.kind === "interest" ? colors.butterInk : (c?.ink ?? colors.ink);
+      const d = size(n) * (n.kind === "save" && id === selected ? 1.35 : 1);
       const group = new THREE.Group();
-      const color =
-        n.kind === "interest" ? colors.butter : n.kind === "save" ? (c?.ink ?? colors.muted) : (c?.fill ?? colors.line);
-      const mat = new THREE.MeshStandardMaterial({
-        color,
-        roughness: 0.45,
-        metalness: 0.05,
-        emissive: new THREE.Color(color),
-        emissiveIntensity: n.kind === "save" ? 0.05 : 0.22,
-        transparent: !on,
-        opacity: on ? 1 : 0.14,
-      });
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 20), mat);
-      group.add(sphere);
-      if (n.kind !== "save" && n.kind !== "interest") {
-        // A thin ring in the kind's ink, like the outline on the flat map.
-        const ring = new THREE.Mesh(
-          new THREE.TorusGeometry(r * 1.02, Math.max(0.25, r * 0.06), 8, 48),
-          new THREE.MeshBasicMaterial({ color: c?.ink ?? colors.ink, transparent: true, opacity: on ? 0.55 : 0.08 }),
-        );
-        group.add(ring);
-      }
-      // A tapped reel shows its card over the canvas (the page), so reels get no floating label.
+
+      const tex =
+        n.kind === "save"
+          ? texture(`thumb:${n.thumb_url ?? id}:${fill}`, () => thumbTexture(n.thumb_url, fill, ink))
+          : texture(`disc:${fill}:${ink}`, () => discTexture(fill, ink));
+      group.add(spriteFrom(tex, d, opacity));
+
+      // Kinds, folders and interests carry a name chip; a reel shows its card when tapped.
       if (n.kind !== "save" && on) {
-        const text = n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label;
-        const ink = n.kind === "interest" ? colors.butterInk : n.kind === "type" ? (c?.ink ?? colors.ink) : colors.ink;
-        const h = n.kind === "type" ? 9 : 6.5;
-        const sprite = labelSprite(text, ink, n.kind === "type" ? 700 : 600, h);
-        sprite.position.set(0, -(r + h * 0.85), 0);
+        const text = n.label.length > 24 ? `${n.label.slice(0, 23)}…` : n.label;
+        const weight = n.kind === "type" ? 700 : 600;
+        const color = n.kind === "type" ? ink : colors.ink;
+        const chip = label(`${text}:${color}:${weight}`, () => labelTexture(text, color, colors.line, weight));
+        const h = n.kind === "type" ? 6.4 : 4.6;
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: chip.tex, transparent: true, depthWrite: false, depthTest: false }),
+        );
+        sprite.scale.set(h * chip.aspect, h, 1);
+        sprite.position.set(0, -(d / 2 + h * 0.7), 0);
+        sprite.renderOrder = 2;
         group.add(sprite);
       }
       return group;
     },
-    [colors, lit],
+    [colors, lit, selected, texture, label],
+  );
+
+  const touches = useCallback(
+    (l: L) => !selected || endId(l.source) === selected || endId(l.target) === selected,
+    [selected],
+  );
+
+  // The kind's ink, at full strength for the drifting particles and softened for the line.
+  const inkOf = useCallback(
+    (l: L) => {
+      if (l.kind === "likes") return colors.butterInk;
+      const t = (l.source as N & GraphNode).type;
+      return t ? colors.kinds[t].ink : colors.ink;
+    },
+    [colors],
   );
 
   const linkColor = useCallback(
     (l: L) => {
-      const on = !selected || endId(l.source) === selected || endId(l.target) === selected;
-      if (!on) return "rgba(160,160,170,0.08)";
-      if (l.kind === "related") {
-        const t = (l.source as N & GraphNode).type;
-        return t ? colors.kinds[t].ink : colors.ink;
-      }
-      if (l.kind === "likes") return colors.butterInk;
-      return colors.line;
+      if (!touches(l)) return colors.line;
+      if (l.kind === "related" || l.kind === "likes") return soften(inkOf(l), 0.35);
+      return colors.lineStrong;
     },
-    [colors, selected],
+    [colors, touches, inkOf],
   );
 
   return (
@@ -246,23 +387,26 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
         nodeId="id"
         nodeLabel={(n) => (n.kind === "save" ? n.label : "")}
         nodeThreeObject={nodeObject}
+        nodeThreeObjectExtend={false}
+        nodeRelSize={1}
+        nodeVal={(n) => (size(n) / 2) ** 3}
         linkColor={linkColor}
-        linkOpacity={0.55}
-        linkWidth={(l) => (l.kind === "related" ? 0.6 : 0)}
-        linkDirectionalParticles={(l) => (l.kind === "related" && !still ? 2 : 0)}
+        linkOpacity={0.7}
+        linkWidth={0}
+        linkDirectionalParticles={(l) => (l.kind === "related" && !still && touches(l) ? 2 : 0)}
         linkDirectionalParticleSpeed={0.004}
-        linkDirectionalParticleWidth={1.4}
-        linkDirectionalParticleColor={linkColor}
-        cooldownTicks={140}
+        linkDirectionalParticleWidth={1.6}
+        linkDirectionalParticleColor={inkOf}
+        cooldownTicks={160}
         onEngineStop={() => {
           if (fitted.current) return;
           fitted.current = true;
-          fg.current?.zoomToFit(600, 12);
+          fg.current?.zoomToFit(600, 36);
           if (!still && !touched.current) {
             const controls = fg.current?.controls() as unknown as { autoRotate?: boolean; autoRotateSpeed?: number };
             if (controls) {
               controls.autoRotate = true;
-              controls.autoRotateSpeed = 0.9;
+              controls.autoRotateSpeed = 0.6;
             }
           }
         }}

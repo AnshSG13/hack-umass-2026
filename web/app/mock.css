@@ -3166,9 +3166,10 @@ button.note {
   overflow: hidden;
   touch-action: none;
 }
-/* the 3D map: a soft lit backdrop so the spheres read as depth */
+/* the 3D map: flat, like every other surface (DESIGN.md: no gradients) */
 .kg-3d {
-  background: radial-gradient(120% 90% at 50% 35%, #ffffff 0%, var(--surface) 62%, #efece6 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
 }
 .kg-loading {
   height: 500px;
