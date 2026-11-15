@@ -6,7 +6,7 @@
 	}
 }
 
-{$DOMAIN} {
+{$DOMAIN} {$EXTRA_DOMAINS} {
 	log {
 		output stdout
 		format console

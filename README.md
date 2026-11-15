@@ -5,7 +5,7 @@ Every save becomes a plan.
 People save reels on autopilot and rarely act on them. Realize turns a saved reel into one small, concrete plan: share a reel from Instagram, an agent reads it, checks your week and asks "Cook Thu 6:30 pm + 3 groceries?". You confirm with one tap. Nothing is added to your calendar or reminders without that tap. Later it asks whether you did it.
 
 - Demo video: TODO
-- Live: https://140-82-6-164.sslip.io (Vultr). The landing page has a "Try the demo" button that needs no login. On an iPhone, see [Use it on your iPhone](#use-it-on-your-iphone).
+- Live: https://reelize.boston (Vultr). The landing page has a "Try the demo" button that needs no login. On an iPhone, see [Use it on your iPhone](#use-it-on-your-iphone).
 - Real saved-count stat: TODO (count from the production database before the pitch; no number is quoted until then)
 
 Built at HackUMass XIV.
@@ -118,9 +118,9 @@ You need Python 3.12 or newer, Node 22 or newer, a MongoDB Atlas cluster (the fr
 
 ## Use it on your iPhone
 
-The live site is **https://140-82-6-164.sslip.io**. `sslip.io` is a free name that points at the server's IP, so there is no domain to buy; Caddy gets a real HTTPS certificate for it.
+The live site is **https://reelize.boston**. The old address, https://140-82-6-164.sslip.io, still opens the same site.
 
-1. **Open it in Safari** (only Safari can add a web app to the Home Screen): https://140-82-6-164.sslip.io/setup
+1. **Open it in Safari** (only Safari can add a web app to the Home Screen): https://reelize.boston/setup
 2. **Make an account.** Sign up with email and password, or create a key-only account. Accounts from a laptop setup don't carry over: the server has its own database.
 3. **Add it to your Home Screen.** Tap Share, then **Add to Home Screen**. It opens full screen like an app. If you added it before from a laptop address (`http://10.0.0...`), delete that icon first.
 4. **Save a reel.** In Instagram, open a reel, tap Share, **Copy link**. Open Realize, tap Save and paste (or tap "Paste the link I copied"). The plan appears in a few seconds and the video is read in the background.
@@ -132,7 +132,7 @@ Copy your key first: on `/setup` (or Settings for an email account) tap **Copy k
 In the Shortcuts app, tap **+**, add **Get Contents of URL**, and fill it in:
 
 ```
-URL            https://140-82-6-164.sslip.io/api/save
+URL            https://reelize.boston/api/save
 Method         POST
 Headers
    Authorization   Bearer rl_your_key      (the word Bearer, a space, then the key)
@@ -148,10 +148,10 @@ If you already built the Shortcut against a laptop, change only two things: the 
 
 **If it doesn't work:**
 - Add **Show Result** as the last action to see the server's answer. "Your Realize key doesn't work" means the key; anything about the link means the input field.
-- "The network connection was lost": open https://140-82-6-164.sslip.io/api/health in Safari on the phone. If it shows `"ok":true`, the phone can reach the server; check that the Shortcut's URL is exactly the one above and that no other action in the Shortcut sets a different address. Toggling Airplane Mode clears connections iOS kept from before.
+- "The network connection was lost": open https://reelize.boston/api/health in Safari on the phone. If it shows `"ok":true`, the phone can reach the server; check that the Shortcut's URL is exactly the one above and that no other action in the Shortcut sets a different address. Toggling Airplane Mode clears connections iOS kept from before.
 - Every save that reaches the server is logged as `save attempt: source=shortcut key=ok link=ok` (or which part was wrong): `python deploy/vultr.py logs api`.
 
-The other Shortcut versions (one that opens the app instead, and the full one with a menu, Calendar and Reminders) are in `shortcut/README.md`; use `https://140-82-6-164.sslip.io` as their address.
+The other Shortcut versions (one that opens the app instead, and the full one with a menu, Calendar and Reminders) are in `shortcut/README.md`; use `https://reelize.boston` as their address.
 
 ## Deploy (Vultr VPS, Docker Compose, Caddy)
 
@@ -162,7 +162,7 @@ One Vultr VPS runs everything: Caddy for HTTPS on one domain, the FastAPI API, t
 1. Get an API key from the Vultr dashboard (Account, API), allow your IP there, and set `VULTR_API_KEY` in your shell or in `.env`. You also need an SSH key (`ssh-keygen -t ed25519` if `~/.ssh/id_ed25519.pub` doesn't exist).
 2. `python deploy/vultr.py provision` creates an Ubuntu 24.04 VPS (`vc2-2c-4gb` in `ewr` by default; change them with `--plan` and `--region`). It uploads your SSH key, and `deploy/cloud-init.yaml` installs Docker, opens only ports 22, 80 and 443, turns on fail2ban, and adds 2 GB of swap for the Next.js build. The IP is saved to `deploy/.host`. Running it again reuses the existing `realize` instance.
 3. Add `<ip>/32` under Atlas Network Access, in the project that holds the cluster in `MONGODB_URI`. For a domain, either add a DNS A record to the IP, or use `<ip with dashes>.sslip.io` with no DNS at all.
-4. In `.env`, set `DOMAIN=<domain>` and `PUBLIC_BASE_URL=https://<domain>`. If you use Instagram cookies from a throwaway account, save them as `secrets/instagram_cookies.txt` and set `INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt`.
+4. In `.env`, set `DOMAIN=<domain>` and `PUBLIC_BASE_URL=https://<domain>`. `EXTRA_DOMAINS` (optional, space separated) lists other names Caddy serves the same site on. If you use Instagram cookies from a throwaway account, save them as `secrets/instagram_cookies.txt` and set `INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt`.
 5. `python deploy/vultr.py deploy --init` checks `.env`, uploads the last commit (`git archive HEAD`), `.env` and `secrets/` to `/opt/realize`, runs `docker compose up -d --build`, creates the Atlas indexes, builds the demo samples (skip with `--skip-samples`), and waits for `https://<domain>/api/health`. Caddy gets the certificate on its own.
 
 ### Deploy on every push to main
@@ -223,7 +223,7 @@ No accuracy number appears in this README. The measured ones live in `eval/resul
 - Transcripts and on-screen text make reels searchable and readable for deaf and hard-of-hearing users.
 
 ### Vultr
-- One VPS runs the API, the worker, the web app and Caddy from `docker-compose.yml` and `Caddyfile`, live at https://140-82-6-164.sslip.io. The worker is the only part that can be moved off the VPS, and it moves without any other change.
+- One VPS runs the API, the worker, the web app and Caddy from `docker-compose.yml` and `Caddyfile`, live at https://reelize.boston. The worker is the only part that can be moved off the VPS, and it moves without any other change.
 - Provisioned and deployed by `deploy/vultr.py` through the Vultr API with cloud-init, and redeployed by GitHub Actions on every push to `main`.
 
 ## Privacy and limits
