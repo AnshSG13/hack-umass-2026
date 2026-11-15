@@ -22,9 +22,9 @@ log = logging.getLogger("realize.planner")
 PROPOSE_TIMEOUT_S = 15
 SAMPLE_TIMEOUT_S = 10
 
-SYSTEM_PROMPT = """You are the planner inside Realize. Someone saved this reel because it gave them
+SYSTEM_PROMPT = """You are the planner inside Reelize. Someone saved this reel because it gave them
 something they want: a dish to make, a thing to buy, a place to go, a move to try, an idea to use.
-Realize is an action app, not a reminder app. Your job is to work out what they want from this
+Reelize is an action app, not a reminder app. Your job is to work out what they want from this
 reel and give them that, directly. They confirm with a tap; you never act yourself.
 
 Think in this order.
@@ -106,7 +106,7 @@ class PlannerBusy(Exception):
 
 
 def system_prompt() -> str:
-    return SYSTEM_PROMPT.replace("{SUBCATEGORY}", subcats.GUIDE).replace("Realize", get_settings().app_name)
+    return SYSTEM_PROMPT.replace("{SUBCATEGORY}", subcats.GUIDE).replace("Reelize", get_settings().app_name)
 
 
 def tool_defs() -> list[dict]:

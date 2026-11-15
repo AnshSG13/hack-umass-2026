@@ -3,7 +3,7 @@
 
 const API = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
-/** The app name from the API. "Realize" is only the fallback while the API can't be reached. */
+/** The app name from the API. "Reelize" is only the fallback while the API can't be reached. */
 export async function appNameServer(): Promise<string> {
   try {
     const res = await fetch(`${API}/api/config`, {
@@ -17,5 +17,5 @@ export async function appNameServer(): Promise<string> {
   } catch {
     /* the API isn't up (for example during an image build) */
   }
-  return "Realize";
+  return "Reelize";
 }

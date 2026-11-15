@@ -28,7 +28,7 @@ LEAD = re.compile(
     r"look (it |this |that )?up( online| on the (web|internet))?|google|check online|search online)"
     r"( for| about| on| to see| whether| if)?[\s,:]*", re.I)
 
-ASK_PROMPT = """You are Ask, inside Realize. The person asked you to search the web.
+ASK_PROMPT = """You are Ask, inside Reelize. The person asked you to search the web.
 Today is {today_local} ({timezone}).
 - Search with Google and answer what they asked, first sentence first, in 1 to 5 short
   sentences. Use a short "- " list only for options or steps.
@@ -93,7 +93,7 @@ def ask_answer(user: dict, message: str, history: list[dict], clean, saves: list
     tz = tz_of(user)
     listed = "\n".join(f"- {d.get('title') or 'Saved reel'}: {' '.join(str(d.get('summary') or '').split())[:240]}"
                        for d in (saves or [])[:3])
-    system = ASK_PROMPT.replace("Realize", s.app_name).format(
+    system = ASK_PROMPT.replace("Reelize", s.app_name).format(
         today_local=prompt_date(now_utc().astimezone(tz)), timezone=str(tz), saves=listed or "(none)")
     earlier = "\n".join(f"{'Them' if t.get('role') == 'user' else 'You'}: {str(t.get('text') or '')[:600]}"
                         for t in history[-4:])
