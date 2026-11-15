@@ -81,9 +81,9 @@ export default function TasteBoardPage() {
   const head = (
     <header className="page-head with-back gutter">
       <div className="block-head" style={{ minHeight: 44 }}>
-        <Link href="/home" className="back-pill">
+        <Link href="/collection" className="back-pill">
           <Icon name="back" />
-          Home
+          My collection
         </Link>
         <span style={{ display: "inline-flex", gap: 8 }}>
           {type && (

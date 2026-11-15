@@ -933,3 +933,18 @@ def test_action_view_defaults_for_old_plans_and_stale_types():
     assert intent.view({"options": soon}, {"type": "event"})["deliver"] == "calendar"
     # A stored cook action on a save since moved to products becomes the product default.
     assert intent.view({"action": {"deliver": "cook", "cta": "Cook it"}}, {"type": "product"})["deliver"] == "shop"
+
+
+def test_done_on_labels():
+    from datetime import datetime, timedelta, timezone
+
+    from realize.tickets import done_on
+
+    tz = timezone.utc
+    now = datetime(2026, 11, 14, 15, 0, tzinfo=tz)  # a Saturday
+    assert done_on({"done_at": now - timedelta(hours=2)}, tz, now) == "today"
+    assert done_on({"done_at": now - timedelta(days=1)}, tz, now) == "yesterday"
+    assert done_on({"done_at": now - timedelta(days=2)}, tz, now) == "Thursday"
+    assert done_on({"done_at": now - timedelta(days=11)}, tz, now) == "Nov 3"
+    assert done_on({"updated_at": now}, tz, now) == "today"  # done before done_at existed
+    assert done_on({}, tz, now) is None

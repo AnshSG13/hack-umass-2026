@@ -1,8 +1,9 @@
 "use client";
 
-// Actions (the route is still /plans): what is ready for you (plans built from several
-// saves, one tap to start), what is waiting on you (plan cards with the same controls as
-// the Reel page), what is coming up by day, what is done, and what is later.
+// Every action (reached from "See all" on Ready for you; no longer a tab): what is ready for
+// you (plans built from several saves, one tap to start), what is waiting on you (plan cards
+// with the same controls as the Reel page), what is coming up by day, what is done, and
+// what is later.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -51,7 +52,7 @@ function DayList({ days, headingLevel }: { days: PlansResponse["days"]; headingL
 }
 
 export default function PlansPage() {
-  const { openAdd } = useApp();
+  const { openAdd, goBack } = useApp();
   const { data: me } = useMe();
   const { data, error, isLoading, mutate } = useSWR<PlansResponse>("/api/plans?range=week", fetcher);
   const bundles = useBundles();
@@ -62,8 +63,14 @@ export default function PlansPage() {
   );
 
   const header = (
-    <header className="page-head">
-      <h1 className="page-title">Actions</h1>
+    <header className="page-head with-back">
+      <div className="block-head" style={{ minHeight: 44 }}>
+        <button type="button" className="back-pill" onClick={goBack}>
+          <Icon name="back" />
+          Back
+        </button>
+      </div>
+      <h1 className="page-title" style={{ marginTop: 10 }}>All actions</h1>
       {data && <p className="page-sub">{data.week_label}</p>}
     </header>
   );

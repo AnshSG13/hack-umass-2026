@@ -41,6 +41,7 @@ export interface TicketPlan {
   reminders_preview: string[]; // "Groceries, Thu 12 pm"
   share_url: string; // "/p/<plan_id>?t=<token>"
   done_day: string | null; // "Thu" once done or skipped
+  done_on?: string | null; // "today", "yesterday", "Thursday", "Nov 3" once done
 }
 
 export interface StepLine {
@@ -232,13 +233,18 @@ export interface Taste {
   tags: { tag: string; count: number }[]; // up to 3
   subcategories: { name: string; count: number }[]; // every one for this type, largest first
   new: number; // saved since the last visit, or since its board was last opened
+  done?: number; // saves in this taste whose action is done
 }
 export interface TastesResponse {
   total: number;
+  done?: number; // actions done across every taste
   tastes: Taste[]; // only types with at least one save, largest first
   /** The greeting's line: "3 recipes, 4 workouts and 3 product picks". null with nothing to say. */
   recap: { window: "new" | "week"; parts: string[]; text: string } | null;
 }
+
+// ---- GET /api/done ----
+export interface DoneResponse { items: Ticket[]; week: number; total: number }
 
 // ---- GET /api/saves, /api/search, /api/plans ----
 export interface SavesPage { items: Ticket[]; next_before: string | null }

@@ -1,13 +1,15 @@
 "use client";
 
-// Home, after the mockup: greeting, search, the rail of recent saves, 
-// and the tastes grid. Everything on it comes from the API.
+// Home: the greeting, what is ready for you (each opens its action), the rail of recent
+// saves, and what you've completed. Tastes, search and "Remember this" are in My collection.
+// Everything on it comes from the API.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
 import { ActionTile, ReadyTile, useBundles } from "@/components/bundle-card";
+import { Completed } from "@/components/done";
 import { Icon } from "@/components/icons";
 import { PullToRefresh } from "@/components/pull-refresh";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
@@ -16,7 +18,7 @@ import { fetcher } from "@/lib/api";
 import { greeting, inFlight, plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
-import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
+import type { SaveType, SavesPage, TastesResponse } from "@/lib/types";
 
 /** "4 workouts", "3 recipes" -> "You have 4 new workouts and 3 recipes". */
 function newThings(parts: string[]): string {
@@ -25,84 +27,6 @@ function newThings(parts: string[]): string {
   const all = [lead, ...rest];
   return all.length === 1 ? all[0] : `${all.slice(0, -1).join(", ")} and ${all[all.length - 1]}`;
 }
-
-function sentence(tag: string): string {
-  return tag ? tag[0].toUpperCase() + tag.slice(1) : tag;
-}
-
-function Thumbs({ urls, className }: { urls: string[]; className: string }) {
-  if (urls.length === 0) return null;
-  return (
-    <span className={className} aria-hidden="true">
-      {urls.slice(0, 3).map((u) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img key={u} src={u} alt="" loading="lazy" />
-      ))}
-    </span>
-  );
-}
-
-function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
-  const kind = KINDS[taste.type];
-  const label = taste.label || kind.label;
-  const count = plural(taste.count, "save", "saves");
-  const href = `/t/${taste.type}`;
-  const fresh = taste.new > 0 ? (
-    <span className="taste-new" aria-label={`${taste.new} new`}>
-      {taste.new > 9 ? "9+" : taste.new}
-    </span>
-  ) : null;
-
-  if (wide) {
-    return (
-      <Link href={href} className="taste taste-wide" style={tint(kind.color)}>
-        {fresh}
-        <span className="taste-row">
-          <span>
-            <Icon name={kind.icon} />
-            <span className="taste-name">{label}</span>
-            <span className="taste-count">{count}</span>
-          </span>
-          <Thumbs urls={taste.thumbs} className="fan" />
-        </span>
-        {(taste.subcategories ?? []).length > 0 ? (
-          <span className="subs">
-            {(taste.subcategories ?? []).slice(0, 4).map((s) => (
-              <span key={s.name}>
-                {s.name} <b>{s.count}</b>
-              </span>
-            ))}
-          </span>
-        ) : (
-          taste.tags.length > 0 && (
-            <span className="subs">
-              {taste.tags.map((t) => (
-                <span key={t.tag}>
-                  {sentence(t.tag)} <b>{t.count}</b>
-                </span>
-              ))}
-            </span>
-          )
-        )}
-      </Link>
-    );
-  }
-  return (
-    <Link href={href} className="taste" style={tint(kind.color)}>
-      {fresh}
-      <span className="taste-top">
-        <Icon name={kind.icon} />
-        <Thumbs urls={taste.thumbs} className="stack" />
-      </span>
-      <span>
-        <span className="taste-name">{label}</span>
-        <span className="taste-count">{count}</span>
-      </span>
-    </Link>
-  );
-}
-
-const REMEMBER_KEY = "rl_remember_hidden";
 
 /** Ready for you, filtered by taste: one chip per taste with actions ready, plus All. */
 function ReadyFilter({
@@ -134,53 +58,6 @@ function ReadyFilter({
           {KINDS[k].label} <b>{counts.get(k)}</b>
         </button>
       ))}
-    </div>
-  );
-}
-
-/** A just-vibes reel from before today, back for a moment: "Remember this puppy growing up".
- *  Closing it hides today's one on this device. */
-function RememberCard() {
-  const { data } = useSWR<{ item: RememberItem | null }>("/api/remember", fetcher, { revalidateOnFocus: false });
-  const item = data?.item ?? null;
-  const [hidden, setHidden] = useState<string | null>(() => {
-    try {
-      return typeof window === "undefined" ? null : window.localStorage.getItem(REMEMBER_KEY);
-    } catch {
-      return null;
-    }
-  });
-  if (!item || hidden === `${item.day}:${item.save_id}`) return null;
-  function close() {
-    const v = `${item!.day}:${item!.save_id}`;
-    setHidden(v);
-    try {
-      window.localStorage.setItem(REMEMBER_KEY, v);
-    } catch {
-      // Private mode: it stays closed for this visit only.
-    }
-  }
-  return (
-    <div className="gutter">
-      <div className="remember" style={tint("butter")}>
-        <Link href={`/s/${item.save_id}`} className="remember-main">
-          {item.thumb_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.thumb_url} alt="" className="remember-thumb" />
-          ) : (
-            <span className="remember-thumb" aria-hidden="true">
-              <Icon name="spark" />
-            </span>
-          )}
-          <span className="remember-text">
-            <span className="remember-line">{item.line}</span>
-            <span className="remember-meta">You saved this {item.saved_on}</span>
-          </span>
-        </Link>
-        <button type="button" className="remember-x" aria-label="Close" onClick={close}>
-          <Icon name="x" />
-        </button>
-      </div>
     </div>
   );
 }
@@ -217,7 +94,6 @@ export default function HomePage() {
   const listed = (saves.data?.items ?? []).filter((t) => !freshIds.has(t.save_id));
   const loaded = saves.data !== undefined;
   const isEmpty = loaded && listed.length === 0 && fresh.length === 0;
-  const tasteList = tastes.data?.tastes ?? [];
   const readyList = bundles.data?.ready ?? [];
   const readyActions = bundles.data?.actions ?? [];
   const readyCount = readyList.length + readyActions.length;
@@ -282,15 +158,7 @@ export default function HomePage() {
             {name ? name[0].toUpperCase() : <Icon name="user" />}
           </Link>
         </header>
-        {!isEmpty && (
-          <Link href="/library?focus=1" className="search">
-            <Icon name="search" />
-            <span>Search your saves</span>
-          </Link>
-        )}
       </div>
-
-      {!isEmpty && <RememberCard />}
 
       {readyCount > 0 && !isEmpty && (
         <section className="blk" aria-labelledby="ready-h">
@@ -314,22 +182,6 @@ export default function HomePage() {
             ))}
             {shownActions.map((a) => (
               <ActionTile key={a.save_id} item={a} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {tasteList.length > 0 && (
-        <section className="blk gutter" aria-labelledby="tastes-h">
-          <div className="block-head">
-            <h2 className="block-title" id="tastes-h">
-              Your tastes
-              <span className="pill">{tasteList.length}</span>
-            </h2>
-          </div>
-          <div className="tastes">
-            {tasteList.map((t, i) => (
-              <TasteTile key={t.type} taste={t} wide={i === 0} />
             ))}
           </div>
         </section>
@@ -396,6 +248,7 @@ export default function HomePage() {
         </section>
       )}
 
+      {!isEmpty && loaded && <Completed />}
     </>
   );
 }

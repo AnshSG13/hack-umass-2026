@@ -158,6 +158,7 @@ export function CookMode({
   steps,
   servings,
   words = COOK_WORDS,
+  onFinish,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -166,12 +167,17 @@ export function CookMode({
   steps: string[];
   servings: number | null;
   words?: StepModeWords;
+  /** The last step's Done: the whole thing was followed through, not just closed. */
+  onFinish?: () => void;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Content className="cook" aria-describedby={undefined}>
-          <CookBody title={title} ingredients={ingredients} steps={steps} servings={servings} words={words} onClose={() => onOpenChange(false)} />
+          <CookBody title={title} ingredients={ingredients} steps={steps} servings={servings} words={words} onFinish={() => {
+            onFinish?.();
+            onOpenChange(false);
+          }} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -184,14 +190,14 @@ function CookBody({
   steps,
   servings,
   words,
-  onClose,
+  onFinish,
 }: {
   title: string;
   ingredients: Ingredient[];
   steps: string[];
   servings: number | null;
   words: StepModeWords;
-  onClose: () => void;
+  onFinish: () => void;
 }) {
   // Page 0 is "get these ready"; then one page per step.
   const pages = (ingredients.length > 0 ? 1 : 0) + steps.length;
@@ -287,7 +293,7 @@ function CookBody({
           Back
         </button>
         {last ? (
-          <button type="button" className="btn btn-primary" onClick={onClose}>
+          <button type="button" className="btn btn-primary" onClick={onFinish}>
             <Icon name="check" />
             Done
           </button>

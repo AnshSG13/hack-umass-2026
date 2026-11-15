@@ -25,9 +25,9 @@ function asType(value: string | null): SaveType | null {
 
 function BackHome() {
   return (
-    <Link href="/home" className="back-pill">
+    <Link href="/collection" className="back-pill">
       <Icon name="back" />
-      Home
+      My collection
     </Link>
   );
 }

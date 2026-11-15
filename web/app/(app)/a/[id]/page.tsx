@@ -3,12 +3,14 @@
 // Action mode: the thing a reel was saved for, on its own screen, apart from the reel's
 // details. Ready for you opens here. Cook mode and the gym routine open straight into their
 // step-by-step screens; prices, the itinerary, key points and the event each get a focused
-// page. "See the reel" leads to the details page.
+// page. "See the reel" leads to the details page. The foot marks it done; finishing the last
+// step of cook mode or a workout marks it done too.
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { CookMode, type StepModeWords } from "@/components/cook";
+import { DoneBar, useDone } from "@/components/done";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { ReelSections } from "@/components/reel-sections";
@@ -19,7 +21,7 @@ import { TripPlan } from "@/components/trip-plan";
 import { inFlight, ticketTitle } from "@/lib/format";
 import { useSaveDetail } from "@/lib/hooks";
 import { DELIVERY, kindTint } from "@/lib/kinds";
-import type { Fields, Ingredient } from "@/lib/types";
+import type { Fields, Ingredient, SaveDetail } from "@/lib/types";
 
 const GYM_WORDS: StepModeWords = { close: "Stop the workout", prep: "Get these ready", step: "Move", start: "Start" };
 
@@ -45,16 +47,19 @@ function exerciseStep(ex: Exercise): string {
     .join(". ") + ".";
 }
 
+function BackButton() {
+  const { goBack } = useApp();
+  return (
+    <button type="button" className="round back" aria-label="Back" onClick={goBack}>
+      <Icon name="back" />
+    </button>
+  );
+}
+
 export default function ActionPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { goBack } = useApp();
   const { data, error } = useSaveDetail(id);
-  // Step-by-step modes open on arrival; closing that first one goes back to where you came
-  // from. Opened again from this page, closing just shows the page.
-  const [stepOpen, setStepOpen] = useState(true);
-  const autoOpened = useRef(true);
-  const [servings, setServings] = useState<number | null>(null);
 
   // Nothing to do for a vibes reel (or one not read yet): the details page instead.
   const noAction = data !== undefined && (!data.ticket.action || data.ticket.action.deliver === "keep");
@@ -62,16 +67,10 @@ export default function ActionPage() {
     if (noAction) router.replace(`/s/${id}`);
   }, [noAction, id, router]);
 
-  const back = (
-    <button type="button" className="round back" aria-label="Back" onClick={goBack}>
-      <Icon name="back" />
-    </button>
-  );
-
   if (error && !data) {
     return (
       <div className="gutter act-page">
-        {back}
+        <BackButton />
         <p className="msg" role="alert">
           This action didn&apos;t load. Check your connection.
         </p>
@@ -81,21 +80,33 @@ export default function ActionPage() {
   if (!data) {
     return (
       <div className="gutter act-page" role="status">
-        {back}
+        <BackButton />
         <span className="vh">Loading</span>
         <span className="skel" style={{ marginTop: 28, height: 34, width: "70%" }} />
         <span className="skel" style={{ marginTop: 14, height: 14, width: "90%" }} />
       </div>
     );
   }
+  if (noAction) return null;
+  return <ActionView id={id} data={data} />;
+}
 
+function ActionView({ id, data }: { id: string; data: SaveDetail }) {
+  const { goBack } = useApp();
   const { ticket, details } = data;
+  const done = useDone(ticket);
+  // Step-by-step modes open on arrival (not when it is already done); closing that first one
+  // goes back to where you came from. Opened again from this page, closing just shows the page.
+  const [stepOpen, setStepOpen] = useState(!done.done);
+  const autoOpened = useRef(!done.done);
+  // Set by the last step's Done, so closing then stays on the page and the done state shows.
+  const finishing = useRef(false);
+  const [servings, setServings] = useState<number | null>(null);
+
   const fields = details.fields ?? {};
-  const action = ticket.action;
+  const action = ticket.action!;
   const reading = inFlight(ticket.processing);
   const title = ticketTitle(ticket);
-
-  if (!action || action.deliver === "keep") return null;
   const d = DELIVERY[action.deliver];
   const recipe = fields.recipe;
   const workout = fields.workout;
@@ -106,25 +117,39 @@ export default function ActionPage() {
 
   const closeStep = (open: boolean) => {
     setStepOpen(open);
-    if (!open && autoOpened.current) goBack();
+    if (!open && autoOpened.current && !finishing.current) goBack();
     autoOpened.current = false;
+    finishing.current = false;
   };
   const openStep = () => {
     autoOpened.current = false;
     setStepOpen(true);
+  };
+  // Followed through to the end: that counts as done.
+  const finish = () => {
+    finishing.current = true;
+    if (done.canMark) void done.mark();
   };
 
   return (
     <div className="act-page" style={kindTint(ticket.type)}>
       <header className="act-head gutter">
         <div className="act-top">
-          {back}
+          <BackButton />
           <ShareAction deliver={action.deliver} ticket={ticket} fields={fields} />
         </div>
-        <span className="act-kind">
-          <Icon name={d.icon} />
-          {d.label}
-        </span>
+        <div className="act-chips">
+          <span className="act-kind">
+            <Icon name={d.icon} />
+            {d.label}
+          </span>
+          {done.done && (
+            <span className="act-kind is-done">
+              <Icon name="check" />
+              Done{done.when ? ` ${done.when}` : ""}
+            </span>
+          )}
+        </div>
         <h1 className="act-title">{action.cta}</h1>
         {action.pitch && <p className="act-pitch">{action.pitch}</p>}
         <Link href={`/s/${id}`} className="act-reel">
@@ -149,11 +174,11 @@ export default function ActionPage() {
           <>
             <button type="button" className="btn btn-primary btn-block act-go" onClick={openStep}>
               <Icon name="food" />
-              Cook now
+              {done.done ? "Cook it again" : "Cook now"}
             </button>
             <ReelSections saveId={id} fields={{ recipe }} unverified={details.unverified ?? []} servings={servings} onServings={setServings} />
             {(ingredients.length > 0 || steps.length > 0) && (
-              <CookMode open={stepOpen} onOpenChange={closeStep} title={title} ingredients={ingredients} steps={steps} servings={recipe?.servings ?? null} />
+              <CookMode open={stepOpen} onOpenChange={closeStep} title={title} ingredients={ingredients} steps={steps} servings={recipe?.servings ?? null} onFinish={finish} />
             )}
           </>
         )}
@@ -162,11 +187,11 @@ export default function ActionPage() {
           <>
             <button type="button" className="btn btn-primary btn-block act-go" onClick={openStep} disabled={moves.length === 0}>
               <Icon name="fit" />
-              Start the workout
+              {done.done ? "Do it again" : "Start the workout"}
             </button>
             <ReelSections saveId={id} fields={{ workout }} unverified={details.unverified ?? []} servings={null} onServings={() => {}} />
             {moves.length > 0 && (
-              <CookMode open={stepOpen} onOpenChange={closeStep} title={title} ingredients={gear} steps={moves} servings={null} words={GYM_WORDS} />
+              <CookMode open={stepOpen} onOpenChange={closeStep} title={title} ingredients={gear} steps={moves} servings={null} words={GYM_WORDS} onFinish={finish} />
             )}
           </>
         )}
@@ -185,6 +210,9 @@ export default function ActionPage() {
             <ReelSections saveId={id} fields={{ event: fields.event }} unverified={details.unverified ?? []} servings={null} onServings={() => {}} />
           </>
         )}
+
+        {/* The event's plan card carries its own done controls. */}
+        {action.deliver !== "calendar" && !reading && <DoneBar ticket={ticket} />}
       </div>
     </div>
   );

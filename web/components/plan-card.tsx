@@ -81,7 +81,7 @@ export function PlanCard({
     return (await actions.confirm(choice, startLocal)) !== null;
   }
 
-  async function mark(status: "done" | "skipped") {
+  async function mark(status: "done" | "skipped" | "accepted") {
     const next = await actions.setStatus(status);
     if (!next) return;
     apply(next);
@@ -168,6 +168,10 @@ export function PlanCard({
           )}
         </div>
         <div className="plan-row">
+          <button type="button" className="text-btn" disabled={busy} onClick={() => void mark("done")}>
+            <Icon name="check" />
+            Mark as done
+          </button>
           {canPickTime && (
             <button type="button" className="text-btn" disabled={busy} onClick={() => setChangeOpen(true)}>
               Pick a time
@@ -386,7 +390,7 @@ export function PlanCard({
   // Done, skipped, declined or never planned: one quiet line.
   const quiet =
     state === "done"
-      ? { icon: "check" as const, text: `Done${plan?.done_day ? ` ${plan.done_day}` : ""}`, again: false }
+      ? { icon: "check" as const, text: `Done${plan?.done_on ? ` ${plan.done_on}` : plan?.done_day ? ` ${plan.done_day}` : ""}`, again: false }
       : state === "skipped"
         ? { icon: "skip" as const, text: "Skipped", again: true }
         : { icon: "bookmark" as const, text: "Saved without a plan", again: Boolean(plan) };
@@ -402,6 +406,11 @@ export function PlanCard({
         {quiet.again && (
           <button type="button" className="text-btn" disabled={busy} onClick={() => void actions.replan()}>
             Plan again
+          </button>
+        )}
+        {state === "done" && plan && (
+          <button type="button" className="text-btn" disabled={busy} onClick={() => void mark("accepted")}>
+            Undo
           </button>
         )}
       </div>

@@ -2534,3 +2534,389 @@
 article.panel {
   padding-bottom: 76px;
 }
+
+/* ---------- Ready for you filter: every chip shows, wrapping to a second line ---------- */
+.rfilter {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+/* ---------- My collection: a taste is a card with a real preview of its reels ---------- */
+.tcards {
+  margin-top: 14px;
+  display: grid;
+  gap: 14px;
+}
+.tcard {
+  display: block;
+  padding: 8px 8px 16px;
+  border-radius: 26px;
+  background: var(--p);
+  color: var(--d);
+  transition: transform 0.25s var(--ease);
+}
+.tcard:active {
+  transform: scale(0.985);
+}
+.tcard-media {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.tcard-media[data-n="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.tcard-media[data-n="1"],
+.tcard-media[data-n="0"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.tcard-shot {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 5;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+}
+.tcard-media[data-n="2"] .tcard-shot {
+  aspect-ratio: 6 / 5;
+}
+.tcard-media[data-n="1"] .tcard-shot {
+  aspect-ratio: 12 / 5;
+}
+.tcard-shot img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s var(--ease);
+}
+@media (hover: hover) {
+  .tcard:hover .tcard-shot img {
+    transform: scale(1.04);
+  }
+}
+.tcard-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(24, 24, 30, 0.46);
+  color: #ffffff;
+  font-family: var(--display);
+  font-size: 28px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.tcard-ph {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 12 / 5;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.tcard-ph .i {
+  width: 34px;
+  height: 34px;
+  opacity: 0.8;
+}
+.tcard-body {
+  display: block;
+  padding: 14px 8px 0;
+}
+.tcard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tcard-ico {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+}
+.tcard-ico .i {
+  width: 17px;
+  height: 17px;
+}
+.tcard-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--display);
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+}
+.tcard-new {
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--d);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tcard-go {
+  flex: none;
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  opacity: 0.75;
+}
+.tcard-stats {
+  display: block;
+  margin-top: 4px;
+  padding-left: 42px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tcard-subs {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tcard-subs span {
+  height: 30px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.tcard-subs b {
+  font-weight: 600;
+  color: var(--d);
+  font-variant-numeric: tabular-nums;
+}
+.tcard-subs .is-more {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  color: var(--d);
+}
+.tcard.is-loading {
+  background: var(--surface);
+}
+.tcard.is-loading .tcard-shot {
+  margin: 0;
+  height: auto;
+}
+
+/* ---------- Task completion: action mode's done bar, the done chip ---------- */
+.act-chips {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.act-chips .act-kind {
+  margin-top: 0;
+}
+.act-kind.is-done {
+  background: var(--mint-ink);
+  color: #ffffff;
+}
+.donebar {
+  margin-top: 30px;
+}
+.donebar-btn {
+  height: 54px;
+  border-color: transparent;
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+.donebar-btn:hover {
+  background: #c9edd8;
+}
+.donebar-done {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 6px 12px 12px;
+  border-radius: 22px;
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+.donebar-check {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mint-ink);
+  color: #ffffff;
+  animation: done-pop 0.45s var(--ease) both;
+}
+.donebar-check .i {
+  width: 19px;
+  height: 19px;
+  stroke-width: 2.6;
+}
+@keyframes done-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+.donebar-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.donebar-text b {
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.donebar-text span {
+  font-size: 13px;
+  font-weight: 500;
+}
+.donebar-done .text-btn {
+  color: var(--mint-ink);
+}
+
+/* ---------- Home: Completed ---------- */
+.done-list {
+  margin-top: 8px;
+}
+.done-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  border-radius: 14px;
+}
+.done-list li + li .done-row {
+  border-top: 1px solid var(--line);
+}
+.done-thumb {
+  position: relative;
+  width: 46px;
+  height: 58px;
+  flex: none;
+  border-radius: 14px;
+  background: var(--p, var(--surface));
+}
+.done-thumb img {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  object-fit: cover;
+}
+.done-tick {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mint);
+  color: var(--mint-ink);
+  box-shadow: 0 0 0 2.5px #ffffff;
+}
+.done-tick .i {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+}
+.done-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.done-what {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.done-meta {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.done-more {
+  margin-top: 2px;
+  margin-left: -12px;
+}
+.done-more[aria-expanded="true"] .i {
+  transform: rotate(180deg);
+}
+.done-empty {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.done-empty .i {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--mint-ink);
+}
+
+/* A saved reel whose action is done */
+.tile-done {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--mint-ink);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px -2px rgba(30, 31, 36, 0.25);
+}
+.tile-done .i {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .donebar-check,
+  .tcard-shot img {
+    animation: none;
+    transition: none;
+  }
+}

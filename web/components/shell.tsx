@@ -181,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const plain = isPlain(pathname);
   const onHome = pathname.startsWith("/home");
-  const onPlans = pathname.startsWith("/plans");
+  const onCollection = pathname.startsWith("/collection") || pathname.startsWith("/t/") || pathname.startsWith("/library");
 
   return (
     <AppContext.Provider value={app}>
@@ -217,9 +217,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onHeard={(text) => ask(text, true, true)}
             onProblem={(message) => toast.show(message)}
           />
-          <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
-            <Icon name="plans" />
-            Actions
+          <Link href="/collection" className="tab" aria-current={onCollection ? "page" : undefined}>
+            <Icon name="grid" />
+            My collection
           </Link>
         </nav>
 
