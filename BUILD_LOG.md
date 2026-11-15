@@ -334,3 +334,10 @@ The user asked for a knowledge graph that helps retrieval of the vector embeddin
 - **The page** is `/graph` ("How your saves connect"), linked from Home's "Your tastes". react-force-graph-2d is the dependency CLAUDE.md lists for this (1.29.2, pinned). The canvas has a text list of every connection under it, so the page works without the canvas.
 
 Checked at 390 and 1440 px on that temporary account (deleted afterwards): the graph draws 41 nodes and 51 links, tapping a node on the canvas or in the list highlights its neighbours and opens its details with links to its reels. 136 unit tests pass (9 new in `server/tests/test_graph.py`).
+
+## 2026-11-15: pressing fixes after the design review
+
+- **Demo limit.** "Try the demo" allowed 10 sessions an hour per address. A venue's Wi-Fi puts a room behind one address, and locally the web app's `/api` pass-through made every phone look like 127.0.0.1. The count is now `DEMO_SESSIONS_PER_HOUR` (default 60; a session costs no model call). The local API start trusts forwarded addresses from 127.0.0.1 only. Next's rewrite does not send the visitor's address, so locally all phones still share one count; behind Caddy each visitor is counted on their own.
+- **One calorie number per recipe.** The reel page estimated 386 kcal for the curry while the chat quoted the 484 Budget Bytes publishes. Published numbers the chat finds are kept on the save (`published_nutrition`) and the page shows them with their source. With none published, the chat answers with the page's estimate instead of a second estimate. Nine existing saves got their published numbers from earlier chats.
+- **Actions page.** Events whose dates have passed leave "Waiting on you" for a collapsed Missed group (`actions.is_missed`, the same rule that writes "It's passed"). "Just vibes" reads "Save without a plan" on the web, which is what it does; the Shortcut menu keeps the old words. Only the first waiting card keeps the dark button.
+- **Samples rebuilt** with the live models; see BLOCKERS.md for the measured numbers.
