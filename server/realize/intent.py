@@ -1,7 +1,7 @@
 """The action for a save: what the person wants from the reel, and how the app gives it to them.
 
 Realize is an action app, not a reminder app. A recipe reel wants cooking, so the action opens
-cook mode. A product reel wants a good one at a good price, so the action runs price research.
+cook mode. A product reel wants a good one at a good price, so the action finds the best prices and similar products worth a look.
 A travel reel wants an itinerary. A calendar entry is offered only when the reel itself is tied
 to a time (an event with a date still ahead).
 
@@ -27,7 +27,7 @@ NEED_MAX = 60
 # Plain words for each delivery, used when the model gives none or its pick is replaced.
 WORDS: dict[str, dict[str, str]] = {
     "cook": {"cta": "Let's cook this", "pitch": "Step by step, with a shopping list"},
-    "shop": {"cta": "Find the best price", "pitch": "Prices from real stores, plus cheaper picks"},
+    "shop": {"cta": "Shop this and similar picks", "pitch": "Best prices at real stores, plus similar products"},
     "itinerary": {"cta": "Plan a visit", "pitch": "A day plan with hours, prices and what's nearby"},
     "calendar": {"cta": "Save the date", "pitch": "One calendar entry at the event's own time"},
     "workout": {"cta": "Do this workout", "pitch": "The moves, sets and reps from the reel"},

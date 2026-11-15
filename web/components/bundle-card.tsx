@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { useRefresh } from "@/lib/hooks";
-import { actionHref, DELIVERY, kindOf, tint, type KindColor } from "@/lib/kinds";
+import { actionHref, DELIVERY, KINDS, kindOf, tint, type KindColor } from "@/lib/kinds";
 import type { Bundle, BundlesResponse, ReadyAction } from "@/lib/types";
 
 /** The list of bundles. Asked again every few seconds while a new one's words are being written. */
@@ -159,12 +159,13 @@ function ActionPass({
 
 /** A comparison of related product reels. Opens the comparison. */
 export function ReadyTile({ bundle }: { bundle: Bundle }) {
+  const kind = KINDS[bundle.type];
   return (
     <ActionPass
       href={`/b/${bundle.id}`}
-      color="rose"
-      icon="tag"
-      label="Comparison"
+      color={kind.color}
+      icon={kind.icon}
+      label={kind.label}
       cta={bundle.title}
       meta={bundle.count_label}
       button={bundle.cta}
@@ -173,17 +174,20 @@ export function ReadyTile({ bundle }: { bundle: Bundle }) {
   );
 }
 
-/** One reel's action. Opens action mode straight away. */
+/** One reel's action. Opens action mode straight away. The tag is the reel's taste, the
+ *  headline is the reel itself (the dish, the product, the show), the line under it is the
+ *  call to action, and the button says what opens. */
 export function ActionTile({ item }: { item: ReadyAction }) {
   const d = DELIVERY[item.deliver];
+  const kind = KINDS[item.type];
   return (
     <ActionPass
       href={actionHref(item.save_id, item.deliver)}
-      color={d.color}
-      icon={d.icon}
-      label={d.label}
-      cta={item.cta}
-      meta={item.title}
+      color={kind.color}
+      icon={kind.icon}
+      label={kind.label}
+      cta={item.title}
+      meta={item.cta}
       button={d.button}
       prints={[item.thumb_url]}
     />

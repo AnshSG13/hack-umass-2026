@@ -58,7 +58,7 @@ export function actionText(
     const alts = s.offers.filter((o) => o.alternative);
     lines.push(title, "");
     lines.push(...main.map((o) => `- ${o.product}: ${o.price_text} at ${o.store}\n  ${o.url}`));
-    if (alts.length) lines.push("", "Cheaper for the same job", ...alts.map((o) => `- ${o.product}: ${o.price_text} at ${o.store}\n  ${o.url}`));
+    if (alts.length) lines.push("", "Similar products", ...alts.map((o) => `- ${o.product}: ${o.price_text} at ${o.store}\n  ${o.url}`));
     if (s.checked_on) lines.push("", `Prices checked ${s.checked_on}. Check the store before you buy.`);
   } else if (deliver === "itinerary" && extra.trip?.trip) {
     const t = extra.trip.trip;

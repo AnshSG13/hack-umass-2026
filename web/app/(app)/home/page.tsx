@@ -15,19 +15,11 @@ import { PullToRefresh } from "@/components/pull-refresh";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
 import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
-import { greeting, inFlight, plural } from "@/lib/format";
+import { greeting, inFlight } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { STORY_REPLAY_HREF, useStorySeen } from "@/lib/story";
 import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
-import type { SaveType, SavesPage, TastesResponse } from "@/lib/types";
-
-/** "4 workouts", "3 recipes" -> "You have 4 new workouts and 3 recipes". */
-function newThings(parts: string[]): string {
-  const [first, ...rest] = parts;
-  const lead = first.replace(/^(\d+) /, "$1 new ");
-  const all = [lead, ...rest];
-  return all.length === 1 ? all[0] : `${all.slice(0, -1).join(", ")} and ${all[all.length - 1]}`;
-}
+import type { SaveType, SavesPage } from "@/lib/types";
 
 /** Ready for you, filtered by taste: one chip per taste with actions ready, plus All. */
 function ReadyFilter({
@@ -41,22 +33,25 @@ function ReadyFilter({
 }) {
   const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
   const kinds = KIND_ORDER.filter((k) => counts.has(k));
-  // One line if it can be: the chips get smaller step by step until they fit, and only wrap
-  // when even the smallest don't. Measured, so it holds for any labels and screen width.
+  // One line if it can be: the chips get smaller step by step until they fit. When even the
+  // smallest don't, they split evenly over two full-width rows (icons dropped only if a chip
+  // still wouldn't fit). Measured, so it holds for any labels and screen width.
   const row = useRef<HTMLDivElement>(null);
   const signature = kinds.map((k) => `${k}${counts.get(k)}`).join(",");
   useLayoutEffect(() => {
     const el = row.current;
     if (!el) return;
     const fit = () => {
-      const oneLine = () => {
-        const chips = el.children;
-        return chips.length < 2 || (chips[chips.length - 1] as HTMLElement).offsetTop === (chips[0] as HTMLElement).offsetTop;
-      };
+      const chips = Array.from(el.children) as HTMLElement[];
+      el.dataset.icons = "on";
+      el.style.removeProperty("--cols");
       for (const size of ["roomy", "snug", "tight"]) {
         el.dataset.fit = size;
-        if (oneLine()) return;
+        if (chips.length < 2 || chips[chips.length - 1].offsetTop === chips[0].offsetTop) return;
       }
+      el.dataset.fit = "two";
+      el.style.setProperty("--cols", String(Math.ceil(chips.length / 2)));
+      if (chips.some((c) => c.scrollWidth > c.clientWidth + 1)) el.dataset.icons = "off";
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -90,7 +85,6 @@ export default function HomePage() {
   const now = useNow();
   const { data: me } = useMe();
   const storySeen = useStorySeen();
-  const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
   const saves = useSWR<SavesPage>("/api/saves?limit=10", fetcher);
   const bundles = useBundles();
   
@@ -107,12 +101,6 @@ export default function HomePage() {
   const name = me?.name?.trim() ?? "";
   const hour = new Date(now).getHours();
   const hello = name ? `${greeting(hour)}, ${name}` : greeting(hour);
-
-  // "{total} saves across {n} tastes": from /api/tastes, or from the account's own counts
-  // while that hasn't answered.
-  const total = tastes.data?.total ?? me?.counts.saves;
-  const tasteCount =
-    tastes.data?.tastes.length ?? (me ? Object.values(me.counts.by_type).filter((n) => n > 0).length : undefined);
 
   const freshIds = new Set(fresh.map((f) => f.save_id));
   const listed = (saves.data?.items ?? []).filter((t) => !freshIds.has(t.save_id));
@@ -135,7 +123,6 @@ export default function HomePage() {
     setReadyKind(t);
     readyRail.current?.scrollTo({ left: 0 });
   }
-  const recap = tastes.data?.recap ?? null;
   // Still being read right now: just added in this visit, or in the list and not done.
   // The list is asked again when a new save finishes, so its status is the current one.
   const statusOf = new Map((saves.data?.items ?? []).map((t) => [t.save_id, t.processing]));
@@ -160,23 +147,6 @@ export default function HomePage() {
         <header className="home-head">
           <div style={{ minWidth: 0 }}>
             <h1 className="greet">{hello}</h1>
-            {recap ? (
-              recap.window === "new" ? (
-                <p className="greet-sub recap">
-                  You have <b>{newThings(recap.parts)}</b>
-                </p>
-              ) : (
-                <p className="greet-sub recap">
-                  This week: <b>{recap.text}</b>
-                </p>
-              )
-            ) : total !== undefined && tasteCount !== undefined && total > 0 && (
-              <p className="greet-sub">
-                {plural(total, "save", "saves")}
-                {/* A save that is still being read, or could not be, has no taste yet. */}
-                {tasteCount > 0 && ` across ${plural(tasteCount, "taste", "tastes")}`}
-              </p>
-            )}
             {me?.is_demo && storySeen && (
               <Link href={STORY_REPLAY_HREF} className="text-btn story-replay">
                 <Icon name="redo" />
@@ -191,28 +161,29 @@ export default function HomePage() {
       </div>
 
       {readyCount > 0 && !isEmpty && (
-        <section className="blk" aria-labelledby="ready-h">
-          <div className="gutter block-head">
-            <h2 className="block-title" id="ready-h">
-              Ready for you
-              <span className="pill">{readyCount}</span>
-            </h2>
-            <Link href="/plans" className="see-all">
-              See all
-              <Icon name="right" />
-            </Link>
-          </div>
+        <section className="blk ready-blk" aria-labelledby="ready-h">
+          {/* No visible heading: the passes speak for themselves. Kept for screen readers. */}
+          <h2 className="vh" id="ready-h">
+            Ready for you
+          </h2>
           {readyCounts.size > 1 && <ReadyFilter counts={readyCounts} value={kindShown} onChange={pickKind} />}
           <p className="vh" aria-live="polite">
             {kindShown ? `Showing ${shownBundles.length + shownActions.length} ${KINDS[kindShown].label} actions` : ""}
           </p>
-          <div className="rail rail-gallery rail-2x2" ref={readyRail} key={kindShown ?? "all"}>
+          <div className="rail rail-gallery rail-2up" ref={readyRail} key={kindShown ?? "all"}>
             {shownBundles.map((b) => (
               <ReadyTile key={b.id} bundle={b} />
             ))}
             {shownActions.map((a) => (
               <ActionTile key={a.save_id} item={a} />
             ))}
+            <Link href="/plans" className="acard acard-all">
+              <span className="acard-all-ico" aria-hidden="true">
+                <Icon name="right" />
+              </span>
+              <span className="acard-all-text">See all actions</span>
+              <span className="acard-all-sub">What&apos;s coming up and what&apos;s done</span>
+            </Link>
           </div>
         </section>
       )}
@@ -255,13 +226,12 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <div className="rail rail-2x2" ref={railRef}>
+            <div className="rail rail-3" ref={railRef}>
               {fresh.map((f) => (
                 <LiveReelTile key={f.save_id} saveId={f.save_id} initial={f.ticket} now={now} />
               ))}
               {!loaded && fresh.length === 0 && (
                 <>
-                  <TilePlaceholder />
                   <TilePlaceholder />
                   <TilePlaceholder />
                   <TilePlaceholder />

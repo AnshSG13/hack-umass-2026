@@ -410,10 +410,11 @@ def view(bundle: dict, user: dict, *, full: bool = False) -> dict:
     return out
 
 
-SINGLES_MAX = 10
-# Saves whose plan was answered (on the calendar, done, skipped, or "just save it") are not
-# offered again as ready.
-ANSWERED = ("accepted", "done", "skipped", "declined")
+SINGLES_MAX = 40
+# Saves whose plan is finished with (done, skipped, or "just save it") are not offered again.
+# One given a time (accepted) is still an open action until it is done: Home, All actions and
+# the reel page all show the same set (owner's call, 2026-11-14).
+ANSWERED = ("done", "skipped", "declined")
 
 
 def singles(user: dict, exclude: set) -> list[dict]:
@@ -422,7 +423,7 @@ def singles(user: dict, exclude: set) -> list[dict]:
     docs = list(db.saves().find(
         {"user_id": user["_id"], "status": {"$in": ["planned", "enriching", "ready"]},
          "type": {"$in": [t for t in intent.DEFAULT_DELIVER if t != "other"]}},
-        {"embedding": 0, "transcript": 0, "transcript_text": 0}).sort("created_at", -1).limit(40))
+        {"embedding": 0, "transcript": 0, "transcript_text": 0}).sort("created_at", -1).limit(80))
     docs = [d for d in docs if d["_id"] not in exclude]
     plans = {p["save_id"]: p for p in db.plans().find(
         {"user_id": user["_id"], "save_id": {"$in": [d["_id"] for d in docs]}})} if docs else {}

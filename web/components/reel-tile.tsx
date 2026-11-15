@@ -89,7 +89,7 @@ export function ReelTile({
         <>
           <span className="tile-meta">
             <KindChip type={ticket.type} />
-            {when}
+            <span className="tile-when">{when}</span>
           </span>
           <span className="tile-title">{title}</span>
         </>
