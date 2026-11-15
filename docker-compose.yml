@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
   caddy:
     image: caddy:2
-    ports: ["80:80", "443:443", "443:443/udp"]
+    ports: ["80:80", "443:443"]
     env_file: .env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
