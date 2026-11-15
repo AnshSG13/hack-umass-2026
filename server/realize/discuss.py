@@ -7,6 +7,10 @@ model is told what they can already see and answers the question instead of rest
 
 The model writes the answer and may name the second of the spoken line it relied on.
 Code checks that second against the real transcript before the page links to it.
+
+When the reel doesn't answer the question and the web could (a place's hours, a product's
+price, what a dish is, nutrition), the first call says so and a second call searches with
+Gemini's Google Search tool. That answer carries numbered links to the pages it used.
 """
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ import re
 
 from bson import ObjectId
 
-from . import db, gemini, planops
+from . import db, gemini, nutrition, planops, trip
 from .config import get_settings
 from .runs import Run
 from .timeutil import as_utc, big_time, now_utc, prompt_date, tz_of
@@ -24,6 +28,7 @@ from .timeutil import as_utc, big_time, now_utc, prompt_date, tz_of
 log = logging.getLogger("realize.discuss")
 
 TIMEOUT_S = 25
+WEB_TIMEOUT_S = 50
 MESSAGE_MAX = 1000          # characters of one question
 ANSWER_MAX = 1200           # characters of one answer
 TITLE_MAX = 60
@@ -49,6 +54,11 @@ lists pulled from it (ingredients, steps, exercises, places, products). So:
 - at_sec: when one spoken line in the transcript supports your answer, give that line's
   start second exactly as it is written in the transcript. Otherwise -1.
 - from_reel: true when the answer comes from the reel, false when it is general knowledge.
+- needs_web: true when the reel doesn't answer the question and a web search would: facts about
+  a place, product, person, dish or event named in the reel or the question; prices, opening
+  hours, dates, tickets, availability; reviews; nutrition; anything current; how-tos that need
+  specifics. Then put a short search query in search_for, and text can be one line saying you'll
+  look it up. false when the reel answers it, or it is a matter of taste or small talk.
 
 THE REEL
 {reel}"""
@@ -59,9 +69,23 @@ ANSWER_SCHEMA: dict = {
         "text": {"type": "string", "description": "The answer, 1 to 4 short sentences"},
         "at_sec": {"type": "integer", "description": "Start second of the supporting transcript line, or -1"},
         "from_reel": {"type": "boolean"},
+        "needs_web": {"type": "boolean"},
+        "search_for": {"type": "string", "description": "A short web search query, when needs_web"},
     },
-    "required": ["text", "at_sec", "from_reel"],
+    "required": ["text", "at_sec", "from_reel", "needs_web"],
 }
+
+WEB_PROMPT = """You are Ask, inside Realize, talking with someone about one reel they saved.
+Today is {today_local} ({timezone}). They asked something the reel doesn't answer, so search
+the web for it.
+- Answer the question, first sentence first, in 1 to 4 short sentences, specific to this
+  reel's place, product, recipe or event. Use a short "- " list only for options or steps.
+- Use only what the search results say. If they don't settle it, say so plainly.
+- Never present something from the web as something the reel said.
+- Plain sentence case. No em dashes. No headings. No markdown except "- " list lines.
+
+THE REEL
+{reel}"""
 
 
 # ---------- what the model is given ----------
@@ -130,7 +154,9 @@ def snap_second(save: dict, at_sec) -> int | None:
 def clean_answer(text: str) -> str:
     """The copy rules, enforced: no em dashes, no markdown emphasis, capped length."""
     out = re.sub(r"\s*\u2014\s*", ", ", text or "").replace("\u2013", "-").replace("**", "").replace("__", "")
-    out = "\n".join(line.rstrip() for line in out.strip().splitlines())
+    # Web answers sometimes come back as markdown: "* " lists and "#" headings become plain lines.
+    out = "\n".join(re.sub(r"^\s*[*•]\s+", "- ", re.sub(r"^\s*#+\s*", "", line)).rstrip()
+                    for line in out.strip().splitlines())
     while "\n\n\n" in out:
         out = out.replace("\n\n\n", "\n\n")
     return out[:ANSWER_MAX].strip()
@@ -157,10 +183,29 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
     text = (("Earlier in this discussion:\n" + "\n".join(lines) + "\n\nTheir new message: ") if lines else "") \
         + message[:MESSAGE_MAX]
     run = Run(user, None, "discuss", s.gemini_model_fast)
+    if nutrition.wants_nutrition(save, message):
+        # Reels almost never give nutrition: look it up, and keep only sourced numbers.
+        try:
+            reply = nutrition.answer(save, message, run.step)
+            run.finish("done")
+            return reply
+        except Exception as e:  # noqa: BLE001
+            log.warning("nutrition lookup failed: %s", str(e)[:200])
+            run.finish("failed", str(e))
+            raise
     try:
         out = gemini.generate_json(role="fast", input=[gemini.user_step(text)], schema=ANSWER_SCHEMA,
                                    system=system, timeout_s=TIMEOUT_S)
         body = clean_answer(str(out.get("text") or ""))
+        if out.get("needs_web"):
+            try:
+                web = web_answer(user, save, plan, text, str(out.get("search_for") or message), run)
+            except Exception as e:  # noqa: BLE001 - fall back to what the reel-only call said
+                log.warning("web answer failed: %s", str(e)[:200])
+                web = None
+            if web:
+                run.finish("done")
+                return web
         if not body:
             raise RuntimeError("empty answer")
         run.finish("done")
@@ -170,6 +215,47 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
         log.warning("discussion failed: %s", str(e)[:200])
         run.finish("failed", str(e))
         raise
+
+
+def web_answer(user: dict, save: dict, plan: dict | None, text: str, query: str, run: Run) -> dict | None:
+    """Search the web for what the reel doesn't say. Returns None when the search gave no
+    source to link, so nothing unsourced is shown as found on the web."""
+    s = get_settings()
+    tz = tz_of(user)
+    system = WEB_PROMPT.replace("Realize", s.app_name).format(
+        today_local=prompt_date(now_utc().astimezone(tz)), timezone=str(tz),
+        reel=reel_context(save, plan, user)[:6000])
+    sources: list[dict] = []
+    with run.step("web_search", {"query": query[:200]}) as h:
+        it = gemini.create_interaction(
+            WEB_TIMEOUT_S, role="fast", store=False, system_instruction=system,
+            input=f"{text}\n\n(Search for: {query[:200]})", tools=[{"type": "google_search"}],
+            generation_config={"thinking_level": "low"})
+        parts: list[str] = []
+        for step in getattr(it, "steps", None) or []:
+            if getattr(step, "type", None) != "model_output":
+                continue
+            for block in getattr(step, "content", None) or []:
+                if getattr(block, "type", None) != "text":
+                    continue
+                raw = getattr(block, "text", "") or ""
+                anns = [{"url": getattr(a, "url", None), "title": getattr(a, "title", None),
+                         "end": getattr(a, "end_index", None)}
+                        for a in (getattr(block, "annotations", None) or [])
+                        if getattr(a, "type", None) == "url_citation"]
+                parts.append(trip.cite(raw, anns, sources))
+        h["result"] = {"sources": len(sources)}
+    body = clean_answer("\n".join(parts))
+    if not body or not sources:
+        return None
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for src, real in zip(sources, pool.map(trip._resolve, [x["url"] for x in sources])):
+            src["url"] = real
+    return {"text": body, "at_sec": None, "from_reel": False, "web": True,
+            "sources": [{"n": x["n"], "title": x.get("title") or "", "url": x["url"]} for x in sources],
+            "macros": None}
 
 
 # ---------- storage ----------
@@ -196,6 +282,9 @@ def append(user: dict, save: dict, discussion: dict | None, message: str, reply:
         {"role": "assistant", "text": reply["text"], "at": now,
          "at_sec": reply.get("at_sec"), "from_reel": reply.get("from_reel", True)},
     ]
+    if reply.get("web"):
+        # Looked up on the web: the links its numbers came from travel with the answer.
+        pair[1].update({"web": True, "sources": reply.get("sources") or [], "macros": reply.get("macros")})
     if discussion is None:
         doc: dict = {"_id": ObjectId(), "user_id": user["_id"], "save_id": save["_id"],
                      "title": title_from(message), "messages": pair, "count": 2,
@@ -229,6 +318,10 @@ def _message_view(m: dict) -> dict:
         out["at_sec"] = sec if isinstance(sec, int) else None
         out["at_label"] = _clock(sec) if isinstance(sec, int) else None
         out["from_reel"] = bool(m.get("from_reel", True))
+        if m.get("web"):
+            out["web"] = True
+            out["sources"] = m.get("sources") or []
+            out["macros"] = m.get("macros")
     return out
 
 

@@ -16,7 +16,11 @@ export function Streamed({ text, live, onDone }: { text: string; live: boolean; 
   const [shown, setShown] = useState(animate ? 0 : words.length);
 
   useEffect(() => {
-    if (!animate) return;
+    if (!animate) {
+      // With reduced motion the whole answer is there at once: it is done straight away.
+      if (live) onDone?.();
+      return;
+    }
     if (shown >= words.length) {
       onDone?.();
       return;
@@ -26,7 +30,7 @@ export function Streamed({ text, live, onDone }: { text: string; live: boolean; 
     return () => window.clearTimeout(id);
     // onDone is read when the last word lands; a new callback must not restart the pace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [animate, shown, words.length]);
+  }, [animate, live, shown, words.length]);
 
   if (!animate) return <>{text}</>;
   return (

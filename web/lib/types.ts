@@ -328,6 +328,20 @@ export interface DiscussionMessage {
   at_label?: string | null; // "0:11"
   /** false: general knowledge, not something the reel says. Assistant only. */
   from_reel?: boolean;
+  /** true: the reel didn't say, so the answer was looked up on the web. Assistant only. */
+  web?: boolean;
+  /** The pages a web answer used; the answer's [n] markers point at these. */
+  sources?: { n: number; title: string; url: string }[];
+  /** For a recipe's nutrition: numbers kept only with a source (n points into sources). */
+  macros?: {
+    basis: "published" | "estimated";
+    per: "serving" | "recipe";
+    servings: number | null;
+    values: Partial<Record<
+      "calories" | "protein_g" | "carbs_g" | "fat_g" | "fiber_g" | "sugar_g" | "sodium_mg",
+      { value: number; source: number }
+    >>;
+  } | null;
 }
 export interface DiscussionSummary {
   id: string;
@@ -403,4 +417,33 @@ export interface Bundle {
 export interface BundlesResponse {
   ready: Bundle[];
   started: Bundle[];
+}
+
+// ---- deliverables: something finished to send, made from one reel ----
+export type DeliverableKind = "itinerary" | "invite" | "grocery_list" | "recipe_card" | "workout_card"
+  | "shortlist" | "places_list" | "key_points" | "chat_notes";
+export interface DeliverableOption {
+  kind: DeliverableKind;
+  label: string;          // "Itinerary to send"
+  hint: string;           // "The days, stops, times and what they cost"
+  needs: null | "trip";   // "trip": the trip plan has to be built first
+}
+export interface DeliverableItem { text: string; sub?: string; url?: string; url_label?: string }
+export interface DeliverableBlock { heading: string; numbered?: boolean; items: DeliverableItem[] }
+export interface Deliverable {
+  id: string; kind: DeliverableKind; label: string; title: string;
+  lede: string[]; blocks: DeliverableBlock[]; closing: string[];
+  text: string;        // the whole message as plain text, ready to paste or send, link included
+  share_path: string;  // "/d/<id>?t=<token>" on this site
+  share_url: string;   // the same as an absolute link
+  updated_at: string;
+}
+export interface PublicDeliverable extends Deliverable {
+  reel: { title: string | null; creator: string | null; url: string | null; thumb_url: string | null };
+  app_name: string;
+}
+/** GET /api/saves/{id}/deliverables: what this reel can make now, and what was made before. */
+export interface DeliverablesResponse {
+  options: DeliverableOption[];
+  made: Deliverable[];
 }

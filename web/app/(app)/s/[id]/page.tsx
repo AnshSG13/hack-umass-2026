@@ -9,6 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { AgentTrace } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
+import { SendSomething } from "@/components/deliverables";
 import { Icon, type IconName } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { AskAboutButton, Discussions, ReelChat } from "@/components/reel-chat";
@@ -563,6 +564,9 @@ export default function ReelPage() {
           </a>
         </div>
 
+        {/* Something finished to send, for people who never open the chat. */}
+        {!reading && <SendSomething saveId={ticket.save_id} servings={servings} />}
+
         <TripPlan saveId={ticket.save_id} type={type} settled={!reading} />
 
         <Discussions saveId={ticket.save_id} onOpen={openChat} />
@@ -845,6 +849,7 @@ export default function ReelPage() {
         discussionId={discussionId}
         onDiscussionId={setDiscussionId}
         onJump={setAtSec}
+        servings={servings}
       />
 
       <GrocerySheet
