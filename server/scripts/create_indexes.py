@@ -54,6 +54,7 @@ def regular_indexes() -> None:
     db.bundles().create_index([("expires_at", ASCENDING)], **ttl)
 
     db.discussions().create_index([("user_id", ASCENDING), ("save_id", ASCENDING), ("updated_at", DESCENDING)])
+    db.discussions().create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])  # all chats, newest first
     db.discussions().create_index([("expires_at", ASCENDING)], **ttl)
 
     db.jobs().create_index([("kind", ASCENDING), ("status", ASCENDING), ("run_after", ASCENDING)])

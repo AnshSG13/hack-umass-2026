@@ -341,3 +341,14 @@ Checked at 390 and 1440 px on that temporary account (deleted afterwards): the g
 - **One calorie number per recipe.** The reel page estimated 386 kcal for the curry while the chat quoted the 484 Budget Bytes publishes. Published numbers the chat finds are kept on the save (`published_nutrition`) and the page shows them with their source. With none published, the chat answers with the page's estimate instead of a second estimate. Nine existing saves got their published numbers from earlier chats.
 - **Actions page.** Events whose dates have passed leave "Waiting on you" for a collapsed Missed group (`actions.is_missed`, the same rule that writes "It's passed"). "Just vibes" reads "Save without a plan" on the web, which is what it does; the Shortcut menu keeps the old words. Only the first waiting card keeps the dark button.
 - **Samples rebuilt** with the live models; see BLOCKERS.md for the measured numbers.
+
+## 2026-11-15: saved chats
+
+The owner asked for a better chat flow, perhaps with saved chats. Before: Ask (the orb) lived in memory only, so "New chat" or a reload lost it, and reel chats were kept but folded away in a collapsed "Discussions" box on each reel. Decisions:
+
+- **One collection, two kinds.** Ask chats go in `discussions` with `save_id: null`; each answered turn is kept with its reels (the cards as shown) and next questions. The stream's last line is `{"type": "saved", "chat_id"}`, and the client sends `chat_id` to continue; the server then uses the chat's own messages as history. A turn that fails is not kept.
+- **Every chat in one list.** `GET /api/chats` returns Ask and reel chats together, newest first (index `user_id, updated_at`). The Ask page's start screen shows "Your chats" under the idea chips; a row reopens an Ask chat in place or a reel chat over its reel (`/s/<id>?chat=`). A question handed over from Home or the orb starts its own chat.
+- **Reel chats are easy to pick up.** The reel page shows "Your chats about this" open, three at a time. The chat's start screen offers "Pick up where you left off", and an open chat has New chat and Delete in its header. Ask chats can be deleted too.
+- **Next questions in reel chats.** The reel chat's answer now asks the model for up to 2 follow-ups in the same call (no extra request); code keeps them short, distinct and in sentence case. Web and nutrition answers have none.
+
+Checked live on a fresh demo session at 390 px (`scratchpad/chats_look.py`): one Ask question was kept and listed, reopened with its turn and 2 reel tiles; one reel question came back with 2 follow-ups, showed under "Pick up where you left off", on the reel page and in the Ask list; no page errors. `pytest`: 165 passed.

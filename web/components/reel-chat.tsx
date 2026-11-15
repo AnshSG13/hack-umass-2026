@@ -8,6 +8,7 @@ import { Fragment, useEffect, useId, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
+import { CHATS_KEY } from "@/components/chat-list";
 import {
   DeliverableCard,
   deliverablesKey,
@@ -57,39 +58,53 @@ export function AskAboutButton({ onClick, disabled }: { onClick: () => void; dis
 
 // ---- the list on the Reel page ----
 
+const REEL_FIRST = 3;
+
+/** One kept chat about this reel, as a row that opens it. */
+function ReelChatRow({ d, now, onOpen }: { d: DiscussionSummary; now: number; onOpen: (id: string) => void }) {
+  return (
+    <button type="button" className="chat-row" onClick={() => onOpen(d.id)} aria-haspopup="dialog">
+      <span className="chat-thumb is-ask" aria-hidden="true">
+        <Icon name="ask" />
+      </span>
+      <span className="chat-text">
+        <span className="chat-title">{d.title}</span>
+        {d.preview && <span className="chat-preview">{d.preview}</span>}
+        <span className="chat-meta">
+          {plural(d.questions, "question", "questions")} · {relativeTime(d.updated_at, now)}
+        </span>
+      </span>
+      <Icon name="right" />
+    </button>
+  );
+}
+
+/** The chats kept with this reel, open on its page so they're easy to pick up again. */
 export function Discussions({ saveId, onOpen }: { saveId: string; onOpen: (id: string) => void }) {
   const { data } = useDiscussions(saveId);
   const now = useNow();
+  const [all, setAll] = useState(false);
   const list = data?.discussions ?? [];
   if (list.length === 0) return null;
+  const shown = all ? list : list.slice(0, REEL_FIRST);
   return (
-    <details className="said disc">
-      <summary>
-        <span className="disc-head">
-          Discussions
-          <span className="pill">{list.length}</span>
-        </span>
-        <Icon name="down" />
-      </summary>
-      <ul className="disc-list">
-        {list.map((d) => (
+    <section className="chats reel-chats" aria-labelledby="reel-chats-h">
+      <h2 className="chats-h" id="reel-chats-h">
+        Your chats about this
+      </h2>
+      <ul className="chats-list">
+        {shown.map((d) => (
           <li key={d.id}>
-            <button type="button" className="disc-row" onClick={() => onOpen(d.id)} aria-haspopup="dialog">
-              <span className="disc-ico" aria-hidden="true">
-                <Icon name="ask" />
-              </span>
-              <span className="disc-text">
-                <span className="disc-title">{d.title}</span>
-                <span className="disc-meta">
-                  {plural(d.questions, "question", "questions")} · {relativeTime(d.updated_at, now)}
-                </span>
-              </span>
-              <Icon name="right" />
-            </button>
+            <ReelChatRow d={d} now={now} onOpen={onOpen} />
           </li>
         ))}
       </ul>
-    </details>
+      {list.length > REEL_FIRST && (
+        <button type="button" className="chats-more" onClick={() => setAll((v) => !v)} aria-expanded={all}>
+          {all ? "Show fewer" : `Show all ${list.length}`}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -271,6 +286,10 @@ function ChatPanel({
   const messages = discussionId ? (data?.discussion.messages ?? []) : [];
   const sending = pending !== null && pending.error === null;
   const empty = messages.length === 0 && !pending && !(discussionId && isLoading);
+  // Earlier chats on this reel, offered on the start screen so one can be picked up again.
+  const { data: earlier } = useDiscussions(saveId);
+  const now = useNow();
+  const earlierChats = (earlier?.discussions ?? []).slice(0, 3);
 
   // Something to send: what this reel can make now, offered under the newest answer, and
   // the cards made in this sitting, each kept after the message it was made under.
@@ -289,7 +308,21 @@ function ChatPanel({
   });
   const options = sendable?.options ?? [];
   const last = messages.length - 1;
-  const suggest = options.length > 0 && !sending && !writing && last >= 0 && messages[last].role === "assistant";
+  const settledAnswer = !sending && !writing && last >= 0 && messages[last].role === "assistant";
+  const suggest = options.length > 0 && settledAnswer;
+  // Next questions the answer suggested: one tap asks them.
+  const followUps = settledAnswer ? (messages[last].follow_ups ?? []) : [];
+
+  function newChat() {
+    setCards([]);
+    setLiveAt(null);
+    setWriting(false);
+    setPending(null);
+    setConfirmDelete(false);
+    setDraft("");
+    onDiscussionId(null);
+    inputRef.current?.focus({ preventScroll: true });
+  }
 
   // Keep the newest message in view.
   const marker = `${messages.length}:${pending ? (pending.error ? 2 : 1) : 0}:${maker.steps ? 1 : 0}:${maker.problem ? 1 : 0}`;
@@ -318,6 +351,7 @@ function ChatPanel({
       setPending(null);
       if (d.id !== discussionId) onDiscussionId(d.id);
       void mutate(discussionsKey(saveId));
+      void mutate(CHATS_KEY);
       // An answered question can add an option ("Notes from this chat").
       void mutate(deliverablesKey(saveId, d.id));
     } catch (e) {
@@ -338,6 +372,7 @@ function ChatPanel({
       /* already gone is the same result */
     }
     void mutate(discussionsKey(saveId));
+    void mutate(CHATS_KEY);
     onDiscussionId(null);
     onOpenChange(false);
   }
@@ -358,20 +393,20 @@ function ChatPanel({
         </span>
         <Dialog.Title className="rc-title">{title}</Dialog.Title>
         {discussionId && (
-          <button
-            type="button"
-            className="rc-btn"
-            aria-label="Delete this discussion"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <Icon name="trash" />
-          </button>
+          <>
+            <button type="button" className="rc-btn" aria-label="Start a new chat" disabled={sending} onClick={newChat}>
+              <Icon name="plus" />
+            </button>
+            <button type="button" className="rc-btn" aria-label="Delete this chat" onClick={() => setConfirmDelete(true)}>
+              <Icon name="trash" />
+            </button>
+          </>
         )}
       </header>
 
       {confirmDelete && (
-        <div className="rc-confirm" role="alertdialog" aria-label="Delete this discussion?">
-          <p>Delete this discussion? This can&apos;t be undone.</p>
+        <div className="rc-confirm" role="alertdialog" aria-label="Delete this chat?">
+          <p>Delete this chat? This can&apos;t be undone.</p>
           <div>
             <button type="button" className="btn btn-danger" onClick={() => void remove()}>
               Delete
@@ -392,7 +427,9 @@ function ChatPanel({
         {empty && (
           <div className="rc-empty">
             <p className="rc-lead">What do you want to know?</p>
-            <p className="rc-sub">Answers come from this reel. It&apos;s saved here when you&apos;re done.</p>
+            <p className="rc-sub">
+              Answers come from this reel, or the web when it doesn&apos;t say. Chats are kept with the reel and in Ask.
+            </p>
             <div className="rc-starters">
               {(STARTERS[type ?? "other"] ?? STARTERS.other).map((q) => (
                 <button key={q} type="button" className="starter" onClick={() => void send(q)}>
@@ -400,6 +437,18 @@ function ChatPanel({
                 </button>
               ))}
             </div>
+            {earlierChats.length > 0 && (
+              <div className="rc-earlier">
+                <p className="rc-earlier-h">Pick up where you left off</p>
+                <ul className="chats-list">
+                  {earlierChats.map((d) => (
+                    <li key={d.id}>
+                      <ReelChatRow d={d} now={now} onOpen={(id) => onDiscussionId(id)} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -450,6 +499,16 @@ function ChatPanel({
                   onJump(sec);
                 }}
               />
+            )}
+            {i === last && followUps.length > 0 && (
+              <div className="follow rc-follow">
+                {followUps.map((q) => (
+                  <button key={q} type="button" className="follow-chip" onClick={() => void send(q)}>
+                    {q}
+                    <Icon name="send" />
+                  </button>
+                ))}
+              </div>
             )}
             {i === last && suggest && (
               <SendSuggestions options={options} busy={maker.busy !== null} onPick={maker.make} />

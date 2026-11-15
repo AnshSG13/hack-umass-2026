@@ -4,20 +4,38 @@
 // with plans coming back as plan cards you confirm. Home's idea chips, the orb's dictation
 // and "Ask about this" hand their question over through the shell's store.
 
-import { useEffect, useId, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import useSWR from "swr";
+import { useRouter, useSearchParams } from "next/navigation";
+import useSWR, { useSWRConfig } from "swr";
 import { StepLines } from "@/components/agent-activity";
 import { KindChip } from "@/components/bits";
+import { CHATS_KEY, ChatList } from "@/components/chat-list";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { Streamed } from "@/components/streamed";
 import { useAskStore, type AskTurn } from "@/components/shell";
-import { chatStream, fetcher } from "@/lib/api";
+import { api, chatStream, fetcher } from "@/lib/api";
 import { kindOf, kindTint, tint, type KindColor } from "@/lib/kinds";
-import type { AskCard, ChatEvent } from "@/lib/types";
+import type { AskCard, ChatEvent, Discussion } from "@/lib/types";
 
 const GENERIC_ERROR = "Ask didn't answer. Try again.";
+const CHAT_GONE = "That chat isn't here any more.";
+
+/** A kept Ask chat as the page's turns: each question with the answer and reels it got. */
+function toTurns(d: Discussion): AskTurn[] {
+  const turns: AskTurn[] = [];
+  for (const m of d.messages) {
+    if (m.role === "user") {
+      turns.push({ id: turns.length + 1, question: m.text, steps: [], cards: [], tickets: [], answer: null, error: null, done: true });
+    } else if (turns.length > 0) {
+      const t = turns[turns.length - 1];
+      t.answer = { text: m.text, confidence: m.confidence ?? "high", followUps: m.follow_ups ?? [] };
+      t.cards = m.cards ?? [];
+    }
+  }
+  return turns.filter((t) => t.answer !== null);
+}
 const IDEA_COLORS: KindColor[] = ["peach", "butter", "rose", "sky", "mint", "lavender"];
 
 function applyEvent(turn: AskTurn, e: ChatEvent): AskTurn {
@@ -174,8 +192,22 @@ function Turn({
   );
 }
 
+// The page reads ?chat= from the router, which needs a Suspense boundary to build.
 export default function AskPage() {
-  const { turns, setTurns, handoff, clearHandoff } = useAskStore();
+  return (
+    <Suspense>
+      <AskInner />
+    </Suspense>
+  );
+}
+
+function AskInner() {
+  const { turns, setTurns, chatId, setChatId, handoff, clearHandoff } = useAskStore();
+  const { mutate } = useSWRConfig();
+  const router = useRouter();
+  const linkedChat = useSearchParams().get("chat");
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { data: chips } = useSWR<{ chips: string[] }>("/api/chips", fetcher, { revalidateOnFocus: false });
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -193,19 +225,81 @@ export default function AskPage() {
     if (turns.length > 0) endRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
   }, [marker, turns.length]);
 
-  async function send(text: string, replaceId?: number, spoken?: boolean) {
+  // A link to a kept chat (?chat=<id>, from the chat list): open it here, or over its reel
+  // when it's a reel chat. The address goes back to /ask once it's read.
+  useEffect(() => {
+    if (!linkedChat) return;
+    if (linkedChat === chatId) {
+      router.replace("/ask", { scroll: false });
+      return;
+    }
+    let gone = false;
+    api<{ discussion: Discussion }>(`/api/discussions/${encodeURIComponent(linkedChat)}`)
+      .then(({ discussion: d }) => {
+        if (gone) return;
+        if (d.kind === "reel" && d.save_id) {
+          router.replace(`/s/${d.save_id}?chat=${d.id}`);
+          return;
+        }
+        setTurns(toTurns(d));
+        setChatId(d.id);
+        setLiveIds([]);
+        setOpenError(null);
+        router.replace("/ask", { scroll: false });
+      })
+      .catch(() => {
+        if (gone) return;
+        setOpenError(CHAT_GONE);
+        router.replace("/ask", { scroll: false });
+      });
+    return () => {
+      gone = true;
+    };
+    // Only a new link should load; the store setters are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedChat]);
+
+  async function removeChat() {
+    const id = chatId;
+    setConfirmDelete(false);
+    if (id) {
+      try {
+        await api<{ ok: boolean }>(`/api/discussions/${id}`, { method: "DELETE" });
+      } catch {
+        /* already gone is the same result */
+      }
+      void mutate(CHATS_KEY);
+    }
+    newChat();
+  }
+
+  function newChat() {
+    setConfirmDelete(false);
+    setTurns([]);
+    setChatId(null);
+    setLiveIds([]);
+    setDraft("");
+    setOpenError(null);
+    window.scrollTo({ top: 0 });
+    inputRef.current?.focus({ preventScroll: true });
+  }
+
+  async function send(text: string, replaceId?: number, spoken?: boolean, startNew = false) {
     const message = text.trim();
     if (!message || sending) return;
     setSending(true);
     setDraft("");
-    const prior = turns.filter((t) => t.id !== replaceId);
+    setOpenError(null);
+    const prior = startNew ? [] : turns.filter((t) => t.id !== replaceId);
+    const into = startNew ? null : chatId;
     const history = prior
       .flatMap((t) => [
         { role: "user" as const, text: t.question },
         ...(t.answer ? [{ role: "assistant" as const, text: t.answer.text }] : []),
       ])
       .slice(-6);
-    const id = turns.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+    const id = prior.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+    if (startNew) setChatId(null);
     const fresh: AskTurn = {
       id,
       question: message,
@@ -220,7 +314,17 @@ export default function AskPage() {
     setTurns([...prior, fresh]);
     setLiveIds((ids) => [...ids, id]);
     const update = (fn: (t: AskTurn) => AskTurn) => setTurns((ts) => ts.map((t) => (t.id === id ? fn(t) : t)));
-    await chatStream({ message, history }, (e) => update((t) => applyEvent(t, e)));
+    await chatStream({ message, history, chat_id: into ?? undefined }, (e) => {
+      if (e.type === "saved") {
+        // Kept: later questions go into the same chat, and the list shows it.
+        setChatId(e.chat_id);
+        void mutate(CHATS_KEY);
+        return;
+      }
+      // The chat was deleted elsewhere: the next question starts a new one.
+      if (e.type === "error" && e.message === CHAT_GONE) setChatId(null);
+      update((t) => applyEvent(t, e));
+    });
     // The stream ended: anything without an answer by now is an error.
     update((t) => (t.answer || t.error ? { ...t, done: true } : { ...t, done: true, error: GENERIC_ERROR }));
     setSending(false);
@@ -237,8 +341,9 @@ export default function AskPage() {
     window.setTimeout(() => {
       clearHandoff();
       // While an answer is still streaming, a new question waits in the input instead.
+      // A question from elsewhere is a new topic: it starts its own chat.
       if (taken.send && taken.text.trim() && !sending) {
-        void send(taken.text, undefined, taken.spoken);
+        void send(taken.text, undefined, taken.spoken, true);
         return;
       }
       if (taken.text) setDraft(taken.text);
@@ -261,43 +366,66 @@ export default function AskPage() {
       <header className="page-head ask-head">
         <h1 className="page-title">Ask</h1>
         {!empty && (
-          <button
-            type="button"
-            className="add"
-            disabled={sending}
-            onClick={() => {
-              setTurns([]);
-              setLiveIds([]);
-              setDraft("");
-              window.scrollTo({ top: 0 });
-              inputRef.current?.focus({ preventScroll: true });
-            }}
-          >
-            <Icon name="plus" />
-            New chat
-          </button>
+          <span className="ask-head-btns">
+            {chatId && (
+              <button
+                type="button"
+                className="add icon-only"
+                aria-label="Delete this chat"
+                disabled={sending}
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Icon name="trash" />
+              </button>
+            )}
+            <button type="button" className="add" disabled={sending} onClick={newChat}>
+              <Icon name="plus" />
+              New chat
+            </button>
+          </span>
         )}
-        {empty && <p className="page-sub">Ask about anything you&apos;ve saved.</p>}
+        {confirmDelete && chatId && (
+          <div className="chat-confirm" role="alertdialog" aria-label="Delete this chat?">
+            <p>Delete this chat? This can&apos;t be undone.</p>
+            <div>
+              <button type="button" className="btn btn-danger" onClick={() => void removeChat()}>
+                Delete
+              </button>
+              <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
+                Keep it
+              </button>
+            </div>
+          </div>
+        )}
+        {empty && <p className="page-sub">Ask about anything you&apos;ve saved. Your chats are kept here.</p>}
       </header>
 
       {empty ? (
-        ideas.length > 0 && (
-          <div className="ideas wrap" style={{ marginTop: 22 }}>
-            {ideas.slice(0, 4).map((c, i) => (
-              <button
-                key={c}
-                type="button"
-                className="idea"
-                style={tint(IDEA_COLORS[i % IDEA_COLORS.length])}
-                disabled={sending}
-                onClick={() => void send(c)}
-              >
-                <Icon name="spark" />
-                {c}
-              </button>
-            ))}
-          </div>
-        )
+        <>
+          {openError && (
+            <p role="alert" className="msg" style={{ marginTop: 16 }}>
+              {openError}
+            </p>
+          )}
+          {ideas.length > 0 && (
+            <div className="ideas wrap" style={{ marginTop: 22 }}>
+              {ideas.slice(0, 4).map((c, i) => (
+                <button
+                  key={c}
+                  type="button"
+                  className="idea"
+                  style={tint(IDEA_COLORS[i % IDEA_COLORS.length])}
+                  disabled={sending}
+                  onClick={() => void send(c)}
+                >
+                  <Icon name="spark" />
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+          <ChatList />
+        </>
       ) : (
         <div className="chat">
           {turns.map((t) => (

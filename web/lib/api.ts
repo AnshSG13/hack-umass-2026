@@ -96,7 +96,7 @@ export const publicFetcher = <T,>(path: string) => api<T>(path, { anonymous: tru
 
 // POST /api/chat answers with NDJSON; call onEvent for each line as it arrives.
 export async function chatStream(
-  body: { message: string; history: { role: "user" | "assistant"; text: string }[] },
+  body: { message: string; history: { role: "user" | "assistant"; text: string }[]; chat_id?: string },
   onEvent: (e: ChatEvent) => void,
 ): Promise<void> {
   let res: Response;

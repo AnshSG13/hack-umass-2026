@@ -55,6 +55,12 @@ def ask_about(save_id: str, body: DiscussRequest, user: dict = Depends(current_u
     return {"discussion": discuss.view(discuss.append(user, save, existing, message, reply))}
 
 
+@router.get("/api/chats")
+def all_chats(user: dict = Depends(current_user)) -> dict:
+    """Every chat, Ask and reel ones together, newest first: the list on the Ask page."""
+    return {"chats": discuss.list_all(user)}
+
+
 @router.get("/api/discussions/{discussion_id}")
 def get_discussion(discussion_id: str, user: dict = Depends(current_user)) -> dict:
     d = discuss.get(discussion_id, user)

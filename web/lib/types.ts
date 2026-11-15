@@ -356,7 +356,9 @@ export type ChatEvent =
   | { type: "plans"; tickets: Ticket[] }
   | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[]; follow_ups?: string[] }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** The answered turn was kept: the chat it went into (a new one on the first question). */
+  | { type: "saved"; chat_id: string; title?: string };
 
 // ---- discussions: chats about one reel, saved with it ----
 export interface DiscussionMessage {
@@ -370,6 +372,11 @@ export interface DiscussionMessage {
   from_reel?: boolean;
   /** true: the reel didn't say, so the answer was looked up on the web. Assistant only. */
   web?: boolean;
+  /** Up to 2 questions worth asking next. Assistant only. */
+  follow_ups?: string[];
+  /** An Ask chat's turn: the reels the answer showed, and how sure it was. */
+  cards?: AskCard[];
+  confidence?: "high" | "low" | "none" | null;
   /** The pages a web answer used; the answer's [n] markers point at these. */
   sources?: { n: number; title: string; url: string }[];
   /** For a recipe's nutrition: numbers kept only with a source (n points into sources). */
@@ -391,8 +398,15 @@ export interface DiscussionSummary {
   preview: string;
 }
 export interface Discussion extends DiscussionSummary {
-  save_id: string;
+  /** null for an Ask chat, which is about all the saves rather than one reel. */
+  save_id: string | null;
+  kind: "reel" | "ask";
   messages: DiscussionMessage[];
+}
+/** GET /api/chats: every chat, Ask and reel ones together, newest first. */
+export interface ChatSummary extends DiscussionSummary {
+  kind: "reel" | "ask";
+  reel: { save_id: string; title: string; type: SaveType | null; thumb_url: string | null } | null;
 }
 
 // ---- GET /api/tastes/{type}: one taste as a board ----
