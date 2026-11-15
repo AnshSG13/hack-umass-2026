@@ -91,10 +91,6 @@ export default function TasteBoardPage() {
               <Icon name="search" />
             </Link>
           )}
-          <button type="button" className="add" onClick={openAdd}>
-            <Icon name="plus" />
-            Add
-          </button>
         </span>
       </div>
       <h1 className="page-title board-title" style={kind ? tint(kind.color) : undefined}>

@@ -24,7 +24,8 @@ log = logging.getLogger("realize.shop")
 
 STALE_BUILD_S = 150
 MAX_PRODUCTS = 4
-MAX_OFFERS = 12
+MAX_PRICES = 4          # the lowest prices for what the reel shows, one per store
+MAX_ALTERNATIVES = 2    # cheaper picks for the same job
 
 # Stores and review sites a person would recognise. Matched on the end of the host name.
 STORES = {
@@ -193,8 +194,22 @@ def keep_offers(raw: list[dict], sources: list[dict], brands: list[str]) -> list
         out.append({"product": product, "store": store, "price": price, "price_text": f"${price:,.2f}".replace(".00", ""),
                     "note": " ".join(str(o.get("note") or "").replace("Alternative:", "").split())[:70],
                     "alternative": bool(o.get("alternative")), "url": src["url"], "via": via})
-    out.sort(key=lambda x: (x["alternative"], x["product"].lower(), x["price"]))
-    return out[:MAX_OFFERS]
+    return top_offers(out)
+
+
+def top_offers(offers: list[dict]) -> list[dict]:
+    """The lowest MAX_PRICES prices, one per store, then up to MAX_ALTERNATIVES alternatives
+    (one per product). Everything else is left out so the list stays short."""
+    main, alts, stores, alt_names = [], [], set(), set()
+    for o in sorted(offers, key=lambda x: x["price"]):
+        if o["alternative"]:
+            if o["product"].lower() not in alt_names and len(alts) < MAX_ALTERNATIVES:
+                alt_names.add(o["product"].lower())
+                alts.append(o)
+        elif o["store"].lower() not in stores and len(main) < MAX_PRICES:
+            stores.add(o["store"].lower())
+            main.append(o)
+    return main + alts
 
 
 def best_by_product(offers: list[dict]) -> list[dict]:
@@ -272,7 +287,7 @@ def view(save: dict, user: dict) -> dict | None:
     status = s.get("status")
     if status == "building" and not building(save):
         status = "failed"
-    offers = s.get("offers") or []
+    offers = top_offers(s.get("offers") or [])   # older results kept more; show the same short list
     when = month_day(as_utc(s["done_at"]).astimezone(tz_of(user))) if s.get("done_at") else None
     return {"status": status, "offers": offers, "best": best_by_product(offers),
             "alternatives": [o for o in offers if o["alternative"]],

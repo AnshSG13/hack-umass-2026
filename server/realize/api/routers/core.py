@@ -210,7 +210,7 @@ def remember(user: dict = Depends(current_user)) -> dict:
 
 @router.get("/api/chips")
 def chips(user: dict = Depends(current_user)) -> dict:
-    return {"chips": ask.chips(user), "actions": ask.recommended(user)}
+    return {"chips": ask.chips(user)}
 
 
 @router.post("/api/chat")

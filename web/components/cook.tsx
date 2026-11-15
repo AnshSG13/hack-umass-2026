@@ -152,6 +152,15 @@ function NutritionBody({ n }: { n: Nutrition }) {
 
 // ---- cook mode ----
 
+/** The words of a step-by-step mode. Cook mode by default; the gym routine uses its own. */
+export interface StepModeWords {
+  close: string; // aria label of the close button
+  prep: string; // the first page's heading
+  step: string; // "Step" -> "Step 2"
+  start: string; // the first page's button
+}
+const COOK_WORDS: StepModeWords = { close: "Stop cooking", prep: "Get these ready", step: "Step", start: "Start" };
+
 export function CookMode({
   open,
   onOpenChange,
@@ -159,6 +168,7 @@ export function CookMode({
   ingredients,
   steps,
   servings,
+  words = COOK_WORDS,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -166,12 +176,13 @@ export function CookMode({
   ingredients: Ingredient[];
   steps: string[];
   servings: number | null;
+  words?: StepModeWords;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Content className="cook" aria-describedby={undefined}>
-          <CookBody title={title} ingredients={ingredients} steps={steps} servings={servings} onClose={() => onOpenChange(false)} />
+          <CookBody title={title} ingredients={ingredients} steps={steps} servings={servings} words={words} onClose={() => onOpenChange(false)} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -183,12 +194,14 @@ function CookBody({
   ingredients,
   steps,
   servings,
+  words,
   onClose,
 }: {
   title: string;
   ingredients: Ingredient[];
   steps: string[];
   servings: number | null;
+  words: StepModeWords;
   onClose: () => void;
 }) {
   // Page 0 is "get these ready"; then one page per step.
@@ -227,7 +240,7 @@ function CookBody({
   return (
     <>
       <header className="cook-head">
-        <Dialog.Close className="rc-btn" aria-label="Stop cooking">
+        <Dialog.Close className="rc-btn" aria-label={words.close}>
           <Icon name="x" />
         </Dialog.Close>
         <Dialog.Title className="cook-title">{title}</Dialog.Title>
@@ -244,7 +257,7 @@ function CookBody({
       <div className="cook-page" key={at} aria-live="polite">
         {hasPrep && at === 0 ? (
           <>
-            <p className="cook-label">Get these ready{servings ? `, for ${plural(servings, "serving", "servings")}` : ""}</p>
+            <p className="cook-label">{words.prep}{servings ? `, for ${plural(servings, "serving", "servings")}` : ""}</p>
             <ul className="ings cook-ings">
               {ingredients.map((ing, i) => {
                 const { qty, name } = ingredientParts(ing);
@@ -271,7 +284,9 @@ function CookBody({
           </>
         ) : (
           <>
-            <p className="cook-label">Step {stepIndex + 1}</p>
+            <p className="cook-label">
+              {words.step} {stepIndex + 1}
+            </p>
             <p className="cook-step">{steps[stepIndex]}</p>
           </>
         )}
@@ -289,7 +304,7 @@ function CookBody({
           </button>
         ) : (
           <button type="button" className="btn btn-primary" onClick={() => setAt((n) => Math.min(pages - 1, n + 1))}>
-            {hasPrep && at === 0 ? "Start" : "Next"}
+            {hasPrep && at === 0 ? words.start : "Next"}
             <Icon name="right" />
           </button>
         )}

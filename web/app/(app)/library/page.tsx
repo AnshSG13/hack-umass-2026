@@ -89,10 +89,6 @@ function SavesList() {
     <header className="page-head with-back">
       <div className="block-head" style={{ minHeight: 44 }}>
         <BackHome />
-        <button type="button" className="add" onClick={openAdd}>
-          <Icon name="plus" />
-          Add
-        </button>
       </div>
       <h1 className="page-title" style={{ marginTop: 10 }}>
         Your saves

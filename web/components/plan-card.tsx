@@ -43,6 +43,7 @@ export function PlanCard({
   withReel = false,
   onChange,
   onDo,
+  bare = false,
 }: {
   ticket: Ticket;
   /** Show the reel's thumbnail and title on top, linking to its page. */
@@ -52,6 +53,8 @@ export function PlanCard({
   /** On the reel's own page: do the action here (open cook mode, run price research).
    *  Elsewhere the action's button opens the reel's page, which does it on arrival. */
   onDo?: (deliver: Deliver) => void;
+  /** In action mode, where the page already shows the call to action: just the controls. */
+  bare?: boolean;
 }) {
   // After a change we show the server's reply until the parent's data catches up.
   const [override, setOverride] = useState<{ base: Ticket; t: Ticket } | null>(null);
@@ -132,12 +135,16 @@ export function PlanCard({
     return (
       <section className="plan action-card" style={kindTint(t.type) ?? tint("lavender")} aria-label="Action">
         {reel}
-        <p className="plan-label">
-          <Icon name={d.icon} />
-          {d.label}
-        </p>
-        <p className="action-cta">{action.cta}</p>
-        {action.pitch && <p className="plan-why">{action.pitch}</p>}
+        {!bare && (
+          <>
+            <p className="plan-label">
+              <Icon name={d.icon} />
+              {d.label}
+            </p>
+            <p className="action-cta">{action.cta}</p>
+            {action.pitch && <p className="plan-why">{action.pitch}</p>}
+          </>
+        )}
         {dated && (
           <p className="action-when">
             <Icon name="cal" />

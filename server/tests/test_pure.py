@@ -865,6 +865,20 @@ def test_offers_keep_only_backed_readable_prices():
     assert small[0]["store"] == "pickleballcentral.com" and small[0]["via"] == "pickleballcentral.com"
 
 
+def test_price_list_is_the_top_four_stores_and_two_alternatives():
+    from realize import shop
+
+    def o(store, price, alt=False, product="Paddle"):
+        return {"product": product, "store": store, "price": price, "alternative": alt}
+    offers = [o("A", 50), o("B", 40), o("B", 45), o("C", 60), o("D", 70), o("E", 30), o("F", 90),
+              o("G", 20, True, "Cheap one"), o("H", 25, True, "Cheap one"), o("I", 22, True, "Other"),
+              o("J", 28, True, "Third")]
+    out = shop.top_offers(offers)
+    main = [(x["store"], x["price"]) for x in out if not x["alternative"]]
+    assert main == [("E", 30), ("B", 40), ("A", 50), ("C", 60)]            # lowest 4, one per store
+    assert [x["product"] for x in out if x["alternative"]] == ["Cheap one", "Other"]
+
+
 # ---------- actions: what the person wants from the reel, delivered ----------
 
 

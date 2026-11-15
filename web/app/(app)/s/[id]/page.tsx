@@ -521,7 +521,7 @@ export default function ReelPage() {
             headline={ticket.action?.deliver === "cook" ? ticket.action.cta : undefined}
           />
         ) : (
-          <PlanCard ticket={ticket} onChange={applyTicket} onDo={doAction} />
+          <PlanCard ticket={ticket} onChange={applyTicket} />
         )}
 
         {enriching && (

@@ -1,6 +1,6 @@
 "use client";
 
-// Home, after the mockup: greeting, search, the rail of recent saves, recommended actions,
+// Home, after the mockup: greeting, search, the rail of recent saves, 
 // and the tastes grid. Everything on it comes from the API.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,20 +11,12 @@ import { ActionTile, ReadyTile, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { PullToRefresh } from "@/components/pull-refresh";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
-import { useApp, useAskStore } from "@/components/shell";
+import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
 import { greeting, inFlight, plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
-import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
-
-interface Action {
-  type: SaveType;
-  verb: string;
-  title: string;
-  detail: string;
-  question: string;
-}
+import type { RememberItem, SavesPage, Taste, TastesResponse } from "@/lib/types";
 
 /** "4 workouts", "3 recipes" -> "You have 4 new workouts and 3 recipes". */
 function newThings(parts: string[]): string {
@@ -161,14 +153,12 @@ function RememberCard() {
 
 export default function HomePage() {
   const { openAdd, fresh } = useApp();
-  const { ask } = useAskStore();
   const now = useNow();
   const { data: me } = useMe();
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
   const saves = useSWR<SavesPage>("/api/saves?limit=10", fetcher);
   const bundles = useBundles();
-  const { data: chips } = useSWR<{ chips: string[]; actions?: Action[] }>("/api/chips", fetcher, { revalidateOnFocus: false });
-
+  
   // A reel just added goes first in the rail: bring the rail and the page back to it.
   const railRef = useRef<HTMLDivElement>(null);
   const newest = fresh[0]?.save_id;
@@ -193,7 +183,6 @@ export default function HomePage() {
   const listed = (saves.data?.items ?? []).filter((t) => !freshIds.has(t.save_id));
   const loaded = saves.data !== undefined;
   const isEmpty = loaded && listed.length === 0 && fresh.length === 0;
-  const actions = chips?.actions ?? [];
   const tasteList = tastes.data?.tastes ?? [];
   const readyList = bundles.data?.ready ?? [];
   const readyActions = bundles.data?.actions ?? [];
@@ -323,10 +312,6 @@ export default function HomePage() {
                 )
               )}
             </h2>
-            <button type="button" className="add" onClick={openAdd}>
-              <Icon name="plus" />
-              Add
-            </button>
           </div>
           {saves.error && !loaded && fresh.length === 0 ? (
             <div className="gutter msg" role="alert">
@@ -356,38 +341,6 @@ export default function HomePage() {
               )}
             </div>
           )}
-        </section>
-      )}
-
-      {actions.length > 0 && !isEmpty && (
-        <section className="blk gutter" aria-labelledby="actions-h">
-          <div className="block-head">
-            <h2 className="block-title" id="actions-h">
-              Recommended actions
-            </h2>
-          </div>
-          <ul className="recs">
-            {actions.map((a) => {
-              const kind = KINDS[a.type];
-              return (
-                <li key={a.type}>
-                  <button type="button" className="rec" style={tint(kind.color)} onClick={() => ask(a.question, true)}>
-                    <span className="rec-ico" aria-hidden="true">
-                      <Icon name={kind.icon} />
-                    </span>
-                    <span className="rec-text">
-                      <span className="rec-title">{a.title}</span>
-                      <span className="rec-detail">{a.detail}</span>
-                    </span>
-                    <span className="rec-go" aria-hidden="true">
-                      <Icon name="right" />
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="recs-note">Each one opens Ask with an answer from your saves.</p>
         </section>
       )}
 

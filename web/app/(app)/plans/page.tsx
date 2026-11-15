@@ -172,10 +172,6 @@ export default function PlansPage() {
               Waiting on you
               <span className="pill">{data.waiting.length}</span>
             </h2>
-            <button type="button" className="add" onClick={openAdd}>
-              <Icon name="plus" />
-              Add
-            </button>
           </div>
           <div className="stack-col">
             {data.waiting.map((t) => (
@@ -191,12 +187,6 @@ export default function PlansPage() {
             <h2 id="week-h" className="block-title">
               Coming up
             </h2>
-            {!hasWaiting && (
-              <button type="button" className="add" onClick={openAdd}>
-                <Icon name="plus" />
-                Add
-              </button>
-            )}
           </div>
           <DayList days={data.days} headingLevel="h3" />
         </section>
