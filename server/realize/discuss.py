@@ -20,7 +20,7 @@ import re
 
 from bson import ObjectId
 
-from . import db, gemini, planops, trip, web_nutrition
+from . import db, gemini, planops, web_nutrition, websearch
 from .config import get_settings
 from .runs import Run
 from .timeutil import as_utc, big_time, now_utc, prompt_date, tz_of
@@ -28,7 +28,6 @@ from .timeutil import as_utc, big_time, now_utc, prompt_date, tz_of
 log = logging.getLogger("realize.discuss")
 
 TIMEOUT_S = 25
-WEB_TIMEOUT_S = 50
 MESSAGE_MAX = 1000          # characters of one question
 ANSWER_MAX = 1200           # characters of one answer
 TITLE_MAX = 60
@@ -206,10 +205,23 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
             reply = web_nutrition.answer(save, message, run.step)
             run.finish("done")
             return reply
+        except Exception as e:  # noqa: BLE001 - the reel's own answer below is better than an error
+            log.warning("nutrition lookup failed, answering from the reel: %s", str(e)[:200])
+    if websearch.wants_web(message):
+        # They asked for a web search in so many words: go straight there, about this reel.
+        title = " ".join(str(save.get("title") or "").split())
+        query = websearch.query_from(message)
+        if title and title.lower() not in query.lower():
+            query = f"{title}: {query}"
+        try:
+            web = web_answer(user, save, plan, text, query, run)
         except Exception as e:  # noqa: BLE001
-            log.warning("nutrition lookup failed: %s", str(e)[:200])
+            log.warning("web search failed: %s", str(e)[:200])
             run.finish("failed", str(e))
             raise
+        run.finish("done")
+        return web or {"text": websearch.NOT_FOUND, "at_sec": None, "from_reel": False, "web": True,
+                       "sources": [], "macros": None}
     try:
         out = gemini.generate_json(role="fast", input=[gemini.user_step(text)], schema=ANSWER_SCHEMA,
                                    system=system, timeout_s=TIMEOUT_S)
@@ -243,36 +255,13 @@ def web_answer(user: dict, save: dict, plan: dict | None, text: str, query: str,
     system = WEB_PROMPT.replace("Realize", s.app_name).format(
         today_local=prompt_date(now_utc().astimezone(tz)), timezone=str(tz),
         reel=reel_context(save, plan, user)[:6000])
-    sources: list[dict] = []
     with run.step("web_search", {"query": query[:200]}) as h:
-        it = gemini.create_interaction(
-            WEB_TIMEOUT_S, role="fast", store=False, system_instruction=system,
-            input=f"{text}\n\n(Search for: {query[:200]})", tools=[{"type": "google_search"}],
-            generation_config={"thinking_level": "low"})
-        parts: list[str] = []
-        for step in getattr(it, "steps", None) or []:
-            if getattr(step, "type", None) != "model_output":
-                continue
-            for block in getattr(step, "content", None) or []:
-                if getattr(block, "type", None) != "text":
-                    continue
-                raw = getattr(block, "text", "") or ""
-                anns = [{"url": getattr(a, "url", None), "title": getattr(a, "title", None),
-                         "end": getattr(a, "end_index", None)}
-                        for a in (getattr(block, "annotations", None) or [])
-                        if getattr(a, "type", None) == "url_citation"]
-                parts.append(trip.cite(raw, anns, sources))
+        raw, sources = websearch.grounded(system, f"{text}\n\n(Search for: {query[:200]})")
         h["result"] = {"sources": len(sources)}
-    body = clean_answer("\n".join(parts))
+    body = clean_answer(raw)
     if not body or not sources:
         return None
-    from concurrent.futures import ThreadPoolExecutor
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for src, real in zip(sources, pool.map(trip._resolve, [x["url"] for x in sources])):
-            src["url"] = real
-    return {"text": body, "at_sec": None, "from_reel": False, "web": True,
-            "sources": [{"n": x["n"], "title": x.get("title") or "", "url": x["url"]} for x in sources],
+    return {"text": body, "at_sec": None, "from_reel": False, "web": True, "sources": sources,
             "macros": None}
 
 
@@ -329,6 +318,9 @@ def append_ask(user: dict, chat: dict | None, message: str, answer: dict, cards:
          "confidence": answer.get("confidence"), "follow_ups": answer.get("follow_ups") or [],
          "cards": cards[:6]},
     ]
+    if answer.get("web"):
+        # A web search they asked for: the pages it used travel with the answer.
+        pair[1].update({"web": True, "sources": answer.get("sources") or [], "macros": None})
     if chat is None:
         doc: dict = {"_id": ObjectId(), "user_id": user["_id"], "save_id": None, "kind": "ask",
                      "title": title_from(message), "messages": pair, "count": 2,

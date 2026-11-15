@@ -13,7 +13,7 @@ import socket
 import threading
 import time
 
-from .. import db, enrich, jobs, planner
+from .. import db, enrich, jobs, planner, recover
 from ..config import get_settings
 from ..models import PERMANENT_REASONS, failure_message
 from ..ytdlp import ReelError
@@ -111,11 +111,19 @@ def lane(kind: str, n: int) -> None:
 
 def beat(lanes: list[str]) -> None:
     host = socket.gethostname()
+    ticks = 0
     while not stop.is_set():
         try:
             jobs.worker_beat(lanes, host)
         except Exception as e:  # noqa: BLE001
             log.warning("worker heartbeat failed: %s", str(e)[:120])
+        # About once a minute (and at start): saves a restart left half-read start again.
+        if ticks % 6 == 0:
+            try:
+                recover.sweep()
+            except Exception as e:  # noqa: BLE001
+                log.warning("stuck-save sweep failed: %s", str(e)[:120])
+        ticks += 1
         stop.wait(10)
 
 

@@ -16,6 +16,16 @@ def test_which_questions_trigger_the_search():
     assert not nu.wants_nutrition({"type": "place"}, "how many calories is the burger")
 
 
+def test_questions_about_changing_the_recipe_are_cooking_questions():
+    for q in ["Can I use less sugar?", "Can I swap the protein for tofu?", "Can I use low fat milk instead?",
+              "How do I make it healthy for kids?", "Can I make it keto?", "Can I use less sugar to cut calories?",
+              "Can I add more protein?", "Is brown sugar ok?", "What fat should I cook it in?"]:
+        assert not nu.wants_nutrition(RECIPE, q), q
+    for q in ["How much protein does it have?", "What is the fat per serving?", "Is it healthy?",
+              "how many grams of sugar?", "calories?"]:
+        assert nu.wants_nutrition(RECIPE, q), q
+
+
 def test_only_sourced_plausible_numbers_are_kept_and_sources_renumbered():
     raw = {"basis": "published", "per": "serving", "servings": 4,
            "calories": 451.6, "calories_source": 2, "protein_g": 14, "protein_g_source": 2,
