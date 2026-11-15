@@ -57,7 +57,7 @@ Then each reel becomes something you can use:
 
 - Let the model read and propose, and let code commit. Splitting the work that way made the app both smarter and more trustworthy.
 - Video understanding is the unlock. Captions rarely carry the recipe amounts or the workout reps; the video almost always does.
-- Hybrid search beats either half alone for "that reel where she said…" questions.
+- Searching the transcript, not just the caption, is what answers "that reel where she said…" questions.
 - Showing the agent's steps ("Checking your week") makes waiting a few seconds feel fine.
 
 ## What's next
