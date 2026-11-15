@@ -34,6 +34,7 @@ def regular_indexes() -> None:
     db.saves().create_index([("user_id", ASCENDING), ("type", ASCENDING), ("subcategory", ASCENDING),
                              ("created_at", DESCENDING)])
     db.saves().create_index([("expires_at", ASCENDING)], **ttl)
+    db.graph_cache().create_index([("expires_at", ASCENDING)], **ttl)
 
     db.plans().create_index([("user_id", ASCENDING), ("status", ASCENDING), ("scheduled_for", ASCENDING)])
     db.plans().create_index([("save_id", ASCENDING)], unique=True)

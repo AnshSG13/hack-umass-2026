@@ -10,6 +10,7 @@ import useSWR from "swr";
 import { QRCodeSVG } from "qrcode.react";
 import { LiveTicket } from "@/components/live-ticket";
 import { PasteForm } from "@/components/paste-form";
+import { ShortcutKey } from "@/components/shortcut-key";
 import { ToastViewport } from "@/components/toast";
 import { fetcher, getKey, isApiKey, setKey } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
@@ -55,6 +56,7 @@ function Account({ accountKey }: { accountKey: string }) {
   const { config, appName } = useConfig();
   const device = useDevice();
   const standalone = useStandalone();
+  const { data: me } = useMe();
   const { mutate, data: latest } = useSWR<SavesPage>("/api/saves?limit=1", fetcher, {
     refreshInterval: 3000,
   });
@@ -189,6 +191,9 @@ function Account({ accountKey }: { accountKey: string }) {
       {firstSaveBlock}
       {openApp}
       <ShortcutHelp appName={appName} shortcutUrl={shortcutUrl} />
+      {/* Email accounts have no key on screen, but a Shortcut that sends reels straight to the
+          server needs one. Key accounts already see theirs below. */}
+      {!keyAccount && me && !me.is_demo && <ShortcutKey me={me} className="mt-6" />}
       <div className="mt-6">{keyBox(true)}</div>
     </>
   );
@@ -268,7 +273,7 @@ function ShortcutHelp({ appName, shortcutUrl }: { appName: string; shortcutUrl: 
             <a className={linkInk} href={shortcutUrl}>
               Add that Shortcut
             </a>
-            . When it asks for your key, make one in Settings and paste it.
+            . When it asks for your key, use your Shortcut key from below or from Settings.
           </p>
         )}
       </div>

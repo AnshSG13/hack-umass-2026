@@ -12,6 +12,7 @@ import { useToast } from "@/components/toast";
 import { useTrace } from "@/components/trace";
 import { ApiError, fetcher } from "@/lib/api";
 import { useConfig, useRefresh } from "@/lib/hooks";
+import { STORY_REPLAY_HREF } from "@/lib/story";
 import { btnOutline, btnPrimary, linkInk, pageTitle, sectionTitle } from "@/lib/styles";
 import type { SampleCard, SavesPage, Ticket as TicketData } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -124,6 +125,11 @@ export default function DemoPage() {
     <div>
       <h1 className={pageTitle}>Samples</h1>
       <p className="mt-1 text-[16px] text-ink">This is what happens when you share a reel from Instagram.</p>
+      <p className="mt-1">
+        <Link href={STORY_REPLAY_HREF} className={cn(linkInk, "inline-flex min-h-11 items-center text-[15px]")}>
+          Replay the story
+        </Link>
+      </p>
 
       <div className="mt-5 flex flex-col gap-4">
         {samples.error && !samples.data ? (

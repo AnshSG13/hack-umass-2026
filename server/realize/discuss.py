@@ -20,7 +20,7 @@ import re
 
 from bson import ObjectId
 
-from . import db, gemini, nutrition, planops, trip
+from . import db, gemini, planops, trip, web_nutrition
 from .config import get_settings
 from .runs import Run
 from .timeutil import as_utc, big_time, now_utc, prompt_date, tz_of
@@ -183,10 +183,10 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
     text = (("Earlier in this discussion:\n" + "\n".join(lines) + "\n\nTheir new message: ") if lines else "") \
         + message[:MESSAGE_MAX]
     run = Run(user, None, "discuss", s.gemini_model_fast)
-    if nutrition.wants_nutrition(save, message):
+    if web_nutrition.wants_nutrition(save, message):
         # Reels almost never give nutrition: look it up, and keep only sourced numbers.
         try:
-            reply = nutrition.answer(save, message, run.step)
+            reply = web_nutrition.answer(save, message, run.step)
             run.finish("done")
             return reply
         except Exception as e:  # noqa: BLE001

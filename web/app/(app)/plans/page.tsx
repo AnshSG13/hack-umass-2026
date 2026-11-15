@@ -156,7 +156,7 @@ export default function PlansPage() {
               <span className="pill">{ready.length}</span>
             </h2>
           </div>
-          <p className="blk-sub">Built from what you saved. One tap puts it on your week.</p>
+          <p className="blk-sub">Built from what you saved, ready to go.</p>
           <div className="stack-col">
             {ready.map((b) => (
               <BundleCard key={b.id} bundle={b} onDismiss={dismiss} />

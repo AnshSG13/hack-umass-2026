@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from . import actions, db, subcats
+from . import actions, db, intent, subcats
 from .config import get_settings
 from .models import failure_message
 from .runs import latest_run, step_views
@@ -80,6 +80,8 @@ def ticket(save: dict, plan: dict | None, user: dict, *, with_steps: bool = Fals
         if failed else None,
         "is_sample": save.get("source") == "sample",
         "plan": plan_view(plan, user, now=now) if plan else None,
+        # What the person wants from the reel and how the app gives it (cook, shop, ...).
+        "action": None if failed else intent.view(plan, save),
     }
     if with_steps:
         t["steps"] = step_views(latest_run(save["_id"]))

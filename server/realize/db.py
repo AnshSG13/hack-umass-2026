@@ -79,6 +79,11 @@ def workers() -> Collection:
     return get_db()["workers"]
 
 
+def graph_cache() -> Collection:
+    """One document per user: the knowledge graph's cached related map and interest vectors."""
+    return get_db()["graph_cache"]
+
+
 def oid(value: str | ObjectId | None) -> ObjectId | None:
     """Parse an id from a URL; None when it isn't one."""
     if isinstance(value, ObjectId):

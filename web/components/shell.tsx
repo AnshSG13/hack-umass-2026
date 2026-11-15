@@ -91,6 +91,11 @@ function isPlain(path: string): boolean {
   return path.startsWith("/demo") || path.startsWith("/save") || path.startsWith("/settings");
 }
 
+/** Full-screen pages with no bottom bar and no back row: the guided first open. */
+function isBare(path: string): boolean {
+  return path.startsWith("/story");
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const key = useKey();
   const router = useRouter();
@@ -185,6 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!key) return <div className="min-h-dvh bg-paper" />;
 
   const plain = isPlain(pathname);
+  const bare = isBare(pathname);
   const onHome = pathname.startsWith("/home");
   const onPlans = pathname.startsWith("/plans");
 
@@ -192,7 +198,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={app}>
       <AskContext.Provider value={askStore}>
         <div data-shell="" className="app">
-          {plain && (
+          {plain && !bare && (
             <div className="plain-head gutter">
               <button type="button" className="back-pill" onClick={goBack}>
                 <Icon name="back" />
@@ -205,29 +211,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           )}
-          <main className={plain ? "screen gutter" : "screen"}>
+          <main className={bare ? "story-screen" : plain ? "screen gutter" : "screen"}>
             {/* A new key is a different account: pages start over with it. */}
             <Fragment key={key}>{children}</Fragment>
           </main>
         </div>
 
-        <nav className="bar" aria-label="Main">
-          <Link href="/home" className="tab" aria-current={onHome ? "page" : undefined}>
-            <Icon name="home" />
-            Home
-          </Link>
-          <Orb
-            appName={appName}
-            onOpen={() => ask("", false)}
-            onHeard={(text) => ask(text, true, true)}
-            onProblem={(message) => toast.show(message)}
-          />
-          <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
-            <Icon name="plans" />
-            Actions
-          </Link>
-        </nav>
+        {!bare && (
+          <nav className="bar" aria-label="Main">
+            <Link href="/home" className="tab" aria-current={onHome ? "page" : undefined}>
+              <Icon name="home" />
+              Home
+            </Link>
+            <Orb
+              appName={appName}
+              onOpen={() => ask("", false)}
+              onHeard={(text) => ask(text, true, true)}
+              onProblem={(message) => toast.show(message)}
+            />
+            <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
+              <Icon name="plans" />
+              Actions
+            </Link>
+          </nav>
+        )}
 
+        {/* On the bare pages it sits above their pinned button, where the bar would be. */}
         <ToastViewport aboveTabBar />
 
         <AddSheet open={addOpen} onOpenChange={setAddOpen} isDemo={Boolean(me?.is_demo)} onSaved={onSaved} />

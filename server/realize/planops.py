@@ -61,7 +61,7 @@ def code_options(kind: str, save: dict, user: dict, *, reserved: list[dict] | No
 
 def upsert_proposal(save: dict, user: dict, *, kind: str, actionable: bool, question: str,
                     why: str, confidence: str, options: list[dict],
-                    similar_save_id: str | None = None) -> dict:
+                    similar_save_id: str | None = None, action: dict | None = None) -> dict:
     """Create the plan at proposal time, or refresh a still-proposed one.
     Old options move to options_prev so a Shortcut menu shown earlier still matches."""
     now = now_utc()
@@ -73,7 +73,8 @@ def upsert_proposal(save: dict, user: dict, *, kind: str, actionable: bool, ques
             {"_id": existing["_id"], "status": "proposed"},
             {"$set": {"kind": kind, "actionable": actionable, "question": question, "why": why,
                       "confidence": confidence, "options": options,
-                      "options_prev": existing.get("options") or [], "updated_at": now}},
+                      "options_prev": existing.get("options") or [], "updated_at": now,
+                      **({"action": action} if action else {})}},
             return_document=ReturnDocument.AFTER,
         )
         return plan or existing
@@ -85,7 +86,7 @@ def upsert_proposal(save: dict, user: dict, *, kind: str, actionable: bool, ques
         "device_actions": {"event": None, "reminders": []},
         "confirmed_via": None, "followup_at": None,
         "share_token": secrets.token_urlsafe(16)[:22],
-        "similar_save_id": similar_save_id,
+        "similar_save_id": similar_save_id, "action": action,
         "history": [], "created_at": now, "updated_at": now,
     }
     if user.get("expires_at"):

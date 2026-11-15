@@ -296,11 +296,25 @@ PROPOSE_PLAN_SCHEMA: dict = _obj(
         "category": {"type": "string", "description": (
             "1 to 3 words naming what this save is about, like a folder for an interest, e.g. Baking, "
             "Travel, Broadway musicals. Reuse an existing category when it fits. Never the title.")},
+        "highlight": {"type": "string", "description": "The one thing the reel is about, max 60 chars"},
+        "need": {"type": "string", "description": "What the person wants from it, from their side, max 60 chars"},
+        "action": {
+            "type": "object",
+            "description": "How the app gives them that need",
+            "properties": {
+                "deliver": {"type": "string", "enum": ["cook", "shop", "itinerary", "calendar", "workout", "learn", "keep"]},
+                "cta": {"type": "string", "description": "Call to action, max 40 chars, verb first, specific to this reel"},
+                "pitch": {"type": "string", "description": "What is ready for them, max 90 chars, facts from the reel only"},
+                "schedule": {"type": "boolean", "description": "True only when the action needs a set time"},
+            },
+            "required": ["deliver", "cta", "pitch", "schedule"],
+        },
         "subcategory": {"type": "string", "description": (
             "1 to 3 words, a narrower group inside the category, e.g. Cakes, Japan. Reuse one already "
             "in that category when it fits. Never the title.")},
     },
-    ["type", "title", "summary", "caption_sufficient", "actionable", "question", "why", "confidence"],
+    ["type", "title", "summary", "caption_sufficient", "actionable", "need", "action", "question", "why",
+     "confidence"],
 )
 
 ENTITY_KINDS = ["ingredient", "product", "brand", "place", "person", "exercise", "topic", "event"]

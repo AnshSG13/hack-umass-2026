@@ -54,7 +54,10 @@ def list_plans(range: str = Query(default="week", pattern="^(week|upcoming)$"),
         return {"waiting": [], "days": _group_days(later, user), "done": [], "later_count": 0,
                 "week_label": week_label}
 
-    waiting = list(db.plans().find({"user_id": uid, "status": "proposed"}).sort("created_at", -1).limit(20))
+    # A recipe isn't waiting on a time: people cook a saved recipe when they want to, so
+    # it opens to cook mode instead of asking for a slot (owner's call, 2026-11-14).
+    waiting = list(db.plans().find({"user_id": uid, "status": "proposed", "kind": {"$ne": "recipe"}})
+                   .sort("created_at", -1).limit(20))
     # Accepted plans up to the end of this week, including older ones still waiting on a follow-up.
     this_week = list(db.plans().find({"user_id": uid, "status": "accepted", "scheduled_for": {"$lt": end}}))
     done = list(db.plans().find({"user_id": uid, "status": "done",

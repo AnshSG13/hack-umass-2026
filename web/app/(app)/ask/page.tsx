@@ -258,8 +258,25 @@ export default function AskPage() {
 
   return (
     <div className="gutter">
-      <header className="page-head">
+      <header className="page-head ask-head">
         <h1 className="page-title">Ask</h1>
+        {!empty && (
+          <button
+            type="button"
+            className="add"
+            disabled={sending}
+            onClick={() => {
+              setTurns([]);
+              setLiveIds([]);
+              setDraft("");
+              window.scrollTo({ top: 0 });
+              inputRef.current?.focus({ preventScroll: true });
+            }}
+          >
+            <Icon name="plus" />
+            New chat
+          </button>
+        )}
         {empty && <p className="page-sub">Ask about anything you&apos;ve saved.</p>}
       </header>
 
