@@ -37,12 +37,13 @@ export function ReelTile({
   const kind = kindOf(ticket.type);
   const title = ticketTitle(ticket);
   const when = relativeTime(ticket.created_at, now);
+  const done = !processing && ticket.plan?.status === "done";
 
   return (
     <Link
       href={`/s/${ticket.save_id}`}
       className={cn("tile", processing && "is-processing")}
-      aria-label={processing ? `${stage?.text ?? "Reading"}. Open this save.` : `Open ${title}`}
+      aria-label={processing ? `${stage?.text ?? "Reading"}. Open this save.` : `Open ${title}${done ? ", done" : ""}`}
     >
       <span className="tile-media">
         {ticket.thumb_url ? (
@@ -55,6 +56,12 @@ export function ReelTile({
               <Icon name={kind?.icon ?? "bookmark"} />
             </span>
           )
+        )}
+        {done && (
+          <span className="tile-done" aria-hidden="true">
+            <Icon name="check" />
+            Done
+          </span>
         )}
         {failed && (
           <span className="tile-fail">
@@ -82,7 +89,7 @@ export function ReelTile({
         <>
           <span className="tile-meta">
             <KindChip type={ticket.type} />
-            {when}
+            <span className="tile-when">{when}</span>
           </span>
           <span className="tile-title">{title}</span>
         </>

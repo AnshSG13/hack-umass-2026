@@ -80,19 +80,37 @@ export function useTicketActions(
     [apply, refresh, saveId, toast, undo],
   );
 
-  /** Done or skipped. Returns the updated ticket; the caller applies it (Done tears first). */
+  /** Done, skipped, or "accepted" to take a done or skipped back (it returns to where it
+   *  was). Returns the updated ticket; the caller applies it (Done tears first). Done can be
+   *  undone from its toast. */
   const setStatus = useCallback(
-    async (status: "done" | "skipped"): Promise<Ticket | null> => {
+    async (status: "done" | "skipped" | "accepted"): Promise<Ticket | null> => {
       if (!planId) return null;
       setBusy(status);
       setError(null);
+      const path = publicToken
+        ? `/api/public/plans/${planId}/status?t=${encodeURIComponent(publicToken)}`
+        : `/api/plans/${planId}/status`;
       try {
-        const path = publicToken
-          ? `/api/public/plans/${planId}/status?t=${encodeURIComponent(publicToken)}`
-          : `/api/plans/${planId}/status`;
         const r = await api<TicketReply>(path, { body: { status } });
         // The public plan page says it in the page itself ("Nice. Marked done.").
-        if (!publicToken) toast.show(r.message || (status === "done" ? "Marked done." : "Marked skipped."));
+        if (!publicToken) {
+          const message = r.message || (status === "done" ? "Marked done." : status === "skipped" ? "Marked skipped." : "Undone.");
+          const takeBack =
+            status === "done"
+              ? async () => {
+                  try {
+                    const back = await api<TicketReply>(path, { body: { status: "accepted" } });
+                    apply(back.ticket);
+                    toast.show(back.message || "Undone.");
+                  } catch (e) {
+                    toast.show(messageOf(e));
+                  }
+                  refresh();
+                }
+              : undefined;
+          toast.show(message, takeBack ? { undo: () => void takeBack() } : undefined);
+        }
         return r.ticket;
       } catch (e) {
         setError(messageOf(e));
@@ -101,7 +119,7 @@ export function useTicketActions(
         setBusy(null);
       }
     },
-    [planId, publicToken, toast],
+    [apply, planId, publicToken, refresh, toast],
   );
 
   const post = useCallback(

@@ -878,6 +878,33 @@ def test_offers_keep_only_backed_readable_prices():
     assert small[0]["store"] == "pickleballcentral.com" and small[0]["via"] == "pickleballcentral.com"
 
 
+def test_out_of_stock_prices_are_dropped():
+    from realize import shop
+
+    sources = [{"n": 1, "url": "https://www.target.com/p/1", "title": "t"}]
+    raw = [{"product": "Paddle", "store": "Target", "price_text": "$99", "source": 1, "alternative": False,
+            "note": "Out of stock online"},
+           {"product": "Paddle", "store": "Target", "price_text": "$120", "source": 1, "alternative": False,
+            "note": "Pre-order, ships in May"},
+           {"product": "Paddle", "store": "Target", "price_text": "$139", "source": 1, "alternative": False,
+            "note": "In stock"}]
+    assert [o["price"] for o in shop.keep_offers(raw, sources, [])] == [139.0]
+
+
+def test_price_list_is_the_top_four_stores_and_three_similar_products():
+    from realize import shop
+
+    def o(store, price, alt=False, product="Paddle"):
+        return {"product": product, "store": store, "price": price, "alternative": alt}
+    offers = [o("A", 50), o("B", 40), o("B", 45), o("C", 60), o("D", 70), o("E", 30), o("F", 90),
+              o("G", 20, True, "Cheap one"), o("H", 25, True, "Cheap one"), o("I", 22, True, "Other"),
+              o("J", 28, True, "Third"), o("K", 26, True, "Fourth")]
+    out = shop.top_offers(offers)
+    main = [(x["store"], x["price"]) for x in out if not x["alternative"]]
+    assert main == [("E", 30), ("B", 40), ("A", 50), ("C", 60)]            # lowest 4, one per store
+    assert [x["product"] for x in out if x["alternative"]] == ["Cheap one", "Other", "Fourth"]
+
+
 # ---------- actions: what the person wants from the reel, delivered ----------
 
 
@@ -919,3 +946,18 @@ def test_action_view_defaults_for_old_plans_and_stale_types():
     assert intent.view({"options": soon}, {"type": "event"})["deliver"] == "calendar"
     # A stored cook action on a save since moved to products becomes the product default.
     assert intent.view({"action": {"deliver": "cook", "cta": "Cook it"}}, {"type": "product"})["deliver"] == "shop"
+
+
+def test_done_on_labels():
+    from datetime import datetime, timedelta, timezone
+
+    from realize.tickets import done_on
+
+    tz = timezone.utc
+    now = datetime(2026, 11, 14, 15, 0, tzinfo=tz)  # a Saturday
+    assert done_on({"done_at": now - timedelta(hours=2)}, tz, now) == "today"
+    assert done_on({"done_at": now - timedelta(days=1)}, tz, now) == "yesterday"
+    assert done_on({"done_at": now - timedelta(days=2)}, tz, now) == "Thursday"
+    assert done_on({"done_at": now - timedelta(days=11)}, tz, now) == "Nov 3"
+    assert done_on({"updated_at": now}, tz, now) == "today"  # done before done_at existed
+    assert done_on({}, tz, now) is None

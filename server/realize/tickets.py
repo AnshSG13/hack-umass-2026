@@ -7,7 +7,7 @@ from . import actions, db, intent
 from .config import get_settings
 from .models import failure_message
 from .runs import latest_run, step_views
-from .timeutil import DAY_SHORT, as_utc, big_time, long_day, month_day, now_utc, tz_of
+from .timeutil import DAY_LONG, DAY_SHORT, as_utc, big_time, long_day, month_day, now_utc, tz_of
 
 
 def saved_on(save: dict, user: dict) -> str:
@@ -16,6 +16,22 @@ def saved_on(save: dict, user: dict) -> str:
 
 def thumb_url(save: dict) -> str | None:
     return f"/api/t/{save['thumb_id']}" if save.get("thumb_id") else None
+
+
+def done_on(plan: dict, tz, now_l: datetime) -> str | None:
+    """'today', 'yesterday', 'Thursday' within the week, else 'Nov 3'. When it was marked done."""
+    at = plan.get("done_at") or plan.get("updated_at")
+    if not at:
+        return None
+    d = as_utc(at).astimezone(tz)
+    delta = (now_l.date() - d.date()).days
+    if delta <= 0:
+        return "today"
+    if delta == 1:
+        return "yesterday"
+    if delta < 7:
+        return DAY_LONG[d.weekday()]
+    return month_day(d)
 
 
 def plan_view(plan: dict, user: dict, *, now: datetime | None = None) -> dict:
@@ -54,6 +70,7 @@ def plan_view(plan: dict, user: dict, *, now: datetime | None = None) -> dict:
         "share_url": f"/p/{plan['_id']}?t={plan['share_token']}",
         "done_day": DAY_SHORT[as_utc(plan["updated_at"]).astimezone(tz).weekday()]
         if status in ("done", "skipped") and plan.get("updated_at") else None,
+        "done_on": done_on(plan, tz, now_l) if status == "done" else None,
         "long_day": long_day(as_utc(plan["scheduled_for"]).astimezone(tz), now_l)
         if plan.get("scheduled_for") else None,
     }
