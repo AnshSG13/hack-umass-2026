@@ -14,7 +14,7 @@ import { fetcher } from "@/lib/api";
 import { plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
-import type { SavesPage, SaveType, SearchResult, TastesResponse } from "@/lib/types";
+import type { SavesPage, SaveType, SearchResult, Taste, TastesResponse } from "@/lib/types";
 
 const PAGE = 30;
 const MAX_LIMIT = 100; // the API's cap on ?limit
@@ -38,9 +38,14 @@ function SavesList() {
   const { openAdd } = useApp();
   const { data: me } = useMe();
   const type = asType(params.get("type"));
+  // A custom category ("Comedy") is type other plus its name; type other alone is Just vibes.
+  const category = type === "other" ? params.get("category") || null : null;
+  const key = category ? `other:${category}` : type;
   const sub = type ? params.get("sub") : null;
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
-  const subs = type ? (tastes.data?.tastes.find((t) => t.type === type)?.subcategories ?? []) : [];
+  const picked = key ? tastes.data?.tastes.find((t) => (t.key ?? t.type) === key) : undefined;
+  const subs = picked?.subcategories ?? [];
+  const pickedLabel = picked?.label ?? category ?? (type ? KINDS[type].label : "");
   const wantsFocus = params.get("focus") === "1";
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -58,7 +63,10 @@ function SavesList() {
   }, [wantsFocus]);
 
   const searching = debounced.length > 0;
-  const typeParam = (type ? `&type=${type}` : "") + (sub ? `&sub=${encodeURIComponent(sub)}` : "");
+  const typeParam =
+    (type ? `&type=${type}` : "") +
+    (category ? `&category=${encodeURIComponent(category)}` : "") +
+    (sub ? `&sub=${encodeURIComponent(sub)}` : "");
   const list = useSWR<SavesPage>(searching ? null : `/api/saves?limit=${limit}${typeParam}`, fetcher, {
     keepPreviousData: true,
   });
@@ -74,15 +82,18 @@ function SavesList() {
   const nothingSaved = !searching && !type && list.data !== undefined && list.data.items.length === 0;
   const canShowMore = !searching && Boolean(list.data?.next_before) && limit < MAX_LIMIT;
 
-  function pick(next: SaveType | null) {
+  const here = (t: SaveType, cat: string | null) =>
+    `/library?type=${t}${cat ? `&category=${encodeURIComponent(cat)}` : ""}`;
+
+  function pick(next: Taste | null) {
     setLimit(PAGE);
-    router.replace(next ? `/library?type=${next}` : "/library", { scroll: false });
+    router.replace(next ? here(next.type, next.category ?? null) : "/library", { scroll: false });
   }
 
   function pickSub(next: string | null) {
     if (!type) return;
     setLimit(PAGE);
-    router.replace(`/library?type=${type}${next ? `&sub=${encodeURIComponent(next)}` : ""}`, { scroll: false });
+    router.replace(`${here(type, category)}${next ? `&sub=${encodeURIComponent(next)}` : ""}`, { scroll: false });
   }
 
   const head = (
@@ -113,8 +124,9 @@ function SavesList() {
     );
   }
 
-  // "All", then every kind this account has saved (and the one picked, even at zero).
-  const kinds = KIND_ORDER.filter((t) => t === type || me === undefined || (me.counts.by_type[t] ?? 0) > 0);
+  // "All", then every taste this account has: the kinds and its own categories, as in Your
+  // tastes on My collection.
+  const chips = tastes.data?.tastes ?? [];
 
   return (
     <>
@@ -136,35 +148,35 @@ function SavesList() {
         </label>
       </div>
 
-      <div className="filters" role="group" aria-label="Filter by kind">
+      <div className="filters" role="group" aria-label="Filter by category">
         <button type="button" className="fchip" aria-pressed={type === null} onClick={() => pick(null)}>
           All
           {total !== undefined && <b>{total}</b>}
         </button>
-        {kinds.map((t) => {
-          const k = KINDS[t];
-          const count = me?.counts.by_type[t];
+        {chips.map((t) => {
+          const k = KINDS[t.type];
+          const id = t.key ?? t.type;
           return (
             <button
-              key={t}
+              key={id}
               type="button"
               className="fchip"
               style={tint(k.color)}
-              aria-pressed={type === t}
+              aria-pressed={key === id}
               onClick={() => pick(t)}
             >
               <Icon name={k.icon} />
-              {k.label}
-              {count !== undefined && <b>{count}</b>}
+              {t.label}
+              <b>{t.count}</b>
             </button>
           );
         })}
       </div>
 
       {type && subs.length > 0 && (
-        <div className="filters" role="group" aria-label={`Filter ${KINDS[type].label} by sub-category`}>
+        <div className="filters" role="group" aria-label={`Filter ${pickedLabel} by sub-category`}>
           <button type="button" className="fchip" aria-pressed={sub === null} onClick={() => pickSub(null)}>
-            All {KINDS[type].label}
+            All {pickedLabel}
           </button>
           {subs.map((s) => (
             <button
@@ -201,7 +213,7 @@ function SavesList() {
             {searching
               ? `Nothing matches “${debounced}”. Try a word they said in the video.`
               : type
-                ? `Nothing filed under ${KINDS[type].label}${sub ? ` › ${sub}` : ""} yet.`
+                ? `Nothing filed under ${pickedLabel}${sub ? ` › ${sub}` : ""} yet.`
                 : "Nothing here yet."}
           </p>
         ) : (

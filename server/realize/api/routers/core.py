@@ -189,15 +189,21 @@ def taste_board(type: str, category: str | None = None, user: dict = Depends(cur
 
 
 @router.get("/api/search")
-def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
-                 user: dict = Depends(current_user)) -> dict:
+def search_saves(q: str = "", type: str | None = None, category: str | None = None,
+                 sub: str | None = None, user: dict = Depends(current_user)) -> dict:
     t = type if type in TYPES else None
     if not q.strip():
         return {"items": [], "mode": search.active_mode()}
     try:
-        docs, mode = search.hybrid_search(user["_id"], q, type=t, limit=40 if t and sub else 20)
+        narrow = bool(t and (sub or t == "other"))
+        docs, mode = search.hybrid_search(user["_id"], q, type=t, limit=40 if narrow else 20)
+        if t == "other":
+            # One custom category, or Just vibes (other reels with no category).
+            want = f"other:{category}" if category else "other"
+            docs = [d for d in docs if categories.group(d) == want]
         if t and sub:
-            docs = [d for d in docs if d.get("subcategory") == sub][:20]
+            docs = [d for d in docs if d.get("subcategory") == sub]
+        docs = docs[:20]
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=503, detail="Search didn't answer. Try again.") from e
     items = tickets.tickets_for(docs, user)

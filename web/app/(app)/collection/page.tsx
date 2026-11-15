@@ -14,10 +14,6 @@ import { plural } from "@/lib/format";
 import { boardHref, KINDS, tint } from "@/lib/kinds";
 import type { RememberItem, Taste, TastesResponse } from "@/lib/types";
 
-function sentence(tag: string): string {
-  return tag ? tag[0].toUpperCase() + tag.slice(1) : tag;
-}
-
 function Thumbs({ urls, className }: { urls: string[]; className: string }) {
   if (urls.length === 0) return null;
   return (
@@ -66,17 +62,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
               </span>
             ))}
           </span>
-        ) : (
-          taste.tags.length > 0 && (
-            <span className="subs">
-              {taste.tags.map((t) => (
-                <span key={t.tag}>
-                  {sentence(t.tag)} <b>{t.count}</b>
-                </span>
-              ))}
-            </span>
-          )
-        )}
+        ) : null}
       </Link>
     );
   }

@@ -72,17 +72,7 @@ export function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
               </span>
             ))}
           </span>
-        ) : (
-          taste.tags.length > 0 && (
-            <span className="subs">
-              {taste.tags.map((t) => (
-                <span key={t.tag}>
-                  {sentence(t.tag)} <b>{t.count}</b>
-                </span>
-              ))}
-            </span>
-          )
-        )}
+        ) : null}
       </Link>
     );
   }

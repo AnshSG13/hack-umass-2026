@@ -2,7 +2,7 @@
 
 // A taste as a board: every save of one kind as a card, in two staggered columns. Each
 // card is the reel's thumbnail, a short title and one quiet line of facts. The chips on
-// top are the tags these saves share; tapping one narrows the board.
+// top are its sub-categories ("Weeknight dinners"); tapping one narrows the board.
 
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
@@ -37,10 +37,6 @@ function columns(items: BoardItem[]): [BoardItem[], BoardItem[]] {
     height[c] += shapeOf(item.save_id) + 0.42;
   }
   return cols;
-}
-
-function sentence(tag: string): string {
-  return tag ? tag[0].toUpperCase() + tag.slice(1) : tag;
 }
 
 function Pin({ item, type }: { item: BoardItem; type: SaveType }) {
@@ -82,15 +78,16 @@ function TasteBoard() {
     type ? `/api/tastes/${type}${category ? `?category=${encodeURIComponent(category)}` : ""}` : null,
     fetcher,
   );
-  const [tag, setTag] = useState<string | null>(null);
+  const [sub, setSub] = useState<string | null>(null);
   const bundles = useBundles(Boolean(type));
   const ready = bundles.data?.ready.find((b) => b.type === type);
 
   const kind = type ? KINDS[type] : null;
   const items = useMemo(() => data?.items ?? [], [data]);
-  // A chip whose saves were all deleted stops filtering instead of emptying the board.
-  const active = tag && data?.tags.some((t) => t.tag === tag) ? tag : null;
-  const shown = useMemo(() => (active ? items.filter((i) => i.tags.includes(active)) : items), [items, active]);
+  const subs = useMemo(() => data?.subcategories ?? [], [data]);
+  // A chip whose saves were all moved or deleted stops filtering instead of emptying the board.
+  const active = sub && subs.some((x) => x.name === sub) ? sub : null;
+  const shown = useMemo(() => (active ? items.filter((i) => i.subcategory === active) : items), [items, active]);
   const [left, right] = useMemo(() => columns(shown), [shown]);
 
   const head = (
@@ -138,21 +135,21 @@ function TasteBoard() {
     <>
       {head}
 
-      {data && data.tags.length > 0 && data.count > 1 && (
-        <div className="filters" role="group" aria-label="Filter this board">
-          <button type="button" className="fchip" aria-pressed={active === null} onClick={() => setTag(null)}>
+      {data && subs.length > 0 && (
+        <div className="filters" role="group" aria-label="Filter by sub-category">
+          <button type="button" className="fchip" aria-pressed={active === null} onClick={() => setSub(null)}>
             All <b>{data.count}</b>
           </button>
-          {data.tags.map((t) => (
+          {subs.map((x) => (
             <button
-              key={t.tag}
+              key={x.name}
               type="button"
               className="fchip"
               style={kind ? tint(kind.color) : undefined}
-              aria-pressed={active === t.tag}
-              onClick={() => setTag(active === t.tag ? null : t.tag)}
+              aria-pressed={active === x.name}
+              onClick={() => setSub(active === x.name ? null : x.name)}
             >
-              {sentence(t.tag)} <b>{t.count}</b>
+              {x.name} <b>{x.count}</b>
             </button>
           ))}
         </div>

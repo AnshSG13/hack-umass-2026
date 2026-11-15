@@ -444,7 +444,7 @@ export interface BoardItem {
   title: string;
   thumb_url: string | null;
   meta: string; // "20 min · 7 ingredients", or "" when the reel gave nothing to say
-  tags: string[];
+  subcategory?: string | null; // "Weeknight dinners"
   has_note: boolean;
   is_new: boolean; // saved in the last day
 }
@@ -453,7 +453,8 @@ export interface Board {
   category?: string | null;
   label: string;
   count: number;
-  tags: { tag: string; count: number }[]; // the filter chips, at most 6
+  /** The filter chips: this board's sub-categories, largest first. */
+  subcategories?: { name: string; count: number }[];
   items: BoardItem[];
 }
 

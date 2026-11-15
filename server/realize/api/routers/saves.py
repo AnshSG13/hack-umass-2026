@@ -336,12 +336,14 @@ def delete_save(save_id: str, user: dict = Depends(current_user)) -> dict:
 
 
 @router.get("/api/saves")
-def list_saves(type: str | None = None, sub: str | None = None,
+def list_saves(type: str | None = None, category: str | None = None, sub: str | None = None,
                limit: int = Query(default=30, ge=1, le=100),
                before: str | None = None, user: dict = Depends(current_user)) -> dict:
+    """category: a custom category with type other; type other alone means Just vibes, the
+    other reels that have no category (categories.query)."""
     q: dict = {"user_id": user["_id"]}
     if type in TYPES:
-        q["type"] = type
+        q.update(categories.query(f"other:{category}" if type == "other" and category else type))
         if sub:
             q["subcategory"] = sub
     if before:

@@ -109,19 +109,24 @@ def board(user: dict, group: str) -> dict:
     cursor = db.saves().find(
         {"user_id": user["_id"], **categories.query(group)},
         {"title": 1, "type": 1, "fields": 1, "tags": 1, "note": 1, "thumb_id": 1, "creator": 1,
-         "created_at": 1, "status": 1},
+         "created_at": 1, "status": 1, "subcategory": 1},
     ).sort("created_at", -1).limit(MAX_ITEMS)
     fresh_after = now_utc() - timedelta(hours=NEW_HOURS)
-    items, tag_lists = [], []
+    items = []
     for s in cursor:
-        tags = clean_tags(s)
-        tag_lists.append(tags)
         items.append({
             "save_id": str(s["_id"]), "title": s.get("title") or "Saved reel",
             "thumb_url": f"/api/t/{s['thumb_id']}" if s.get("thumb_id") else None,
-            "meta": meta_line(s), "tags": tags,
+            "meta": meta_line(s), "subcategory": s.get("subcategory") or None,
             "has_note": bool((s.get("note") or "").strip()),
             "is_new": as_utc(s["created_at"]) >= fresh_after,
         })
+    # The filter chips are the sub-categories, largest first, the same ones the reel page and
+    # the knowledge graph name.
+    subs: dict[str, int] = {}
+    for it in items:
+        if it["subcategory"]:
+            subs[it["subcategory"]] = subs.get(it["subcategory"], 0) + 1
     return {"type": type_, "category": cat, "label": categories.label(group), "count": len(items),
-            "tags": top_tags(tag_lists), "items": items}
+            "items": items,
+            "subcategories": [{"name": k, "count": v} for k, v in sorted(subs.items(), key=lambda kv: (-kv[1], kv[0]))]}
