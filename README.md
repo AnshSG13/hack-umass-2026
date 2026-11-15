@@ -4,7 +4,7 @@ Every save becomes a plan.
 
 People save reels on autopilot and rarely act on them. Reelize turns a saved reel into one small, concrete plan: share a reel from Instagram, an agent reads it, checks your week and asks "Cook Thu 6:30 pm + 3 groceries?". You confirm with one tap. Nothing is added to your calendar or reminders without that tap. Later it asks whether you did it.
 
-- Demo video: TODO
+- Demo video: https://www.youtube.com/watch?v=62SgcxgwumA
 - Live: https://reelize.boston (Vultr). The landing page has a "Try the demo" button that needs no login. On an iPhone, see [Use it on your iPhone](#use-it-on-your-iphone).
 - Real saved-count stat: TODO (count from the production database before the pitch; no number is quoted until then)
 
