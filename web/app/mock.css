@@ -3180,26 +3180,24 @@ button.note {
     opacity: 0.6;
   }
 }
-.kg-legend {
+/* the key under the map: each sample is drawn the way the map draws it */
+.kg-key-list {
   margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+.kg-key-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
+  gap: 6px;
+  min-width: 0;
 }
-.kg-key {
-  display: inline-block;
-  width: 22px;
-  height: 0;
-  border-top: 2px dashed var(--ink-2);
-  margin-left: 6px;
-}
-.kg-key:first-child {
-  margin-left: 0;
-}
-.kg-key-likes {
-  border-top: 2px dotted var(--butter-ink);
+.kg-key-list svg {
+  flex: none;
 }
 /* the canvas plus the reel card that sits over its bottom edge */
 .kg-stage {

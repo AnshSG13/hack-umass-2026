@@ -282,17 +282,14 @@ export default function GraphPage() {
           )}
           <div aria-live="polite">{sel?.kind === "save" && sel.save_id ? reelCard(sel) : null}</div>
         </div>
-        <p className="kg-legend" aria-hidden="true">
-          <span className="kg-key kg-key-related" /> similar reels
-          <span className="kg-key kg-key-likes" /> your interests
-        </p>
+        <GraphKey reels={showSaves} interests={showInterests && Boolean(data?.counts.interests)} />
 
         {sel && sel.kind !== "save" ? (
           details(sel)
         ) : (
           data && (
             <p className="kg-hint">
-              Drag to turn it, pinch to zoom. Tap a sphere to see what it connects to, or a dot to see the reel.
+              Drag to turn it, pinch to zoom. Tap a circle to see what it holds, or a reel to see its picture and title.
             </p>
           )
         )}
@@ -335,5 +332,55 @@ export default function GraphPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** What each shape and line on the map means, drawn the way the map draws it. */
+function GraphKey({ reels, interests }: { reels: boolean; interests: boolean }) {
+  const disc = (r: number, fill: string, ring: string) => (
+    <svg viewBox="0 0 28 16" width="28" height="16" aria-hidden="true">
+      <circle cx="14" cy="8" r={r} fill={`var(${fill})`} stroke={`var(${ring})`} strokeOpacity="0.45" strokeWidth="1.2" />
+    </svg>
+  );
+  const line = (color: string, dot: boolean) => (
+    <svg viewBox="0 0 28 16" width="28" height="16" aria-hidden="true">
+      <line x1="2" y1="8" x2="26" y2="8" stroke={`var(${color})`} strokeWidth="1.4" strokeLinecap="round" />
+      {dot && <circle cx="17" cy="8" r="2.2" fill={`var(${color})`} />}
+    </svg>
+  );
+  return (
+    <ul className="kg-key-list" aria-label="Key">
+      <li>
+        {disc(7, "--peach", "--peach-ink")}
+        Kind or category
+      </li>
+      <li>
+        {disc(4.5, "--peach", "--peach-ink")}
+        Folder
+      </li>
+      {reels && (
+        <li>
+          <svg viewBox="0 0 28 16" width="28" height="16" aria-hidden="true">
+            <circle cx="14" cy="8" r="6" fill="var(--line-strong)" stroke="#fff" strokeWidth="2" />
+            <circle cx="14" cy="8" r="7" fill="none" stroke="var(--peach-ink)" strokeWidth="1" />
+          </svg>
+          Reel
+        </li>
+      )}
+      <li>
+        {line("--line-strong", false)}
+        What&apos;s inside
+      </li>
+      <li>
+        {line("--sky-ink", true)}
+        Folders with similar reels
+      </li>
+      {interests && (
+        <li>
+          {disc(4, "--butter", "--butter-ink")}
+          Your interest
+        </li>
+      )}
+    </ul>
   );
 }
