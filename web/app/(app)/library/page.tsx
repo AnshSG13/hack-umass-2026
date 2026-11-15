@@ -11,7 +11,7 @@ import { Icon } from "@/components/icons";
 import { SaveRow } from "@/components/save-row";
 import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
-import { plural } from "@/lib/format";
+import { yourSaves } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
 import type { SavesPage, SaveType, SearchResult, TastesResponse } from "@/lib/types";
@@ -93,7 +93,7 @@ function SavesList() {
       <h1 className="page-title" style={{ marginTop: 10 }}>
         Your saves
       </h1>
-      {total !== undefined && <p className="page-sub">{plural(total, "save", "saves")}</p>}
+      {total !== undefined && <p className="page-sub">{yourSaves(total)}</p>}
     </header>
   );
 

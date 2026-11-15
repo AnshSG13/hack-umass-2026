@@ -12,7 +12,7 @@ import { Fan, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { useApp } from "@/components/shell";
 import { ApiError, fetcher } from "@/lib/api";
-import { plural } from "@/lib/format";
+import { yourSaves } from "@/lib/format";
 import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
 import type { Board, BoardItem, SaveType } from "@/lib/types";
 
@@ -100,7 +100,7 @@ export default function TasteBoardPage() {
           </span>
         )}
         {data?.label ?? kind?.label ?? "Taste"}
-        {data && <span className="pill">{plural(data.count, "save", "saves")}</span>}
+        {data && <span className="pill">{yourSaves(data.count)}</span>}
       </h1>
     </header>
   );

@@ -175,6 +175,11 @@ export function localInputValue(plusMinutes = 0): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** A count of the person's saves, said as theirs: "1 of your saves", "12 of your saves". */
+export function yourSaves(n: number): string {
+  return `${n} of your saves`;
+}
+
 export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }

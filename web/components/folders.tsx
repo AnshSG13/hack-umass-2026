@@ -11,7 +11,7 @@ import { Icon } from "@/components/icons";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
 import { useApp, useAskStore } from "@/components/shell";
 import { fetcher } from "@/lib/api";
-import { inFlight, plural } from "@/lib/format";
+import { inFlight, yourSaves } from "@/lib/format";
 import { KINDS, tint } from "@/lib/kinds";
 import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
 
@@ -44,7 +44,7 @@ export function Thumbs({ urls, className }: { urls: string[]; className: string 
 export function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
-  const count = plural(taste.count, "save", "saves");
+  const count = yourSaves(taste.count);
   const href = `/t/${taste.type}`;
   const fresh = taste.new > 0 ? (
     <span className="taste-new" aria-label={`${taste.new} new`}>
