@@ -11,7 +11,7 @@ import useSWR from "swr";
 import { Icon } from "@/components/icons";
 import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
-import { plural, yourSaves } from "@/lib/format";
+import { plural } from "@/lib/format";
 import { useMediaQuery } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
 import type { GraphNode, KnowledgeGraph } from "@/lib/types";
@@ -60,7 +60,7 @@ export default function GraphPage() {
       </h1>
       {data && data.counts.saves > 0 && (
         <p className="page-sub">
-          {yourSaves(data.counts.saves)} in {plural(data.counts.subcategories, "folder", "folders")},{" "}
+          {plural(data.counts.saves, "save", "saves")} in {plural(data.counts.subcategories, "folder", "folders")},{" "}
           {plural(data.counts.related, "link", "links")} between folders
         </p>
       )}
@@ -133,7 +133,7 @@ export default function GraphPage() {
           {node.kind === "type" ? "Kind" : node.kind === "sub" ? "Folder" : node.kind === "interest" ? "Your interest" : "Reel"}
         </p>
         <h2 className="kg-detail-title">{node.kind === "save" ? node.label : name(node.id)}</h2>
-        {node.count !== undefined && <p className="kg-detail-sub">{yourSaves(node.count)}</p>}
+        {node.count !== undefined && <p className="kg-detail-sub">{plural(node.count, "save", "saves")}</p>}
         {parent && <p className="kg-detail-sub">In {name(parent)}</p>}
         {subs.length > 0 && (
           <div className="kg-detail-row">

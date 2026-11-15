@@ -10,7 +10,7 @@ import useSWR from "swr";
 import { Icon } from "@/components/icons";
 import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
-import { plural, yourSaves } from "@/lib/format";
+import { plural } from "@/lib/format";
 import { KINDS, tint } from "@/lib/kinds";
 import type { RememberItem, Taste, TastesResponse } from "@/lib/types";
 
@@ -35,7 +35,7 @@ function Thumbs({ urls, className }: { urls: string[]; className: string }) {
 function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
-  const count = [yourSaves(taste.count), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
+  const count = [plural(taste.count, "save", "saves"), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
   const href = `/t/${taste.type}`;
   const fresh = taste.new > 0 ? (
     <span className="taste-new" aria-label={`${taste.new} new`}>
@@ -147,7 +147,7 @@ export default function CollectionPage() {
   const tastes = data?.tastes ?? [];
   const sub = data
     ? [
-        yourSaves(data.total),
+        plural(data.total, "save", "saves"),
         tastes.length > 0 ? `across ${plural(tastes.length, "taste", "tastes")}` : null,
       ]
         .filter(Boolean)
