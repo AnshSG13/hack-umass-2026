@@ -4,8 +4,9 @@
 // see what it touches. Loaded only in the browser (see app/(app)/graph/page.tsx).
 //
 // Flat and light, like the rest of the app (DESIGN.md: no gradients, no shadows). Every
-// node is a sprite, so it always faces the camera and stays crisp: kinds and folders are
-// flat discs in their kind's pastel with a thin ink ring and a name chip under them, reels
+// node is a sprite, so it always faces the camera and stays crisp: a category is a flat
+// disc in its pastel, a sub-category a white disc with a ring in that pastel, both with a
+// name chip under them; reels
 // are round thumbnails of the reel, interests are butter discs. Lines are hairlines;
 // "related" folders get a blue hairline (one colour for all of them, as in the key) with a
 // few particles drifting along it. A gentle pull toward the centre keeps separate tastes from drifting apart, so the
@@ -67,7 +68,35 @@ function spriteFrom(tex: THREE.Texture, diameter: number, opacity: number): THRE
   return sprite;
 }
 
-/** A flat disc: the kind's pastel with a thin ring in its ink. */
+/** A sub-category: white, with a wide ring in its category's pastel and a thin ink edge,
+ *  so it reads as part of the category without looking like one. */
+function ringTexture(fill: string, ring: string): THREE.CanvasTexture {
+  const px = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = px;
+  const ctx = canvas.getContext("2d")!;
+  const r = px / 2 - 8;
+  ctx.beginPath();
+  ctx.arc(px / 2, px / 2, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(px / 2, px / 2, r - 18, 0, Math.PI * 2);
+  ctx.lineWidth = 36;
+  ctx.strokeStyle = fill;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(px / 2, px / 2, r, 0, Math.PI * 2);
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = ring;
+  ctx.globalAlpha = 0.55;
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** A category: a flat disc in its pastel with a thin ring in its ink. */
 function discTexture(fill: string, ring: string): THREE.CanvasTexture {
   const px = 256;
   const canvas = document.createElement("canvas");
@@ -328,7 +357,9 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
       const tex =
         n.kind === "save"
           ? texture(`thumb:${n.thumb_url ?? id}:${fill}`, () => thumbTexture(n.thumb_url, fill, ink))
-          : texture(`disc:${fill}:${ink}`, () => discTexture(fill, ink));
+          : n.kind === "sub"
+            ? texture(`ring:${fill}:${ink}`, () => ringTexture(fill, ink))
+            : texture(`disc:${fill}:${ink}`, () => discTexture(fill, ink));
       group.add(spriteFrom(tex, d, opacity));
 
       // Kinds, folders and interests carry a name chip; a reel shows its card when tapped.

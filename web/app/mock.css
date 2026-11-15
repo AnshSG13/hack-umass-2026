@@ -3199,6 +3199,28 @@ button.note {
 .kg-key-list svg {
   flex: none;
 }
+/* which colour is which category, for the categories on this map */
+.kg-colours {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.kg-colours li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kg-colour-dot {
+  /* a square, so it doesn't read as one of the map's shapes */
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--p);
+  border: 1px solid color-mix(in srgb, var(--d) 45%, transparent);
+}
 /* the canvas plus the reel card that sits over its bottom edge */
 .kg-stage {
   position: relative;
