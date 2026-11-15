@@ -81,10 +81,24 @@ UNAVAILABLE = re.compile(
     r"out of stock|sold out|unavailable|not available|discontinued|pre-?order|back-?order|"
     r"no longer (sold|available)|currently unavailable|waitlist", re.I)
 
+# Who a reel or an item is for, from plain words. Code backs up the model on the one mix-up
+# that is easy to see and bad to show: the women's version of a men's item, or the reverse.
+MEN = re.compile(r"\b(men|men's|mens|male|guys?|menswear|boys?|gentlemen)\b")
+WOMEN = re.compile(r"\b(women|women's|womens|female|ladies|lady|womenswear|girls?|maternity)\b")
+UNISEX = re.compile(r"\bunisex\b|\bgender[- ]neutral\b")
 PRICE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)")
 
 RESEARCH_PROMPT = """Someone saved an Instagram reel about these products and wants to buy one at a good price.
+THE REEL: {title}
+WHAT IT IS ABOUT: {summary}
+FOLDER: {folder}
+THE PRODUCTS:
 {products}
+
+Stay on the reel's topic. Every product and every similar pick must be the same kind of item for
+the same people as the reel shows: a menswear reel gets men's clothing (never the women's version of
+an item), a skincare reel gets skincare, a camping reel gets camping gear. When a name is generic
+("wide leg pants"), search for it with the brand and the reel's topic, e.g. "Uniqlo men's wide leg pants".
 
 Use Google Search. Look at the brand's own website, established retailers big or small (including
 specialist stores for this kind of product, like a sports, outdoor or beauty shop), and review sites.
@@ -117,9 +131,10 @@ OFFER_SCHEMA: dict = {
                 "price_text": {"type": "string", "description": "The price exactly as the notes give it, e.g. $49.99"},
                 "note": {"type": "string", "description": "At most 60 characters, or empty. Say \"out of stock\" when the notes say the item isn't available"},
                 "alternative": {"type": "boolean", "description": "true for a similar product, not the reel's product"},
+                "fits_reel": {"type": "boolean", "description": "false when it is a different kind of item, for different people (a women's version for a men's reel, or the reverse), or off the reel's topic"},
                 "source": {"type": "integer", "description": "The [n] that backs this price, or 0"},
             },
-            "required": ["product", "store", "price_text", "alternative", "source"]}},
+            "required": ["product", "store", "price_text", "alternative", "source", "fits_reel"]}},
     },
     "required": ["offers"],
 }
@@ -179,11 +194,34 @@ def parse_price(text: str) -> float | None:
     return v if 0 < v < 100000 else None
 
 
-def keep_offers(raw: list[dict], sources: list[dict], brands: list[str]) -> list[dict]:
-    """Only offers whose source is real and trusted and whose price can be read."""
+def audience(text: str) -> str | None:
+    """"men" or "women" when the reel says who it is for, else None."""
+    t = text.lower()
+    m = bool(MEN.search(t))
+    w = bool(WOMEN.search(t))
+    return "men" if m and not w else "women" if w and not m else None
+
+
+def off_topic(o: dict, reel_for: str | None) -> bool:
+    """The model said it doesn't fit, or it is plainly for the other people: a women's item on a
+    men's reel, or the reverse. Unisex items fit both."""
+    if o.get("fits_reel") is False:
+        return True
+    if not reel_for:
+        return False
+    item = f"{o.get('product') or ''} {o.get('note') or ''}".lower()
+    if UNISEX.search(item):
+        return False
+    return bool((WOMEN if reel_for == "men" else MEN).search(item))
+
+
+def keep_offers(raw: list[dict], sources: list[dict], brands: list[str], reel_for: str | None = None) -> list[dict]:
+    """Only offers that fit the reel, whose source is real and trusted and whose price can be read."""
     by_n = {s["n"]: s for s in sources}
     out, seen = [], set()
     for o in raw:
+        if off_topic(o, reel_for):
+            continue
         try:
             n = int(o.get("source") or 0)
         except (TypeError, ValueError):
@@ -239,6 +277,14 @@ def best_by_product(offers: list[dict]) -> list[dict]:
     return sorted(best.values(), key=lambda o: o["price"])
 
 
+def reel_context(save: dict) -> dict:
+    """What the reel is about, for the search: its title, summary and folder."""
+    folder = " > ".join(x for x in ["Products", save.get("subcategory") or ""] if x)
+    return {"title": " ".join(str(save.get("title") or "").split())[:140] or "(untitled)",
+            "summary": " ".join(str(save.get("summary") or "").split())[:400] or "(none)",
+            "folder": folder}
+
+
 def products_of(save: dict) -> list[dict]:
     items = ((save.get("fields") or {}).get("product") or {}).get("items") or []
     out = [{"name": str(i["name"]), "brand": str(i.get("brand") or "")} for i in items if i.get("name")]
@@ -273,17 +319,21 @@ def build(save_id, user_id: str) -> None:
         products = products_of(save)
         brands = [p["brand"] for p in products if p["brand"]]
         lines = "\n".join(f"- {p['name']}" + (f" (brand: {p['brand']})" if p["brand"] else "") for p in products)
+        ctx = reel_context(save)
+        reel_for = audience(f"{ctx['title']} {ctx['summary']} {ctx['folder']}")
         sources: list[dict] = []
-        notes = trip.research(RESEARCH_PROMPT.format(products=lines), sources, timeout_s=70)
+        notes = trip.research(RESEARCH_PROMPT.format(products=lines, **ctx), sources, timeout_s=70)
         raw = gemini.generate_json(
             role="fast", schema=OFFER_SCHEMA, timeout_s=40,
             system=("You turn price research notes into a list. Copy prices exactly as the notes give them. "
+                    "Set fits_reel to false for anything that is a different kind of item or for different "
+                    "people than the reel (a women's version of a men's item, or the reverse), or off its topic. "
                     "Put the [n] number that backs each price in source; 0 when no number backs it. "
                     "Never estimate a price. If the notes say an item is out of stock, sold out, discontinued "
                     "or pre-order, write that in its note. Plain words, no em dashes."),
-            input=f"PRODUCTS:\n{lines}\n\nNOTES:\n{notes}\n\nSOURCES:\n" +
+            input=f"THE REEL: {ctx['title']}\nABOUT: {ctx['summary']}\nPRODUCTS:\n{lines}\n\nNOTES:\n{notes}\n\nSOURCES:\n" +
                   "\n".join(f"[{s['n']}] {s['title']} {s['url']}" for s in sources))
-        offers = keep_offers(raw.get("offers") or [], sources, brands)
+        offers = keep_offers(raw.get("offers") or [], sources, brands, reel_for)
         used = {o["url"] for o in offers}
         db.saves().update_one({"_id": save_id, "user_id": user_id}, {"$set": {
             "shop.status": "ready", "shop.done_at": now_utc(), "shop.offers": offers,
