@@ -278,6 +278,8 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
     if cat and "category" not in edited and not (keep_save_fields and save.get("category")):
         db.saves().update_one({"_id": save["_id"]}, {"$set": {"category": cat}})
         save = {**save, "category": cat}
+    if kind == "other" and save.get("category") and save.get("subcategory"):
+        categories.adopt(user["_id"], save["category"], save["subcategory"])
 
     if keep_save_fields:
         fields = save.get("fields") or {}

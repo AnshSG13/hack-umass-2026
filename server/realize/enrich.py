@@ -191,6 +191,8 @@ def run_enrich_job(save: dict, user: dict) -> None:
         if duration and not save.get("duration_sec"):
             update["duration_sec"] = duration
         db.saves().update_one({"_id": sid}, {"$set": update})
+        if update.get("category") and update.get("subcategory"):
+            categories.adopt(save["user_id"], update["category"], update["subcategory"])
         was_caption_sufficient = save.get("caption_sufficient", True)
         save = db.saves().find_one({"_id": sid})
 

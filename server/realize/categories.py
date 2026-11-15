@@ -64,6 +64,21 @@ def resolve(user_id: str, label: object) -> str | None:
     return snap(clean(label), existing(user_id))
 
 
+def adopt(user_id: str, category: str | None, subcategory: str | None) -> int:
+    """Bring this user's older reels from Just vibes into a category when they sit in the
+    folder a reel was just filed under there ("Just vibes > Memes" joins "Comedy > Memes"),
+    so one kind of reel isn't split between Just vibes and its category because some were
+    saved before categories existed. A reel whose category the person set is left alone.
+    Returns how many moved."""
+    if not category or not subcategory:
+        return 0
+    r = db.saves().update_many(
+        {"user_id": user_id, "type": "other", "subcategory": subcategory,
+         "category": {"$not": {"$type": "string"}}, "user_edited": {"$ne": "category"}},
+        {"$set": {"category": category}})
+    return r.modified_count
+
+
 def prompt_line(user_id: str) -> str:
     names = existing(user_id)[:PROMPT_MAX]
     return "EXISTING CATEGORIES: " + (", ".join(names) if names else "none yet")

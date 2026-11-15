@@ -283,7 +283,7 @@ export default function GraphPage() {
           <div aria-live="polite">{sel?.kind === "save" && sel.save_id ? reelCard(sel) : null}</div>
         </div>
         <p className="kg-legend" aria-hidden="true">
-          <span className="kg-key kg-key-related" /> alike reels
+          <span className="kg-key kg-key-related" /> similar reels
           <span className="kg-key kg-key-likes" /> your interests
         </p>
 
@@ -300,7 +300,7 @@ export default function GraphPage() {
         {data && (related.length > 0 || likes.size > 0) && (
           <section className="kg-list" aria-labelledby="kg-links-h">
             <h2 className="block-title" id="kg-links-h">
-              Connections
+              Folders with similar reels
             </h2>
             <ul>
               {related.map((l) => (
@@ -308,7 +308,7 @@ export default function GraphPage() {
                   <button type="button" onClick={() => pickFromList(l.source)}>
                     {name(l.source)}
                   </button>
-                  <span className="kg-rel">is like</span>
+                  <span className="kg-rel">has reels like</span>
                   <button type="button" onClick={() => pickFromList(l.target)}>
                     {name(l.target)}
                   </button>
@@ -319,7 +319,7 @@ export default function GraphPage() {
                   <button type="button" onClick={() => pickFromList(interest)}>
                     {byId.get(interest)?.label}
                   </button>
-                  <span className="kg-rel">leads to</span>
+                  <span className="kg-rel">fits</span>
                   {subs.map((s, i) => (
                     <span key={s}>
                       <button type="button" onClick={() => pickFromList(s)}>
