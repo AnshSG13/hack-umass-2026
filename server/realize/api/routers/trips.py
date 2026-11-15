@@ -60,6 +60,9 @@ def build_trip(save_id: str, body: TripRequest | None = None, user: dict = Depen
     if user.get("is_demo") and not existing:
         if db.trips().count_documents({"user_id": user["_id"]}) >= demo.TRIP_LIMIT:
             raise HTTPException(status_code=429, detail=demo.TRIP_LIMIT_MESSAGE)
+    # Rebuilds count too: a demo session has a budget of paid builds of every kind.
+    if not ratelimit.demo_spend(user):
+        raise HTTPException(status_code=429, detail=ratelimit.DEMO_BUILD_MESSAGE)
     doc = trip.start_build(save, user, _start(body or TripRequest(), user))
     background.submit(trip.build, save["_id"], user["_id"])
     return trip.view(doc, save, user)
@@ -95,6 +98,8 @@ def build_trip_day(save_id: str, index: int, user: dict = Depends(current_user))
         return current
     if not ratelimit.allow("trip", user["_id"]):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
+    if not ratelimit.demo_spend(user):
+        raise HTTPException(status_code=429, detail=ratelimit.DEMO_BUILD_MESSAGE)
     trip.start_day(doc, index)
     background.submit(trip.build_day, save["_id"], user["_id"], index)
     return trip.view(trip.get_for_save(save["_id"], user["_id"]), save, user)
@@ -105,7 +110,7 @@ def trip_day_ics(trip_id: str, index: int, t: str | None = None) -> Response:
     """A day's stops as a calendar file. Opened in a new tab, so the trip's own token stands in for the key."""
     _id = db.oid(trip_id)
     doc = db.trips().find_one({"_id": _id}) if _id else None
-    if not doc or not t or not hmac.compare_digest(str(doc.get("share_token") or ""), str(t)):
+    if not doc or not t or not hmac.compare_digest(str(doc.get("share_token") or "").encode(), str(t).encode()):
         raise HTTPException(status_code=404, detail="This link doesn't open a trip.")
     body = trip.day_ics(doc, index)
     if not body:

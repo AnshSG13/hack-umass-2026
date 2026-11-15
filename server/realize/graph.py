@@ -125,8 +125,11 @@ def interest_vectors(user_id: str, interests: list[str]) -> dict[str, np.ndarray
         try:
             vecs = gemini.embed(missing, "RETRIEVAL_QUERY")
             have.update({t: v for t, v in zip(missing, vecs)})
-            db.graph_cache().update_one({"_id": user_id}, {"$set": {
-                "interests": [{"text": t, "vec": v} for t, v in have.items()]}}, upsert=True)
+            update: dict[str, Any] = {"interests": [{"text": t, "vec": v} for t, v in have.items()]}
+            u = db.users().find_one({"_id": user_id}, {"expires_at": 1}) or {}
+            if u.get("expires_at"):
+                update["expires_at"] = u["expires_at"]  # demo accounts: gone with the rest of it
+            db.graph_cache().update_one({"_id": user_id}, {"$set": update}, upsert=True)
         except Exception as e:  # noqa: BLE001 - the graph still draws without interest edges
             log.warning("interest embeddings failed for %s: %s", user_id, str(e)[:160])
     return {t: _unit(np.asarray(have[t], dtype=float)) for t in interests if t in have}

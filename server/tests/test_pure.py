@@ -404,10 +404,33 @@ def test_thumbnail_hosts():
 
 def test_rate_limit_window():
     ratelimit.reset()
-    assert all(ratelimit.allow("users", "1.2.3.4", now=100.0 + i) for i in range(5))
+    limit, window = ratelimit.LIMITS["users"]
+    assert limit >= 10  # a room on one venue Wi-Fi can sign up
+    assert all(ratelimit.allow("users", "1.2.3.4", now=100.0 + i * 0.1) for i in range(limit))
     assert not ratelimit.allow("users", "1.2.3.4", now=110.0)
     assert ratelimit.allow("users", "5.6.7.8", now=110.0)
-    assert ratelimit.allow("users", "1.2.3.4", now=100.0 + 3601)
+    assert ratelimit.allow("users", "1.2.3.4", now=100.0 + window + 1)
+
+
+def test_only_wrong_passwords_from_one_address_lock_login():
+    ratelimit.reset()
+    limit, _ = ratelimit.LIMITS["login_fail"]
+    for i in range(limit):
+        assert not ratelimit.full("login_fail", "1.2.3.4|a@b.co", now=100.0 + i)
+        ratelimit.hit("login_fail", "1.2.3.4|a@b.co", now=100.0 + i)
+    assert ratelimit.full("login_fail", "1.2.3.4|a@b.co", now=200.0)
+    # The real owner, from their own address, still gets in.
+    assert not ratelimit.full("login_fail", "9.9.9.9|a@b.co", now=200.0)
+
+
+def test_demo_builds_have_a_budget_and_real_accounts_do_not():
+    ratelimit.reset()
+    limit, _ = ratelimit.LIMITS["demo_build"]
+    demo_user = {"_id": "d1", "is_demo": True}
+    assert all(ratelimit.demo_spend(demo_user) for _ in range(limit))
+    assert not ratelimit.demo_spend(demo_user)
+    real = {"_id": "u1"}
+    assert all(ratelimit.demo_spend(real) for _ in range(limit + 5))
 
 
 def test_demo_limit_follows_the_setting(monkeypatch):
