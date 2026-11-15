@@ -278,12 +278,11 @@ export interface Me {
   expires_at: string | null;
   counts: { saves: number; by_type: Record<SaveType, number>; plans: Partial<Record<PlanStatus, number>> };
   profile: Profile | null;
-  onboarded: boolean; // false: a real account that hasn't done the intro yet
+  onboarded: boolean; // false: a real account that hasn't done the intro (only new ones with no saves are sent there)
 }
 
 // ---- the intro (/welcome) ----
 export interface Profile {
-  identity: string | null;
   age_range: string | null;
   ethnicity: string[];
   interests: string[];

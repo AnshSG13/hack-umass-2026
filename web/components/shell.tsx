@@ -117,9 +117,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (key === null) router.replace("/");
   }, [key, router]);
 
-  // A real account that hasn't done the intro screens yet goes there first.
+  // Only a new real account (no intro done and nothing saved yet) goes to the intro first.
+  // Accounts that already have saves are left alone; Settings has "Redo the intro" for them.
   useEffect(() => {
-    if (me && !me.onboarded && !me.is_demo) router.replace("/welcome");
+    if (me && !me.onboarded && !me.is_demo && me.counts.saves === 0) router.replace("/welcome");
   }, [me, router]);
 
   // A key the server no longer knows (rotated, or an expired demo) is the same as no key.

@@ -11,7 +11,9 @@ from ..deps import current_user
 
 router = APIRouter()
 
-IDENTITIES = ["Woman", "Man", "Non-binary", profile.PREFER_NOT]
+# There is no gender question: nothing used the answer. A stored "identity" from before is
+# never read, and finishing the intro again replaces the whole profile without it. A client
+# that still sends one has it dropped (pydantic ignores extra fields).
 AGE_RANGES = ["Under 18", "18 to 24", "25 to 34", "35 to 44", "45 to 54", "55 or older", profile.PREFER_NOT]
 ETHNICITIES = ["Asian", "Black or African", "Hispanic or Latino", "Middle Eastern or North African",
                "Native American or Alaska Native", "Pacific Islander", "White", "Another background",
@@ -21,7 +23,6 @@ HOBBY_IDEAS = ["Cooking", "Running", "Gym", "Yoga", "Hiking", "Photography", "Re
 
 
 class Profile(BaseModel):
-    identity: str | None = Field(default=None, max_length=40)
     age_range: str | None = Field(default=None, max_length=40)
     ethnicity: list[str] = Field(default_factory=list, max_length=9)
     interests: list[str] = Field(default_factory=list, max_length=40)
@@ -48,7 +49,6 @@ def _tags(values: list[str], limit: int) -> list[str]:
 
 def clean_profile(p: Profile) -> dict:
     return {
-        "identity": p.identity if p.identity in IDENTITIES else None,
         "age_range": p.age_range if p.age_range in AGE_RANGES else None,
         "ethnicity": [e for e in ETHNICITIES if e in p.ethnicity],
         "interests": _tags(p.interests, 40),
@@ -64,7 +64,7 @@ def starter_view(starters: dict[str, list[str]]) -> list[dict]:
 
 @router.get("/api/onboarding/options")
 def options() -> dict:
-    return {"identities": IDENTITIES, "age_ranges": AGE_RANGES, "ethnicities": ETHNICITIES,
+    return {"age_ranges": AGE_RANGES, "ethnicities": ETHNICITIES,
             "interests": profile.INTERESTS, "hobbies": HOBBY_IDEAS}
 
 

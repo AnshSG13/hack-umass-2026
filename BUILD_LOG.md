@@ -305,6 +305,12 @@ The owner's calls: a saved recipe is opened when someone wants to cook it, so it
 ## 2026-11-14: interests and hobbies are the folders
 - **Owner asked for it directly:** "i want each of the interest or hobbies to just be used as created categories". Starters are no longer invented by Gemini; each interest and hobby is kept as written and Gemini only picks its type. One that fits no type is left out. Checked live: Baking > Food, Travel > Places, Broadway musicals and Comedy > Events, Strength training and Pickleball > Fitness.
 
+## 2026-11-14: intro asks what you like first; no gender question
+- **Gender question removed.** Nothing read the answer: `profile.taste_lines` (the only profile text sent to Gemini) skips it, and no server or web code read `profile.identity`. Asking something personal before the app shows any value makes people quit, so it went, server and client. An `identity` stored earlier is never read and is dropped the next time the intro is finished; a client that still sends one has it ignored.
+- **New order:** interests, hobbies (they become the folders), then "A bit about you": age range (optional, feeds the planner's "ABOUT THE USER" line) and ethnicity (optional, stored only, the screen says it isn't used). The progress bar follows the step list.
+- **Only new accounts are sent to the intro:** not onboarded, not demo, and no saves yet (`me.counts.saves === 0` in `web/components/shell.tsx`). Accounts that already have saves keep using the app; Settings still has "Redo the intro".
+- Checked at 390 px on a throwaway account (deleted afterwards): /home sends it to /welcome, each of the 4 steps renders, and a demo key opening /home stays on /home.
+
 ## 2026-11-14: intro screens and starter sub-categories
 
 The user asked for intro pages like a video app's onboarding (how you identify, age, ethnicity, hobbies, skills, interests) and for categories the model makes, with a new one whenever a saved reel fits none. Decisions:
