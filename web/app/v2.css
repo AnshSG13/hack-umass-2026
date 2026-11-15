@@ -2535,188 +2535,180 @@ article.panel {
   padding-bottom: 76px;
 }
 
-/* ---------- Ready for you filter: every chip shows, wrapping to a second line ---------- */
+/* ---------- Ready for you filter: one line if it can be ----------
+   The row tries each size in turn (home/page.tsx measures it) and only wraps when even the
+   tight one doesn't fit. */
 .rfilter {
   flex-wrap: wrap;
   overflow: visible;
 }
-
-/* ---------- My collection: a taste is a card with a real preview of its reels ---------- */
-.tcards {
-  margin-top: 14px;
-  display: grid;
-  gap: 14px;
-}
-.tcard {
-  display: block;
-  padding: 8px 8px 16px;
-  border-radius: 26px;
-  background: var(--p);
-  color: var(--d);
-  transition: transform 0.25s var(--ease);
-}
-.tcard:active {
-  transform: scale(0.985);
-}
-.tcard-media {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.rfilter[data-fit="snug"] {
   gap: 6px;
 }
-.tcard-media[data-n="2"] {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.tcard-media[data-n="1"],
-.tcard-media[data-n="0"] {
-  grid-template-columns: minmax(0, 1fr);
-}
-.tcard-shot {
-  position: relative;
-  display: block;
-  aspect-ratio: 4 / 5;
-  border-radius: 18px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.55);
-}
-.tcard-media[data-n="2"] .tcard-shot {
-  aspect-ratio: 6 / 5;
-}
-.tcard-media[data-n="1"] .tcard-shot {
-  aspect-ratio: 12 / 5;
-}
-.tcard-shot img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s var(--ease);
-}
-@media (hover: hover) {
-  .tcard:hover .tcard-shot img {
-    transform: scale(1.04);
-  }
-}
-.tcard-more {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(24, 24, 30, 0.46);
-  color: #ffffff;
-  font-family: var(--display);
-  font-size: 28px;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.tcard-ph {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 12 / 5;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.55);
-}
-.tcard-ph .i {
-  width: 34px;
+.rfilter[data-fit="snug"] .rchip {
   height: 34px;
-  opacity: 0.8;
+  padding: 0 11px 0 9px;
+  gap: 5px;
+  font-size: 13px;
 }
-.tcard-body {
-  display: block;
-  padding: 14px 8px 0;
+.rfilter[data-fit="snug"] .rchip.is-all {
+  padding-left: 11px;
 }
-.tcard-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.rfilter[data-fit="snug"] .rchip .i {
+  width: 15px;
+  height: 15px;
+}
+.rfilter[data-fit="tight"] {
+  gap: 5px;
+}
+.rfilter[data-fit="tight"] .rchip {
+  height: 32px;
+  padding: 0 9px 0 7px;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.rfilter[data-fit="tight"] .rchip.is-all {
+  padding-left: 9px;
+}
+.rfilter[data-fit="tight"] .rchip .i {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Home rails: four at a time, two on top and two underneath, sliding a page of
+   four (with a sliver of the next page showing) ---------- */
+.rail-2x2 {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-columns: calc((100% - 12px - 26px) / 2);
+  gap: 14px 12px;
+  scroll-snap-type: x mandatory;
+}
+.rail-2x2 > * {
+  scroll-snap-align: none;
+}
+.rail-2x2 > :nth-child(4n + 1) {
+  scroll-snap-align: start;
+}
+.rail-2x2 .tile {
+  width: auto;
   min-width: 0;
 }
-.tcard-ico {
-  width: 32px;
-  height: 32px;
+.rail-2x2 .tile-media {
+  aspect-ratio: 4 / 5;
+}
+.rail-2x2 .acard {
+  width: auto;
+  min-width: 0;
+  padding: 12px 12px 10px;
+  border-radius: 22px;
+}
+.rail-2x2 .acard-top {
+  min-height: 46px;
+  gap: 6px;
+}
+.rail-2x2 .acard-chip {
+  min-width: 0;
+  height: 26px;
+  padding: 0 9px 0 7px;
+  gap: 4px;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail-2x2 .acard-chip .i {
   flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.75);
+  width: 13px;
+  height: 13px;
 }
-.tcard-ico .i {
-  width: 17px;
-  height: 17px;
+.rail-2x2 .acard-prints {
+  padding-left: 12px;
 }
-.tcard-name {
+.rail-2x2 .acard-prints img {
+  width: 30px;
+  height: 40px;
+  margin-left: -12px;
+  border-radius: 8px;
+}
+/* Two prints at most in the narrow pass */
+.rail-2x2 .acard-prints img:nth-child(3) {
+  display: none;
+}
+.rail-2x2 .acard-cta {
+  margin-top: 8px;
+  font-size: 17px;
+}
+.rail-2x2 .acard-meta {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.rail-2x2 .acard-go {
+  height: 36px;
+  gap: 3px;
+  padding: 0 6px 0 10px;
+  font-size: 12px;
+}
+.rail-2x2 .acard-go .i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.acard-go-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--display);
-  font-size: 26px;
-  line-height: 1.15;
-  letter-spacing: -0.012em;
-  color: var(--ink);
 }
-.tcard-new {
+
+/* ---------- My collection tastes: the original tiles with bigger prints that never cover
+   the icon. Sized from the tile's own width. ---------- */
+.taste {
+  container-type: inline-size;
+}
+/* small tiles: the icon on top, the prints on their own row under it, then the name */
+.taste-top {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.taste-top > .i {
   flex: none;
-  height: 22px;
-  padding: 0 8px;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--d);
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
-.tcard-go {
-  flex: none;
-  margin-left: auto;
-  width: 20px;
-  height: 20px;
-  opacity: 0.75;
+.taste .stack {
+  align-self: stretch;
+  justify-content: flex-end;
+  padding: 0 3px;
 }
-.tcard-stats {
-  display: block;
-  margin-top: 4px;
-  padding-left: 42px;
-  font-size: 13.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.tcard-subs {
-  margin-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.tcard-subs span {
-  height: 30px;
-  padding: 0 11px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
-  color: var(--ink-2);
-  font-size: 13px;
-  font-weight: 600;
-}
-.tcard-subs b {
-  font-weight: 600;
-  color: var(--d);
-  font-variant-numeric: tabular-nums;
-}
-.tcard-subs .is-more {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
-  color: var(--d);
-}
-.tcard.is-loading {
-  background: var(--surface);
-}
-.tcard.is-loading .tcard-shot {
-  margin: 0;
+.taste .stack img {
+  width: min(58px, calc((100cqi - 6px + 24px) / 3));
   height: auto;
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
+  margin-left: 0;
+}
+.taste .stack img + img {
+  margin-left: -12px;
+}
+/* the wide tile: the fan beside the name; a long name sends the fan above it, never over it */
+.taste-wide .taste-row {
+  flex-wrap: wrap-reverse;
+  align-items: flex-start;
+  row-gap: 14px;
+}
+.taste-wide .taste-text {
+  flex: 1 0 auto;
+  max-width: 100%;
+}
+.taste-wide .fan {
+  margin-left: auto;
+}
+.taste-wide .fan img {
+  width: 76px;
+  height: 100px;
+  margin-left: -20px;
+}
+.taste-wide .fan {
+  padding-left: 20px;
 }
 
 /* ---------- Task completion: action mode's done bar, the done chip ---------- */
@@ -2914,8 +2906,7 @@ article.panel {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .donebar-check,
-  .tcard-shot img {
+  .donebar-check {
     animation: none;
     transition: none;
   }

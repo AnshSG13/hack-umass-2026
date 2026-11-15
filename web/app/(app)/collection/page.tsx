@@ -1,7 +1,7 @@
 "use client";
 
-// My collection: everything saved, by taste. Each taste is a card with a real preview of its
-// newest reels, how many there are, how many are new and done, and its subcategories. Search
+// My collection: everything saved, by taste. Each taste is a tile with prints of its newest
+// reels, how many there are (new and done), and for the largest its subcategories. Search
 // and the just-vibes "Remember this" live here too. Everything on it comes from the API.
 
 import { useState } from "react";
@@ -14,85 +14,81 @@ import { plural } from "@/lib/format";
 import { KINDS, tint } from "@/lib/kinds";
 import type { RememberItem, Taste, TastesResponse } from "@/lib/types";
 
-const SUBS_SHOWN = 5;
-
 function sentence(tag: string): string {
   return tag ? tag[0].toUpperCase() + tag.slice(1) : tag;
 }
 
-/** One taste: up to three of its newest covers, then its name, numbers and subcategories. */
-function TasteCard({ taste }: { taste: Taste }) {
+function Thumbs({ urls, className }: { urls: string[]; className: string }) {
+  if (urls.length === 0) return null;
+  return (
+    <span className={className} aria-hidden="true">
+      {urls.slice(0, 3).map((u) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={u} src={u} alt="" loading="lazy" />
+      ))}
+    </span>
+  );
+}
+
+/** The largest taste is wide (its prints fanned beside the name, then its subcategories);
+ *  the rest sit two by two (the icon, its prints underneath, then the name). */
+function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
-  const thumbs = taste.thumbs.slice(0, 3);
-  const more = Math.max(0, taste.count - thumbs.length);
-  // Subcategories when the taste has them, else its most used tags.
-  const subs = (taste.subcategories ?? []).length
-    ? taste.subcategories.map((s) => ({ name: s.name, count: s.count }))
-    : taste.tags.map((t) => ({ name: sentence(t.tag), count: t.count }));
-  const extra = Math.max(0, subs.length - SUBS_SHOWN);
-  const stats = [plural(taste.count, "save", "saves"), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
+  const count = [plural(taste.count, "save", "saves"), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
+  const href = `/t/${taste.type}`;
+  const fresh = taste.new > 0 ? (
+    <span className="taste-new" aria-label={`${taste.new} new`}>
+      {taste.new > 9 ? "9+" : taste.new}
+    </span>
+  ) : null;
 
-  return (
-    <Link
-      href={`/t/${taste.type}`}
-      className="tcard"
-      style={tint(kind.color)}
-      aria-label={`${label}: ${stats}${taste.new > 0 ? `, ${taste.new} new` : ""}`}
-    >
-      <span className="tcard-media" data-n={thumbs.length} aria-hidden="true">
-        {thumbs.length === 0 ? (
-          <span className="tcard-ph">
+  if (wide) {
+    return (
+      <Link href={href} className="taste taste-wide" style={tint(kind.color)}>
+        {fresh}
+        <span className="taste-row">
+          <span className="taste-text">
             <Icon name={kind.icon} />
+            <span className="taste-name">{label}</span>
+            <span className="taste-count">{count}</span>
           </span>
-        ) : (
-          thumbs.map((u, i) => (
-            <span key={u} className="tcard-shot">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" loading="lazy" />
-              {more > 0 && i === thumbs.length - 1 && <span className="tcard-more">+{more}</span>}
-            </span>
-          ))
-        )}
-      </span>
-      <span className="tcard-body" aria-hidden="true">
-        <span className="tcard-head">
-          <span className="tcard-ico">
-            <Icon name={kind.icon} />
-          </span>
-          <span className="tcard-name">{label}</span>
-          {taste.new > 0 && <span className="tcard-new">{taste.new > 9 ? "9+" : taste.new} new</span>}
-          <Icon name="right" className="tcard-go" />
+          <Thumbs urls={taste.thumbs} className="fan" />
         </span>
-        <span className="tcard-stats">{stats}</span>
-        {subs.length > 0 && (
-          <span className="tcard-subs">
-            {subs.slice(0, SUBS_SHOWN).map((s) => (
+        {(taste.subcategories ?? []).length > 0 ? (
+          <span className="subs">
+            {(taste.subcategories ?? []).slice(0, 4).map((s) => (
               <span key={s.name}>
                 {s.name} <b>{s.count}</b>
               </span>
             ))}
-            {extra > 0 && <span className="is-more">{extra} more</span>}
           </span>
+        ) : (
+          taste.tags.length > 0 && (
+            <span className="subs">
+              {taste.tags.map((t) => (
+                <span key={t.tag}>
+                  {sentence(t.tag)} <b>{t.count}</b>
+                </span>
+              ))}
+            </span>
+          )
         )}
+      </Link>
+    );
+  }
+  return (
+    <Link href={href} className="taste" style={tint(kind.color)}>
+      {fresh}
+      <span className="taste-top">
+        <Icon name={kind.icon} />
+        <Thumbs urls={taste.thumbs} className="stack" />
+      </span>
+      <span>
+        <span className="taste-name">{label}</span>
+        <span className="taste-count">{count}</span>
       </span>
     </Link>
-  );
-}
-
-function TasteCardPlaceholder() {
-  return (
-    <span className="tcard is-loading" aria-hidden="true">
-      <span className="tcard-media" data-n={3}>
-        <span className="tcard-shot skel" />
-        <span className="tcard-shot skel" />
-        <span className="tcard-shot skel" />
-      </span>
-      <span className="tcard-body">
-        <span className="skel" style={{ height: 24, width: "45%" }} />
-        <span className="skel" style={{ height: 14, width: "30%", marginTop: 8 }} />
-      </span>
-    </span>
   );
 }
 
@@ -207,18 +203,19 @@ export default function CollectionPage() {
                 </button>
               </div>
             ) : (
-              <div className="tcards">
+              <div className="tastes">
                 {!data && (
                   <>
                     <span className="vh" role="status">
                       Loading your tastes
                     </span>
-                    <TasteCardPlaceholder />
-                    <TasteCardPlaceholder />
+                    <span className="skel taste-wide" style={{ height: 196, borderRadius: 24, marginTop: 0 }} />
+                    <span className="skel" style={{ height: 196, borderRadius: 24, marginTop: 0 }} />
+                    <span className="skel" style={{ height: 196, borderRadius: 24, marginTop: 0 }} />
                   </>
                 )}
-                {tastes.map((t) => (
-                  <TasteCard key={t.type} taste={t} />
+                {tastes.map((t, i) => (
+                  <TasteTile key={t.type} taste={t} wide={i === 0} />
                 ))}
               </div>
             )}

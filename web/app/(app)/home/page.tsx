@@ -4,7 +4,7 @@
 // saves, and what you've completed. Tastes, search and "Remember this" are in My collection.
 // Everything on it comes from the API.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
@@ -40,8 +40,30 @@ function ReadyFilter({
 }) {
   const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
   const kinds = KIND_ORDER.filter((k) => counts.has(k));
+  // One line if it can be: the chips get smaller step by step until they fit, and only wrap
+  // when even the smallest don't. Measured, so it holds for any labels and screen width.
+  const row = useRef<HTMLDivElement>(null);
+  const signature = kinds.map((k) => `${k}${counts.get(k)}`).join(",");
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const fit = () => {
+      const oneLine = () => {
+        const chips = el.children;
+        return chips.length < 2 || (chips[chips.length - 1] as HTMLElement).offsetTop === (chips[0] as HTMLElement).offsetTop;
+      };
+      for (const size of ["roomy", "snug", "tight"]) {
+        el.dataset.fit = size;
+        if (oneLine()) return;
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [signature]);
   return (
-    <div className="rfilter" role="group" aria-label="Show actions for">
+    <div className="rfilter" role="group" aria-label="Show actions for" ref={row} data-fit="roomy">
       <button type="button" className="rchip is-all" aria-pressed={value === null} onClick={() => onChange(null)}>
         All <b>{total}</b>
       </button>
@@ -176,7 +198,7 @@ export default function HomePage() {
           <p className="vh" aria-live="polite">
             {kindShown ? `Showing ${shownBundles.length + shownActions.length} ${KINDS[kindShown].label} actions` : ""}
           </p>
-          <div className="rail rail-gallery" ref={readyRail} key={kindShown ?? "all"}>
+          <div className="rail rail-gallery rail-2x2" ref={readyRail} key={kindShown ?? "all"}>
             {shownBundles.map((b) => (
               <ReadyTile key={b.id} bundle={b} />
             ))}
@@ -225,12 +247,13 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <div className="rail" ref={railRef}>
+            <div className="rail rail-2x2" ref={railRef}>
               {fresh.map((f) => (
                 <LiveReelTile key={f.save_id} saveId={f.save_id} initial={f.ticket} now={now} />
               ))}
               {!loaded && fresh.length === 0 && (
                 <>
+                  <TilePlaceholder />
                   <TilePlaceholder />
                   <TilePlaceholder />
                   <TilePlaceholder />

@@ -150,7 +150,7 @@ function ActionPass({
       <span className="acard-cta">{cta}</span>
       <span className="acard-meta">{meta}</span>
       <span className="acard-go" aria-hidden="true">
-        {button}
+        <span className="acard-go-text">{button}</span>
         <Icon name="right" />
       </span>
     </Link>
