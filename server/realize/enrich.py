@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 
-from . import actions, db, gemini, planner, planops, search, subcats
+from . import actions, categories, db, gemini, planner, planops, search, subcats
 from .config import get_settings
 from .models import ENRICH_SCHEMA, TYPES, clean_fields
 from .runs import Run
@@ -89,7 +89,7 @@ def analyze_video(path: str, caption: str, existing: str = "") -> tuple[dict, st
             role="video",
             input=[{"type": "video", "uri": f.uri, "mime_type": f.mime_type or "video/mp4"},
                    {"type": "text", "text": PROMPT.format(
-                       caption=(caption or "")[:3000], subcategory_guide=subcats.GUIDE,
+                       caption=(caption or "")[:3000], subcategory_guide=f"{subcats.GUIDE}\n{categories.GUIDE}",
                        existing=existing or "EXISTING SUB-CATEGORIES: none yet")}],
             schema=ENRICH_SCHEMA, timeout_s=180, thinking="low", retries=2)
     except Exception:
@@ -117,6 +117,8 @@ def merge_fields(save: dict, result: dict, grounded: dict) -> dict:
         "language": result.get("language") or "en",
         "subcategory": subcats.clean(result.get("subcategory")) or (
             save.get("subcategory") if kind == save.get("type") else None),
+        # Only a reel of type other has a category; the fixed kinds are their own top level.
+        "category": (categories.clean(result.get("category")) or save.get("category")) if kind == "other" else None,
     }
     edited = set(save.get("user_edited") or [])
     return {k: v for k, v in update.items() if k not in edited}
@@ -183,6 +185,8 @@ def run_enrich_job(save: dict, user: dict) -> None:
         if update.get("subcategory"):
             update["subcategory"] = subcats.snap(
                 update["subcategory"], subcats.existing(save["user_id"], update.get("type", save.get("type"))))
+        if update.get("category"):
+            update["category"] = categories.snap(update["category"], categories.existing(save["user_id"]))
         actions.fix_event_year(update.get("fields"), save.get("posted_at"))
         if duration and not save.get("duration_sec"):
             update["duration_sec"] = duration

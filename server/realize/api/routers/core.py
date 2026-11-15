@@ -7,11 +7,11 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import (accounts, ask, board, db, demo, discuss, intent, jobs, planops, ratelimit, search, subcats, thumbs,
+from ... import (accounts, ask, board, categories, db, demo, discuss, intent, jobs, planops, ratelimit, search, thumbs,
                  tickets, visits)
 from ...config import get_settings
 from ...models import (
-    ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
+    ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TYPES,
 )
 from ...timeutil import as_utc, now_utc, tz_of, valid_tz
 from ..deps import client_ip, current_user, optional_user
@@ -121,7 +121,8 @@ def new_key(user: dict = Depends(current_user)) -> dict:
 def tastes(user: dict = Depends(current_user)) -> dict:
     """Home's "Your tastes": one entry per type the user has saved, largest first, with
     the three newest thumbnails, the three most used tags, and how many are new since the
-    last visit. Also the greeting's recap. Counted in code."""
+    last visit. A reel in a custom category (categories.py) counts toward that category's
+    own entry, not "Just vibes". Also the greeting's recap. Counted in code."""
     by_type: dict[str, dict] = {}
     total = 0
     prev = visits.touch(user)
@@ -131,11 +132,13 @@ def tastes(user: dict = Depends(current_user)) -> dict:
     this_week: dict[str, int] = {}
     done_ids = {p["save_id"] for p in db.plans().find({"user_id": user["_id"], "status": "done"}, {"save_id": 1})}
     done: dict[str, int] = {}
+    recap_new: dict[str, int] = {}
+    recap_week: dict[str, int] = {}
     cursor = db.saves().find({"user_id": user["_id"]},
-                             {"type": 1, "thumb_id": 1, "tags": 1, "created_at": 1}).sort("created_at", -1)
+                             {"type": 1, "category": 1, "thumb_id": 1, "tags": 1, "created_at": 1}).sort("created_at", -1)
     for s in cursor:
         total += 1
-        t = s.get("type") if s.get("type") in TYPES else None
+        t = categories.group(s)
         if t is None:
             continue  # still being read; it has no type yet
         e = by_type.setdefault(t, {"count": 0, "thumbs": [], "tags": {}})
@@ -143,39 +146,46 @@ def tastes(user: dict = Depends(current_user)) -> dict:
         if s["_id"] in done_ids:
             done[t] = done.get(t, 0) + 1
         made = as_utc(s["created_at"])
-        line = visits.new_line(prev, seen.get(t))
+        line = visits.new_line(prev, seen.get(categories.seen_key(t)))
         if made > line:
             new_since[t] = new_since.get(t, 0) + 1
+            recap_new[s["type"]] = recap_new.get(s["type"], 0) + 1
         if made > week_ago:
             this_week[t] = this_week.get(t, 0) + 1
+            recap_week[s["type"]] = recap_week.get(s["type"], 0) + 1
         if s.get("thumb_id") and len(e["thumbs"]) < 3:
             e["thumbs"].append(f"/api/t/{s['thumb_id']}")
         for tag in {str(x).strip().lower().lstrip("#") for x in (s.get("tags") or []) if str(x).strip()}:
             e["tags"][tag] = e["tags"].get(tag, 0) + 1
-    subs = subcats.counts(user["_id"])
+    subs = categories.sub_counts(user["_id"])
     out = []
-    for t in sorted(by_type, key=lambda k: (-by_type[k]["count"], TYPES.index(k))):
+    order = lambda k: (-by_type[k]["count"], TYPES.index(categories.split(k)[0]), k)  # noqa: E731
+    for t in sorted(by_type, key=order):
         e = by_type[t]
         top = sorted(e["tags"].items(), key=lambda kv: (-kv[1], kv[0]))[:3]
-        out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
+        base, cat = categories.split(t)
+        out.append({"type": base, "category": cat, "key": t, "label": categories.label(t),
+                    "count": e["count"], "thumbs": e["thumbs"],
                     "tags": [{"tag": k, "count": n} for k, n in top],
                     "subcategories": subs.get(t, []), "new": new_since.get(t, 0),
                     "done": done.get(t, 0)})
     # The greeting says what was sorted for them: since last time if anything is new,
     # otherwise over the past week.
-    fresh = visits.recap_parts({k: v for k, v in new_since.items()})
-    parts, window = (fresh, "new") if fresh else (visits.recap_parts(this_week), "week")
+    fresh = visits.recap_parts(recap_new)
+    parts, window = (fresh, "new") if fresh else (visits.recap_parts(recap_week), "week")
     return {"total": total, "tastes": out, "done": sum(done.values()),
             "recap": {"window": window, "parts": parts, "text": visits.join_words(parts)} if parts else None}
 
 
 @router.get("/api/tastes/{type}")
-def taste_board(type: str, user: dict = Depends(current_user)) -> dict:
-    """One taste as a board: its saves as cards, and the tags that filter them."""
+def taste_board(type: str, category: str | None = None, user: dict = Depends(current_user)) -> dict:
+    """One taste as a board: its saves as cards, and the tags that filter them. For a custom
+    category, type is "other" and category names it."""
     if type not in TYPES:
         raise HTTPException(status_code=404, detail="That taste doesn't exist.")
-    visits.mark_taste_seen(user, type)
-    return board.board(user, type)
+    group = f"other:{category}" if type == "other" and category else type
+    visits.mark_taste_seen(user, categories.seen_key(group))
+    return board.board(user, group)
 
 
 @router.get("/api/search")

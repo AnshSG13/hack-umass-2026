@@ -7,8 +7,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from . import db
-from .models import TASTE_LABELS
+from . import categories, db
 from .timeutil import as_utc, now_utc
 
 MAX_ITEMS = 80
@@ -104,9 +103,11 @@ def top_tags(tag_lists: list[list[str]]) -> list[dict]:
     return [{"tag": k, "count": v} for k, v in ranked[:MAX_TAGS]]
 
 
-def board(user: dict, type_: str) -> dict:
+def board(user: dict, group: str) -> dict:
+    """group: a type, or "other:<category>" for a custom category (categories.py)."""
+    type_, cat = categories.split(group)
     cursor = db.saves().find(
-        {"user_id": user["_id"], "type": type_},
+        {"user_id": user["_id"], **categories.query(group)},
         {"title": 1, "type": 1, "fields": 1, "tags": 1, "note": 1, "thumb_id": 1, "creator": 1,
          "created_at": 1, "status": 1},
     ).sort("created_at", -1).limit(MAX_ITEMS)
@@ -122,5 +123,5 @@ def board(user: dict, type_: str) -> dict:
             "has_note": bool((s.get("note") or "").strip()),
             "is_new": as_utc(s["created_at"]) >= fresh_after,
         })
-    return {"type": type_, "label": TASTE_LABELS[type_], "count": len(items),
+    return {"type": type_, "category": cat, "label": categories.label(group), "count": len(items),
             "tags": top_tags(tag_lists), "items": items}

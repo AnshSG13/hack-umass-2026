@@ -4,9 +4,9 @@
 // card is the reel's thumbnail, a short title and one quiet line of facts. The chips on
 // top are the tags these saves share; tapping one narrows the board.
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { Fan, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
@@ -63,10 +63,25 @@ function Pin({ item, type }: { item: BoardItem; type: SaveType }) {
 }
 
 export default function TasteBoardPage() {
+  // useSearchParams needs a Suspense boundary.
+  return (
+    <Suspense fallback={null}>
+      <TasteBoard />
+    </Suspense>
+  );
+}
+
+function TasteBoard() {
   const params = useParams<{ type: string }>();
   const type = (KIND_ORDER as string[]).includes(params.type) ? (params.type as SaveType) : null;
+  // A custom category's board: /t/other?category=Pets (categories.py on the server).
+  const search = useSearchParams();
+  const category = type === "other" ? search.get("category") || null : null;
   const { openAdd } = useApp();
-  const { data, error, isLoading, mutate } = useSWR<Board>(type ? `/api/tastes/${type}` : null, fetcher);
+  const { data, error, isLoading, mutate } = useSWR<Board>(
+    type ? `/api/tastes/${type}${category ? `?category=${encodeURIComponent(category)}` : ""}` : null,
+    fetcher,
+  );
   const [tag, setTag] = useState<string | null>(null);
   const bundles = useBundles(Boolean(type));
   const ready = bundles.data?.ready.find((b) => b.type === type);

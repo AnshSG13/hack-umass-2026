@@ -3282,6 +3282,12 @@ button.note {
     animation: none;
   }
 }
+/* a quiet line under a heading inside a sheet */
+.sheet-note {
+  margin: -6px 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
 .kg-hint {
   margin-top: 16px;
   font-size: 14.5px;

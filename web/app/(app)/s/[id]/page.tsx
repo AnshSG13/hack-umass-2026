@@ -35,7 +35,7 @@ import {
   ticketTitle,
 } from "@/lib/format";
 import { useConfig, useRefresh, useSaveDetail } from "@/lib/hooks";
-import { KIND_ORDER, kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
+import { groupLabel, KIND_ORDER, kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
 import type { Deliver, Fields, Ingredient, SaveDetail, SavePatch, SaveType, TastesResponse, Ticket } from "@/lib/types";
 
 function errorText(e: unknown, fallback: string): string {
@@ -169,6 +169,8 @@ export default function ReelPage() {
   const [sheet, setSheet] = useState<"cat" | "more" | "delete" | "grocery" | null>(null);
   const [newSub, setNewSub] = useState("");
   const newSubId = useId();
+  const [newCat, setNewCat] = useState("");
+  const newCatId = useId();
   // The sub-categories this account already uses, offered first in the File under sheet.
   const tastes = useSWR<TastesResponse>(sheet === "cat" ? "/api/tastes" : null, fetcher);
   const [busy, setBusy] = useState(false);
@@ -261,7 +263,7 @@ export default function ReelPage() {
       toast.show("It couldn't be watched again. Where it's filed didn't change.");
       return;
     }
-    const where = [kindOf(t.type)?.label, t.subcategory].filter(Boolean).join(" › ");
+    const where = [groupLabel(t.type, t.category), t.subcategory].filter(Boolean).join(" › ");
     const moved = t.type !== before.type || (t.subcategory ?? null) !== before.sub;
     toast.show(moved ? `Re-sorted under ${where}` : `Read again. Still under ${where}`);
   }, [data, id, refresh, toast]);
@@ -338,6 +340,9 @@ export default function ReelPage() {
   const fields = details.fields ?? {};
   const type = ticket.type;
   const kind = kindOf(type);
+  // What it is filed under at the top: its custom category ("Pets") or its kind's name.
+  const top = groupLabel(type, ticket.category);
+  const groupKey = type === "other" && ticket.category ? `other:${ticket.category}` : type;
   const title = ticketTitle(ticket);
   const reading = inFlight(ticket.processing);
   const enriching = ticket.processing === "enriching" || ticket.processing === "planned";
@@ -389,6 +394,7 @@ export default function ReelPage() {
 
   async function fileUnder(next: SaveType) {
     if (next === type) {
+      if (next === "other" && ticket.category) return fileCategory("");
       setSheet(null);
       return;
     }
@@ -403,6 +409,36 @@ export default function ReelPage() {
     setServings(null);
     setSheet(null);
     toast.show(`Moved to ${KINDS[next].label}`);
+  }
+
+  // A custom category ("Pets") for a reel that fits none of the kinds: an existing one, a
+  // new one typed in the sheet, or "" to take it back to Just vibes. The server tidies the
+  // name and reuses a matching one, so the toast names what was saved.
+  async function fileCategory(next: string) {
+    const clean = next.trim();
+    if (type === "other" && clean === (ticket.category ?? "")) {
+      setSheet(null);
+      return;
+    }
+    setBusy(true);
+    setCatError(null);
+    let saved: string | null = null;
+    try {
+      const body: SavePatch = clean ? { category: clean } : { type: "other", category: "" };
+      const res = await api<SaveDetail>(`/api/saves/${id}`, { method: "PATCH", body });
+      await mutate(res, { revalidate: false });
+      refresh();
+      saved = res.ticket.category ?? null;
+    } catch (e) {
+      setCatError(errorText(e, "That didn't save. Try again."));
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    setNewCat("");
+    setServings(null);
+    setSheet(null);
+    toast.show(`Filed under ${saved ?? KINDS.other.label}`);
   }
 
   async function fileSub(next: string) {
@@ -429,7 +465,7 @@ export default function ReelPage() {
     setBusy(false);
     setNewSub("");
     setSheet(null);
-    toast.show(saved ? `Filed under ${kind?.label ?? "this kind"} › ${saved}` : "Sub-category removed");
+    toast.show(saved ? `Filed under ${top ?? "this kind"} › ${saved}` : "Sub-category removed");
   }
 
   async function planAgain() {
@@ -508,7 +544,7 @@ export default function ReelPage() {
               className="chip-cat"
               style={tint(kind.color)}
               aria-haspopup="dialog"
-              aria-label={`Filed under ${kind.label}${ticket.subcategory ? ` › ${ticket.subcategory}` : ""}. Change`}
+              aria-label={`Filed under ${top}${ticket.subcategory ? ` › ${ticket.subcategory}` : ""}. Change`}
               disabled={reading}
               onClick={() => {
                 setCatError(null);
@@ -517,7 +553,7 @@ export default function ReelPage() {
             >
               <Icon name={kind.icon} />
               <span>
-                {kind.label}
+                {top}
                 {ticket.subcategory && ` › ${ticket.subcategory}`}
               </span>
               <Icon name="down" />
@@ -712,7 +748,7 @@ export default function ReelPage() {
                   <button
                     type="button"
                     className="opt"
-                    aria-pressed={t === type}
+                    aria-pressed={t === type && !(t === "other" && ticket.category)}
                     disabled={busy}
                     onClick={() => void fileUnder(t)}
                   >
@@ -726,13 +762,61 @@ export default function ReelPage() {
               );
             })}
           </ul>
+          <h3 className="sheet-title" style={{ marginTop: 18, minHeight: 44, display: "flex", alignItems: "center" }}>
+            Your own categories
+          </h3>
+          <p className="sheet-note">For reels that fit none of the kinds above.</p>
+          <ul className="opts">
+            {(tastes.data?.tastes ?? [])
+              .filter((t) => t.category)
+              .map((t) => (
+                <li key={t.key ?? t.category}>
+                  <button
+                    type="button"
+                    className="opt"
+                    aria-pressed={type === "other" && ticket.category === t.category}
+                    disabled={busy}
+                    onClick={() => void fileCategory(t.category ?? "")}
+                  >
+                    <span className="opt-ico" style={tint(KINDS.other.color)}>
+                      <Icon name={KINDS.other.icon} />
+                    </span>
+                    <span className="opt-name">{t.category}</span>
+                    <Icon name="check" />
+                  </button>
+                </li>
+              ))}
+          </ul>
+          <form
+            className="name-field"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newCat.trim()) void fileCategory(newCat);
+            }}
+          >
+            <label htmlFor={newCatId} className="vh">
+              New category
+            </label>
+            <input
+              id={newCatId}
+              type="text"
+              maxLength={32}
+              autoComplete="off"
+              placeholder="New category, e.g. Pets"
+              value={newCat}
+              onChange={(e) => setNewCat(e.target.value)}
+            />
+            <button type="submit" className="btn" disabled={busy || !newCat.trim()}>
+              Add
+            </button>
+          </form>
           {kind && type && (
             <>
               <h3 className="sheet-title" style={{ marginTop: 18, minHeight: 44, display: "flex", alignItems: "center" }}>
-                Sub-category in {kind.label}
+                Sub-category in {top}
               </h3>
               <ul className="opts">
-                {(tastes.data?.tastes.find((t) => t.type === type)?.subcategories ?? []).map((s) => (
+                {(tastes.data?.tastes.find((t) => (t.key ?? t.type) === groupKey)?.subcategories ?? []).map((s) => (
                   <li key={s.name}>
                     <button
                       type="button"
@@ -775,7 +859,7 @@ export default function ReelPage() {
                   type="text"
                   maxLength={32}
                   autoComplete="off"
-                  placeholder="New, e.g. Dessert"
+                  placeholder="New sub-category, e.g. Dessert"
                   value={newSub}
                   onChange={(e) => setNewSub(e.target.value)}
                 />

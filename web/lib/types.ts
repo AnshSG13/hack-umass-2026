@@ -89,6 +89,8 @@ export interface Ticket {
   title: string | null;
   type: SaveType | null;
   subcategory: string | null; // "Dessert": groups the save inside its type
+  /** A custom category ("Pets") for a reel that fits none of the fixed kinds (type other). */
+  category?: string | null;
   creator: string | null; // "@chefjohn"
   thumb_url: string | null; // "/api/t/<id>"
   saved_on: string; // "Oct 3"
@@ -183,6 +185,7 @@ export interface SaveDetail {
 // ---- PATCH /api/saves/{id} (answers with the same shape as GET) ----
 export interface SavePatch {
   type?: SaveType;
+  category?: string; // files it under a custom category (type other), new or existing; "" removes it
   subcategory?: string; // "" removes it
   note?: string;
 }
@@ -233,7 +236,10 @@ export interface TripState {
 // ---- GET /api/tastes ----
 export interface Taste {
   type: SaveType;
-  label: string; // "Food", "Fitness"
+  /** Set for a custom category ("Pets"); its type is then "other". */
+  category?: string | null;
+  key?: string; // "recipe", or "other:Pets" for a custom category
+  label: string; // "Food", "Fitness", or the category's name
   count: number;
   thumbs: string[]; // up to 3 "/api/t/<id>"
   tags: { tag: string; count: number }[]; // up to 3
@@ -443,6 +449,7 @@ export interface BoardItem {
 }
 export interface Board {
   type: SaveType;
+  category?: string | null;
   label: string;
   count: number;
   tags: { tag: string; count: number }[]; // the filter chips, at most 6
@@ -581,6 +588,7 @@ export interface GraphNode {
   count?: number; // type and sub nodes
   save_id?: string; // save nodes
   thumb_url?: string | null; // save nodes
+  category?: string; // custom category ("Pets") of a type, sub or save node of type other
 }
 
 export type GraphLinkKind = "has" | "holds" | "related" | "likes";

@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
 
-from ... import accounts, actions, db, demo, jobs, planner, planops, ratelimit, subcats, tickets, urls
+from ... import accounts, actions, categories, db, demo, jobs, planner, planops, ratelimit, subcats, tickets, urls
 from ... import nutrition as nutrition_mod
 from ... import shop, web_nutrition
 from ...config import get_settings
@@ -376,14 +376,26 @@ def get_save(save_id: str, user: dict = Depends(current_user)) -> dict:
 
 @router.patch("/api/saves/{save_id}")
 def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)) -> dict:
-    """File a save under another type, or write a note on it. Returns the save detail."""
+    """File a save under another type or custom category, or write a note on it. Returns
+    the save detail."""
     save = _own_save(save_id, user)
     update: dict = {}
     if body.note is not None:
         update["note"] = body.note.strip()
+    # A category is a group inside type other, so naming one moves the save there.
+    if body.category is not None and body.category.strip() and body.type in (None, "other"):
+        body = body.model_copy(update={"type": "other"})
     retyped = body.type is not None and body.type != save.get("type")
     edited = set(save.get("user_edited") or [])
-    if retyped or body.subcategory is not None:
+    category = None
+    if body.category is not None and body.type in (None, "other"):
+        if body.category.strip():
+            category = categories.resolve(user["_id"], body.category)
+            if not category:
+                raise HTTPException(status_code=400, detail=(
+                    "Use 1 to 3 words, at most 32 characters, and not the name of a kind that's already there."))
+    recategorized = body.category is not None and (category or None) != save.get("category")
+    if retyped or recategorized or body.subcategory is not None:
         if save["status"] in IN_FLIGHT:
             raise HTTPException(status_code=409, detail="This save is still being read. Try again in a moment.")
     if retyped:
@@ -392,6 +404,14 @@ def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)
         edited |= {"type"}
         # A sub-category belongs to its type: moving the save clears it unless one is given.
         if body.subcategory is None:
+            update["subcategory"] = None
+        if body.type != "other":
+            update["category"] = None
+    if recategorized and body.type in (None, "other"):
+        update["category"] = category
+        edited |= {"category"}
+        # Folders live inside a category, so a new category starts without one.
+        if body.subcategory is None and not retyped:
             update["subcategory"] = None
     if body.subcategory is not None:
         kind = body.type or save.get("type")

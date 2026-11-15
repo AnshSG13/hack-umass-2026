@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from . import actions, db, gemini, intent, jobs, planops, search, slots, subcats, thumbs
+from . import actions, categories, db, gemini, intent, jobs, planops, search, slots, subcats, thumbs
 from .config import get_settings
 from .models import PROPOSE_PLAN_SCHEMA, SLOT_KINDS, TYPES, clean_fields
 from .runs import Run
@@ -106,7 +106,8 @@ class PlannerBusy(Exception):
 
 
 def system_prompt() -> str:
-    return SYSTEM_PROMPT.replace("{SUBCATEGORY}", subcats.GUIDE).replace("Reelize", get_settings().app_name)
+    guide = f"{subcats.GUIDE}\n{categories.GUIDE}"
+    return SYSTEM_PROMPT.replace("{SUBCATEGORY}", guide).replace("Reelize", get_settings().app_name)
 
 
 def tool_defs() -> list[dict]:
@@ -272,6 +273,11 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
     if sub and "subcategory" not in edited and not (keep_save_fields and save.get("subcategory")):
         db.saves().update_one({"_id": save["_id"]}, {"$set": {"subcategory": sub}})
         save = {**save, "subcategory": sub}
+    # A reel that fits none of the fixed kinds gets a category of its own (categories.py).
+    cat = categories.resolve(user["_id"], args.get("category")) if kind == "other" else None
+    if cat and "category" not in edited and not (keep_save_fields and save.get("category")):
+        db.saves().update_one({"_id": save["_id"]}, {"$set": {"category": cat}})
+        save = {**save, "category": cat}
 
     if keep_save_fields:
         fields = save.get("fields") or {}

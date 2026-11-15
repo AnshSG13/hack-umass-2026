@@ -133,7 +133,7 @@ export default function GraphPage() {
           )}
           <span className="kg-peek-text">
             <span className="kg-peek-kind">
-              {kind?.label}
+              {node.category ?? kind?.label}
               {folder ? ` · ${byId.get(folder)?.label ?? ""}` : ""}
             </span>
             <span className="kg-peek-title">{node.label}</span>
@@ -158,7 +158,7 @@ export default function GraphPage() {
   function name(id: string): string {
     const n = byId.get(id);
     if (!n) return id;
-    return n.kind === "sub" && n.type ? `${KINDS[n.type].label} › ${n.label}` : n.label;
+    return n.kind === "sub" && n.type ? `${n.category ?? KINDS[n.type].label} › ${n.label}` : n.label;
   }
 
   function details(node: GraphNode) {

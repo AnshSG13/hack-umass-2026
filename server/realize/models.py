@@ -140,8 +140,10 @@ class MePatch(BaseModel):
 
 class SavePatch(BaseModel):
     """What a person can change on a save: where it's filed, and their own note.
-    subcategory "" clears it."""
+    subcategory "" clears it. category files it under a custom category (type other), new
+    or existing; "" takes it out of its category, back to Just vibes."""
     type: Literal["recipe", "event", "place", "workout", "product", "tip", "other"] | None = None
+    category: str | None = Field(default=None, max_length=40)
     subcategory: str | None = Field(default=None, max_length=40)
     note: str | None = Field(default=None, max_length=NOTE_MAX)
 
@@ -310,6 +312,10 @@ PROPOSE_PLAN_SCHEMA: dict = _obj(
         "subcategory": {"type": "string", "description": (
             "1 to 3 words grouping this save inside its type, e.g. Dessert, Thai, Strength, Skincare. "
             "Reuse an existing one for the same type when it fits. Never the title.")},
+        "category": {"type": "string", "description": (
+            "Only when type is other: 1 or 2 words naming the kind of thing this is, broad enough "
+            "for more reels like it (Pets, Fashion, Comedy, Music). Reuse an existing category when "
+            "it fits. Never Food, Events, Places, Fitness, Products or Learning.")},
     },
     ["type", "title", "summary", "caption_sufficient", "actionable", "need", "action", "question", "why",
      "confidence"],
@@ -336,6 +342,10 @@ ENRICH_SCHEMA: dict = _obj(
         "subcategory": {"type": "string", "description": (
             "1 to 3 words grouping this save inside its type, e.g. Dessert, Thai, Strength, Skincare. "
             "Reuse an existing one for the same type when it fits. Never the title.")},
+        "category": {"type": "string", "description": (
+            "Only when type is other: 1 or 2 words naming the kind of thing this is, broad enough "
+            "for more reels like it (Pets, Fashion, Comedy, Music). Reuse an existing category when "
+            "it fits. Never Food, Events, Places, Fitness, Products or Learning.")},
     },
     ["has_speech", "music_only", "language", "transcript", "on_screen_text", "visual_summary",
      "type", "title", "summary", "fields", "entities", "tags"],

@@ -31,7 +31,7 @@ function ReelLine({ ticket }: { ticket: Ticket }) {
     <Link href={`/s/${ticket.save_id}`} className="plan-reel">
       <ReelThumb thumbUrl={ticket.thumb_url} type={ticket.type} small />
       <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-        <KindChip type={ticket.type} />
+        <KindChip type={ticket.type} label={ticket.category ?? undefined} />
         <span className="plan-reel-title">{ticketTitle(ticket)}</span>
       </span>
     </Link>

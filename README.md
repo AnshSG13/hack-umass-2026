@@ -15,7 +15,7 @@ Built at HackUMass XIV.
 Reelize is a web app you add to your iPhone's Home Screen. An iOS Shortcut is an optional extra for saving straight from Instagram's share sheet.
 
 1. **Save.** Copy a reel's link in Instagram, open Reelize, tap Save and paste. No Instagram API and no Instagram login for the user. (With the Shortcut, Share then Reelize sends the link in one step.)
-2. **Plan.** A planner agent reads the caption and thumbnail, works out what the reel is (recipe, event, place, workout, product, tip or just vibes), files it under a sub-category ("Food > Dessert"), looks at your week and proposes one action. It shows up as a ticket.
+2. **Plan.** A planner agent reads the caption and thumbnail, works out what the reel is (recipe, event, place, workout, product, tip or just vibes), files it under a sub-category ("Food > Dessert"), looks at your week and proposes one action. A reel that fits none of the seven kinds gets a category of its own ("Pets", "Comedy") instead of landing in Just vibes, and new sub-categories are made whenever none fits; both reuse your existing names when they mean the same thing. It shows up as a ticket.
 3. **Act.** The action is what the reel is for, not just a reminder: a recipe opens cook mode, a product runs price research, a place or event gets a trip plan, and only a reel tied to a date gets a calendar slot. One tap confirms it. Calendar entries come as "Add to Apple Calendar" (an .ics file with alerts) or "Add to Google Calendar"; the Shortcut path writes a native Calendar event and Reminders instead.
 4. **Watch.** In the background a second pass watches the actual video with Gemini: full transcript with timestamps, on-screen text, ingredients, steps. Facts that aren't in the video or caption are dropped or flagged.
 5. **Find and ask.** Library searches what was said and shown in the video, not just the caption. Ask is a chat over all your saves that streams its answer with source reels and up to two next questions, and you can hold the orb to ask out loud. Every chat is saved and listed on the Ask page.
@@ -31,7 +31,8 @@ What else is in the app:
   - **Reel chat**: a saved chat about that one reel that can search the web when the reel doesn't say (macros, for example) and cites the second of the video it used.
   - **Deliverables**: something finished to send, made from the reel (an itinerary, a grocery list, an invite, a recipe, a workout, a shortlist, key points), as a text message plus a public page that opens without an account.
   - **Reanalyze**, to read a reel again and re-sort it.
-- **Knowledge graph** (`/graph`). How your types, sub-categories, saves and interests connect. Ask uses it to find related saves.
+- **Knowledge graph** (`/graph`). How your types, your own categories, sub-categories, saves and interests connect; it grows as new categories appear. Tap a reel to see its picture and title, double tap to open it. Ask uses the graph to find related saves.
+- **Your own categories.** On any reel, "File under" lists the kinds, your own categories and their sub-categories, with fields to add a new category or sub-category on the spot. Each category gets its own tile in My collection and its own page.
 - **Accounts.** Sign up with email and password, or with a key and no password. An email account can get a Shortcut key in one tap. New accounts get a short intro that asks for interests and hobbies first; each one becomes a starter sub-category.
 - **Demo.** "Try the demo" opens a guided story on prebuilt sample reels, so the first open never waits, then a throwaway account with the samples in it. Demo use is limited to 60 an hour per visitor address.
 

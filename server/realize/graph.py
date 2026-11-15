@@ -1,7 +1,9 @@
 """The knowledge graph: how a person's saves, sub-categories, kinds and interests connect.
 
 Nodes
-  type      a kind of save ("Food"), the top of the hierarchy
+  type      a kind of save ("Food"), the top of the hierarchy. A reel that fits none of the
+            fixed kinds has a custom category ("Pets", categories.py) and that category is a
+            top-level node of its own, so the graph grows with new kinds of reels.
   sub       a sub-category inside a type ("Food > Baking")
   save      one reel
   interest  something the person picked or typed in the intro ("Broadway musicals")
@@ -28,8 +30,7 @@ from typing import Any
 
 import numpy as np
 
-from . import db, gemini
-from .models import TASTE_LABELS
+from . import categories, db, gemini
 
 log = logging.getLogger("realize.graph")
 
@@ -55,8 +56,19 @@ def _unit(v: np.ndarray) -> np.ndarray:
     return v / n if n else v
 
 
-def sub_key(type_: str | None, sub: str | None) -> str | None:
-    return f"{type_}/{sub}" if type_ and sub else None
+def sub_key(group: str | None, sub: str | None) -> str | None:
+    """"recipe/Dessert", or "other:Pets/Dogs" for a folder inside a custom category."""
+    return f"{group}/{sub}" if group and sub else None
+
+
+def save_key(save: dict) -> str | None:
+    return sub_key(categories.group(save), save.get("subcategory"))
+
+
+def key_filter(k: str) -> dict:
+    """The Mongo filter for the saves in one folder key."""
+    group, sub = k.split("/", 1)
+    return {**categories.query(group), "subcategory": sub}
 
 
 # ---------- loading and caching ----------
@@ -65,32 +77,34 @@ def sub_key(type_: str | None, sub: str | None) -> str | None:
 def _signature(user_id: str) -> str:
     """Changes whenever a searchable save is added, removed, re-filed or re-embedded."""
     rows = db.saves().find({"user_id": user_id, "status": {"$in": SEARCHABLE}},
-                           {"type": 1, "subcategory": 1, "embedding_source": 1}).sort("_id", 1)
+                           {"type": 1, "category": 1, "subcategory": 1, "embedding_source": 1}).sort("_id", 1)
     h = hashlib.sha1()
     for r in rows:
-        h.update(f"{r['_id']}|{r.get('type')}|{r.get('subcategory')}|{r.get('embedding_source')};".encode())
+        h.update(f"{r['_id']}|{categories.group(r)}|{r.get('subcategory')}|{r.get('embedding_source')};".encode())
     return h.hexdigest()
 
 
 def _load(user_id: str) -> list[dict]:
     return list(db.saves().find(
         {"user_id": user_id, "status": {"$in": SEARCHABLE}, "embedding": {"$type": "array"}},
-        {"type": 1, "subcategory": 1, "title": 1, "thumb_id": 1, "embedding": 1, "created_at": 1}))
+        {"type": 1, "category": 1, "subcategory": 1, "title": 1, "thumb_id": 1, "embedding": 1, "created_at": 1}))
 
 
 def centroids(saves: list[dict]) -> dict[str, dict]:
-    """{sub_key: {type, name, count, vec}} from the saves' embeddings."""
+    """{sub_key: {group, type, category, name, count, vec}} from the saves' embeddings."""
     groups: dict[str, list] = {}
     meta: dict[str, tuple[str, str]] = {}
     for s in saves:
-        k = sub_key(s.get("type"), s.get("subcategory"))
+        k = save_key(s)
         if not k or not s.get("embedding"):
             continue
         groups.setdefault(k, []).append(s["embedding"])
-        meta[k] = (s["type"], s["subcategory"])
+        meta[k] = (k.split("/", 1)[0], s["subcategory"])
     out = {}
     for k, vecs in groups.items():
-        out[k] = {"type": meta[k][0], "name": meta[k][1], "count": len(vecs),
+        group, name = meta[k]
+        t, cat = categories.split(group)
+        out[k] = {"group": group, "type": t, "category": cat, "name": name, "count": len(vecs),
                   "vec": _unit(np.asarray(vecs, dtype=float).mean(axis=0))}
     return out
 
@@ -199,28 +213,37 @@ def build(user: dict) -> dict[str, Any]:
 
     nodes: list[dict] = []
     links: list[dict] = []
-    type_counts: dict[str, int] = {}
+    # The top level: one node per fixed kind, and one per custom category (categories.py).
+    group_counts: dict[str, int] = {}
     for s in saves:
-        if s.get("type") in TASTE_LABELS:
-            type_counts[s["type"]] = type_counts.get(s["type"], 0) + 1
-    for t, n in type_counts.items():
-        nodes.append({"id": f"type:{t}", "kind": "type", "type": t, "label": TASTE_LABELS[t], "count": n})
+        g = categories.group(s)
+        if g:
+            group_counts[g] = group_counts.get(g, 0) + 1
+
+    def with_category(node: dict, group: str) -> dict:
+        cat = categories.split(group)[1]
+        return {**node, "category": cat} if cat else node
+
+    for g, n in group_counts.items():
+        nodes.append(with_category({"id": f"type:{g}", "kind": "type", "type": categories.split(g)[0],
+                                    "label": categories.label(g), "count": n}, g))
     for k, c in cents.items():
-        if c["type"] not in type_counts:
+        if c["group"] not in group_counts:
             continue
-        nodes.append({"id": f"sub:{k}", "kind": "sub", "type": c["type"], "label": c["name"], "count": c["count"]})
-        links.append({"source": f"type:{c['type']}", "target": f"sub:{k}", "kind": "has"})
+        nodes.append(with_category({"id": f"sub:{k}", "kind": "sub", "type": c["type"], "label": c["name"],
+                                    "count": c["count"]}, c["group"]))
+        links.append({"source": f"type:{c['group']}", "target": f"sub:{k}", "kind": "has"})
     newest = sorted(saves, key=lambda s: s["created_at"], reverse=True)[:MAX_SAVES]
     for s in newest:
-        t = s.get("type")
-        if t not in type_counts:
+        g = categories.group(s)
+        if g not in group_counts:
             continue
         nid = f"save:{s['_id']}"
-        nodes.append({"id": nid, "kind": "save", "type": t, "label": s.get("title") or "Untitled reel",
-                      "save_id": str(s["_id"]),
-                      "thumb_url": f"/api/t/{s['thumb_id']}" if s.get("thumb_id") else None})
-        k = sub_key(t, s.get("subcategory"))
-        links.append({"source": f"sub:{k}" if k in cents else f"type:{t}", "target": nid, "kind": "holds"})
+        nodes.append(with_category({"id": nid, "kind": "save", "type": s["type"],
+                                    "label": s.get("title") or "Untitled reel", "save_id": str(s["_id"]),
+                                    "thumb_url": f"/api/t/{s['thumb_id']}" if s.get("thumb_id") else None}, g))
+        k = save_key(s)
+        links.append({"source": f"sub:{k}" if k in cents else f"type:{g}", "target": nid, "kind": "holds"})
     for a, b, sim in rel:
         links.append({"source": f"sub:{a}", "target": f"sub:{b}", "kind": "related", "weight": sim})
     liked = {name for name, _, _ in likes}
@@ -231,7 +254,7 @@ def build(user: dict) -> dict[str, Any]:
         links.append({"source": f"interest:{name}", "target": f"sub:{k}", "kind": "likes", "weight": sim})
     return {
         "nodes": nodes, "links": links,
-        "counts": {"saves": len(saves), "types": len(type_counts), "subcategories": len(cents),
+        "counts": {"saves": len(saves), "types": len(group_counts), "subcategories": len(cents),
                    "related": len(rel), "interests": len(liked), "interests_total": len(interests)},
     }
 
@@ -247,7 +270,7 @@ def expand(user_id: str, hits: list[dict], qvec: list[float], type_: str | None,
     """
     if room <= 0 or not hits or not qvec or not any(qvec):
         return []
-    anchors = [k for k in (sub_key(h.get("type"), h.get("subcategory")) for h in hits[:EXPAND_ANCHORS]) if k]
+    anchors = [k for k in (save_key(h) for h in hits[:EXPAND_ANCHORS]) if k]
     if not anchors:
         return []
     rel = related_map(user_id)
@@ -256,7 +279,7 @@ def expand(user_id: str, hits: list[dict], qvec: list[float], type_: str | None,
         for x in [k, *rel.get(k, [])[:EXPAND_RELATED]]:
             if x not in keys:
                 keys.append(x)
-    pairs = [{"type": k.split("/", 1)[0], "subcategory": k.split("/", 1)[1]} for k in keys]
+    pairs = [key_filter(k) for k in keys]
     if type_:
         pairs = [p for p in pairs if p["type"] == type_]
     if not pairs:
@@ -278,7 +301,7 @@ def expand(user_id: str, hits: list[dict], qvec: list[float], type_: str | None,
         return []
     scored = []
     for c in cands:
-        k = sub_key(c.get("type"), c.get("subcategory"))
+        k = save_key(c)
         if route.get(k, -1.0) < best - ROUTE_MARGIN:
             continue
         s = float(_unit(np.asarray(c["embedding"], dtype=float)) @ q)

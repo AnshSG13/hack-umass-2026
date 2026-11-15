@@ -88,6 +88,8 @@ def ticket(save: dict, plan: dict | None, user: dict, *, with_steps: bool = Fals
         "title": save.get("title"),
         "type": save.get("type"),
         "subcategory": save.get("subcategory"),
+        # A custom category for a reel of type other ("Pets"), else None (categories.py).
+        "category": save.get("category") if save.get("type") == "other" else None,
         "creator": f"@{creator}" if creator else None,
         "thumb_url": thumb_url(save),
         "saved_on": saved_on(save, user),

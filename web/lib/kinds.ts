@@ -51,6 +51,17 @@ export function kindOf(type: SaveType | null | undefined): Kind | null {
   return type ? (KINDS[type] ?? null) : null;
 }
 
+/** What a save is filed under at the top: its custom category ("Pets") when it has one,
+ *  else its kind's name. Custom categories keep the "Just vibes" colour and icon. */
+export function groupLabel(type: SaveType | null | undefined, category?: string | null): string | null {
+  return category || kindOf(type)?.label || null;
+}
+
+/** Where a taste's board lives: /t/recipe, or /t/other?category=Pets for a custom category. */
+export function boardHref(type: SaveType, category?: string | null): string {
+  return category ? `/t/${type}?category=${encodeURIComponent(category)}` : `/t/${type}`;
+}
+
 /** The mockup's --p (pastel) and --d (ink) pair for a colour. */
 export function tint(color: KindColor): CSSProperties {
   return { "--p": `var(--${color})`, "--d": `var(--${color}-ink)` } as CSSProperties;

@@ -11,7 +11,7 @@ import { Icon } from "@/components/icons";
 import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
 import { plural } from "@/lib/format";
-import { KINDS, tint } from "@/lib/kinds";
+import { boardHref, KINDS, tint } from "@/lib/kinds";
 import type { RememberItem, Taste, TastesResponse } from "@/lib/types";
 
 function sentence(tag: string): string {
@@ -36,7 +36,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
   const count = [plural(taste.count, "save", "saves"), taste.done ? `${taste.done} done` : null].filter(Boolean).join(" · ");
-  const href = `/t/${taste.type}`;
+  const href = boardHref(taste.type, taste.category);
   // New reels since the last look: a bright pill on the corner, and the tile itself glows.
   const fresh = taste.new > 0 ? (
     <span className="taste-new" aria-label={`${taste.new} new ${taste.new === 1 ? "reel" : "reels"}`}>
@@ -257,7 +257,7 @@ export default function CollectionPage() {
                   </>
                 )}
                 {tastes.map((t, i) => (
-                  <TasteTile key={t.type} taste={t} wide={i === 0} />
+                  <TasteTile key={t.key ?? t.type} taste={t} wide={i === 0} />
                 ))}
               </div>
             )}

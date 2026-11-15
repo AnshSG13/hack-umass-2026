@@ -95,8 +95,9 @@ def resolve(user_id: str, type: str | None, label: object) -> str | None:
 
 
 def prompt_line(user_id: str) -> str:
-    """The user's labels for the model, so it reuses them instead of inventing near-twins."""
-    from . import profile  # noqa: PLC0415
+    """The user's labels for the model, so it reuses them instead of inventing near-twins.
+    Also lists their custom categories (categories.py), the level above, for type other."""
+    from . import categories, profile  # noqa: PLC0415 - both import this module
 
     by_type = {t: [x["name"] for x in rows] for t, rows in counts(user_id).items()}
     for t, names in _starters(user_id).items():
@@ -107,6 +108,7 @@ def prompt_line(user_id: str) -> str:
     else:
         parts = [f"{t}: {', '.join(names[:PROMPT_PER_TYPE])}" for t, names in sorted(by_type.items())]
         line = "EXISTING SUB-CATEGORIES: " + "; ".join(parts)
+    line = f"{line}\n{categories.prompt_line(user_id)}"
     return f"{about}\n{line}" if about else line
 
 
