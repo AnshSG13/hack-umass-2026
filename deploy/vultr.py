@@ -30,7 +30,12 @@ CLOUD_INIT = ROOT / "deploy" / "cloud-init.yaml"
 REMOTE_DIR = "/opt/realize"
 API = "https://api.vultr.com/v2"
 OS_NAME = "Ubuntu 24.04 LTS x64"
-SSH_OPTS = ["-o", "StrictHostKeyChecking=accept-new", "-o", "ServerAliveInterval=30"]
+# Always name the key: a shell whose HOME isn't the Windows profile would offer
+# no key (or every key), and repeated failed logins get the IP banned by fail2ban.
+IDENTITY = Path(os.environ.get("REALIZE_SSH_KEY") or Path.home() / ".ssh" / "id_ed25519")
+SSH_OPTS = ["-i", str(IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+            "-o", "StrictHostKeyChecking=accept-new", "-o", "ServerAliveInterval=30",
+            "-o", f"UserKnownHostsFile={Path.home() / '.ssh' / 'known_hosts'}"]
 
 
 def die(msg: str) -> None:
@@ -145,9 +150,13 @@ def scp(target: str, local: Path, remote: str) -> None:
 
 def wait_for_server(target: str) -> None:
     for _ in range(60):
-        if ssh(target, "test -f /var/lib/cloud/realize-ready && docker compose version >/dev/null",
-               check=False, capture_output=True).returncode == 0:
+        proc = ssh(target, "test -f /var/lib/cloud/realize-ready && docker compose version >/dev/null",
+                   check=False, capture_output=True, text=True)
+        if proc.returncode == 0:
             return
+        if "Permission denied" in proc.stderr:
+            # Retrying a rejected key only gets this IP banned by fail2ban.
+            die(f"the server rejected {IDENTITY}. Use the key you gave provision (REALIZE_SSH_KEY=...)")
         print("  waiting for cloud-init to finish installing Docker...")
         time.sleep(10)
     die("the server never finished setup. Check /var/log/cloud-init-output.log on it")
@@ -257,7 +266,7 @@ def main() -> None:
     pr.add_argument("--region", default="ewr", help="Vultr region id (default ewr, New Jersey)")
     pr.add_argument("--plan", default="vc2-2c-4gb", help="Vultr plan id (default vc2-2c-4gb)")
     pr.add_argument("--label", default="realize")
-    pr.add_argument("--ssh-key", default=str(Path.home() / ".ssh" / "id_ed25519.pub"))
+    pr.add_argument("--ssh-key", default=str(IDENTITY) + ".pub")
     pr.set_defaults(fn=cmd_provision)
 
     for name, fn, helptext in (("deploy", cmd_deploy, "ship the code and (re)start"),
