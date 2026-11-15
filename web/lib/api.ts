@@ -58,10 +58,14 @@ function headers(json: boolean, withKey = true): HeadersInit {
   return h;
 }
 
+/** A request the person stopped on purpose (the chat's Stop button). */
+export const STOPPED = "Stopped.";
+export const STOPPED_STATUS = 499;
+
 /** `anonymous`: leave the key out, for pages a link opens for someone with no account. */
 export async function api<T>(
   path: string,
-  init: { method?: string; body?: unknown; anonymous?: boolean } = {},
+  init: { method?: string; body?: unknown; anonymous?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   const hasBody = init.body !== undefined;
   let res: Response;
@@ -71,8 +75,10 @@ export async function api<T>(
       headers: headers(hasBody, !init.anonymous),
       body: hasBody ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
+      signal: init.signal,
     });
   } catch {
+    if (init.signal?.aborted) throw new ApiError(STOPPED_STATUS, STOPPED);
     throw new ApiError(0, "Check your connection.");
   }
   if (!res.ok) {
@@ -98,12 +104,14 @@ export const publicFetcher = <T,>(path: string) => api<T>(path, { anonymous: tru
 export async function chatStream(
   body: { message: string; history: { role: "user" | "assistant"; text: string }[]; chat_id?: string },
   onEvent: (e: ChatEvent) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch("/api/chat", { method: "POST", headers: headers(true), body: JSON.stringify(body) });
+    res = await fetch("/api/chat", { method: "POST", headers: headers(true), body: JSON.stringify(body), signal });
   } catch {
-    onEvent({ type: "error", message: "Ask didn't answer. Try again." });
+    // Stopped on purpose: the caller says so; anything else is a failed request.
+    if (!signal?.aborted) onEvent({ type: "error", message: "Ask didn't answer. Try again." });
     return;
   }
   if (!res.ok || !res.body) {
@@ -121,7 +129,13 @@ export async function chatStream(
   const decoder = new TextDecoder();
   let buf = "";
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      return; // stopped, or the connection dropped mid-answer; the caller decides what to say
+    }
+    const { done, value } = chunk;
     if (done) break;
     buf += decoder.decode(value, { stream: true });
     let nl: number;

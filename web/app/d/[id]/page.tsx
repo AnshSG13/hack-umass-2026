@@ -9,6 +9,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { DeliverableBlocks, safeHref } from "@/components/deliverables";
 import { Icon } from "@/components/icons";
+import { PublicBack } from "@/components/public-back";
 import { ApiError, publicFetcher } from "@/lib/api";
 import { useConfig } from "@/lib/hooks";
 import type { PublicDeliverable } from "@/lib/types";
@@ -108,7 +109,8 @@ function SentPage() {
 
   return (
     <div className="dpage">
-      <header>
+      <header className="dpage-head">
+        <PublicBack />
         <span className="wide dpage-brand" translate="no">
           {d?.app_name ?? appName}
         </span>

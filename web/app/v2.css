@@ -1690,6 +1690,12 @@
   margin-inline: auto;
   padding: max(18px, env(safe-area-inset-top, 0px)) var(--gutter-r) calc(56px + var(--safe-b)) var(--gutter-l);
 }
+.dpage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
 .dpage-brand {
   display: block;
   font-size: 18px;
@@ -4201,4 +4207,57 @@ article.panel {
 }
 .web-chip:nth-child(3) {
   animation-delay: 0.12s;
+}
+
+/* Back, kept reachable on long pages once the page's own Back has scrolled away */
+.scroll-back {
+  position: fixed;
+  z-index: 40;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: max(12px, calc(50% - 220px + 12px));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: var(--ink);
+  box-shadow: 0 6px 18px -6px rgba(30, 31, 36, 0.45);
+  opacity: 0;
+  transform: translateY(-8px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.25s var(--ease);
+}
+.scroll-back[data-shown] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.scroll-back:active {
+  transform: scale(0.94);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-back {
+    transition: opacity 0.01s;
+    transform: none;
+  }
+}
+
+/* Stop, in place of Send while an answer is being written */
+.send.is-stop {
+  background: var(--ink);
+  color: #ffffff;
+  opacity: 1;
+}
+.send.is-stop svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+  border-radius: 3px;
+}
+.send.is-stop:active {
+  transform: scale(0.94);
 }

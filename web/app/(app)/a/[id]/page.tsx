@@ -14,6 +14,7 @@ import { DoneBar, useDone } from "@/components/done";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { ReelSections } from "@/components/reel-sections";
+import { ScrollBack } from "@/components/scroll-back";
 import { useApp } from "@/components/shell";
 import { ShareAction } from "@/components/share-action";
 import { ShopResearch } from "@/components/shop-research";
@@ -133,6 +134,7 @@ function ActionView({ id, data }: { id: string; data: SaveDetail }) {
 
   return (
     <div className="act-page" style={kindTint(ticket.type)}>
+      <ScrollBack />
       <header className="act-head gutter">
         <div className="act-top">
           <BackButton />

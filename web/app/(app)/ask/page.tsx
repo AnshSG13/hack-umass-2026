@@ -5,6 +5,7 @@
 // and "Ask about this" hand their question over through the shell's store.
 
 import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
@@ -15,7 +16,7 @@ import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { Streamed } from "@/components/streamed";
 import { useAskStore, type AskTurn } from "@/components/shell";
-import { api, chatStream, fetcher } from "@/lib/api";
+import { api, chatStream, fetcher, STOPPED } from "@/lib/api";
 import { kindOf, kindTint, tint, type KindColor } from "@/lib/kinds";
 import type { AskCard, ChatEvent, Discussion } from "@/lib/types";
 
@@ -219,7 +220,7 @@ function Turn({
       {turn.error && (
         <div role="alert" className="ask-error">
           <p>{turn.error}</p>
-          {turn.error === GENERIC_ERROR && (
+          {(turn.error === GENERIC_ERROR || turn.error === STOPPED) && (
             <button type="button" className="btn" onClick={onRetry}>
               <Icon name="redo" />
               Try again
@@ -250,6 +251,8 @@ function AskInner() {
   const { data: chips } = useSWR<{ chips: string[] }>("/api/chips", fetcher, { revalidateOnFocus: false });
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // The answer being written, so Stop can cancel it.
+  const stopper = useRef<AbortController | null>(null);
   const inputId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -353,6 +356,8 @@ function AskInner() {
     setTurns([...prior, fresh]);
     setLiveIds((ids) => [...ids, id]);
     const update = (fn: (t: AskTurn) => AskTurn) => setTurns((ts) => ts.map((t) => (t.id === id ? fn(t) : t)));
+    const controller = new AbortController();
+    stopper.current = controller;
     await chatStream({ message, history, chat_id: into ?? undefined }, (e) => {
       if (e.type === "saved") {
         // Kept: later questions go into the same chat, and the list shows it.
@@ -363,7 +368,14 @@ function AskInner() {
       // The chat was deleted elsewhere: the next question starts a new one.
       if (e.type === "error" && e.message === CHAT_GONE) setChatId(null);
       update((t) => applyEvent(t, e));
-    });
+    }, controller.signal);
+    stopper.current = null;
+    // Stopped: an answer that already arrived stays; otherwise it says so, with Try again.
+    if (controller.signal.aborted) {
+      update((t) => (t.answer ? { ...t, done: true } : { ...t, done: true, error: STOPPED }));
+      setSending(false);
+      return;
+    }
     // The stream ended: anything without an answer by now is an error.
     update((t) => (t.answer || t.error ? { ...t, done: true } : { ...t, done: true, error: GENERIC_ERROR }));
     setSending(false);
@@ -505,9 +517,15 @@ function AskInner() {
             }
           }}
         />
-        <button type="submit" className="send" aria-label="Send" disabled={sending || draft.trim().length === 0}>
-          <Icon name="send" />
-        </button>
+        {sending ? (
+          <button type="button" className="send is-stop" aria-label="Stop the answer" onClick={() => stopper.current?.abort()}>
+            <Square aria-hidden="true" />
+          </button>
+        ) : (
+          <button type="submit" className="send" aria-label="Send" disabled={draft.trim().length === 0}>
+            <Icon name="send" />
+          </button>
+        )}
       </form>
     </div>
   );

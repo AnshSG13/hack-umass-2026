@@ -5,6 +5,7 @@
 // Every discussion is saved with the reel and listed on its page (<Discussions />).
 
 import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { Square } from "lucide-react";
 import { Dialog } from "radix-ui";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
@@ -19,7 +20,7 @@ import {
 } from "@/components/deliverables";
 import { Icon } from "@/components/icons";
 import { Streamed } from "@/components/streamed";
-import { api, ApiError, fetcher } from "@/lib/api";
+import { api, ApiError, fetcher, STOPPED } from "@/lib/api";
 import { plural, relativeTime } from "@/lib/format";
 import { kindTint } from "@/lib/kinds";
 import type { Deliverable, Discussion, DiscussionMessage, DiscussionSummary, SaveType } from "@/lib/types";
@@ -305,6 +306,8 @@ function ChatPanel({
   });
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
+  // The question being answered, so Stop can cancel it.
+  const stopper = useRef<AbortController | null>(null);
   const [liveAt, setLiveAt] = useState<number | null>(null); // index of the answer still being written out
   const [writing, setWriting] = useState(false); // true until that answer's last word is out
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -368,9 +371,12 @@ function ChatPanel({
     if (!question || sending) return;
     setDraft("");
     setPending({ question, error: null });
+    const controller = new AbortController();
+    stopper.current = controller;
     try {
       const r = await api<{ discussion: Discussion }>(discussionsKey(saveId), {
         body: { message: question, discussion_id: discussionId ?? undefined },
+        signal: controller.signal,
       });
       const d = r.discussion;
       // Seed the cache for this discussion before switching to it, so nothing flashes.
@@ -388,6 +394,8 @@ function ChatPanel({
         question,
         error: e instanceof ApiError && e.status !== 503 ? e.message : NO_ANSWER,
       });
+    } finally {
+      stopper.current = null;
     }
   }
 
@@ -574,7 +582,7 @@ function ChatPanel({
             ) : (
               <div role="alert" className="ask-error">
                 <p>{pending.error}</p>
-                {pending.error === NO_ANSWER && (
+                {(pending.error === NO_ANSWER || pending.error === STOPPED) && (
                   <button type="button" className="btn" onClick={() => void send(pending.question)}>
                     <Icon name="redo" />
                     Try again
@@ -612,9 +620,15 @@ function ChatPanel({
             }
           }}
         />
-        <button type="submit" className="send" aria-label="Send" disabled={sending || draft.trim().length === 0}>
-          <Icon name="send" />
-        </button>
+        {sending ? (
+          <button type="button" className="send is-stop" aria-label="Stop the answer" onClick={() => stopper.current?.abort()}>
+            <Square aria-hidden="true" />
+          </button>
+        ) : (
+          <button type="submit" className="send" aria-label="Send" disabled={draft.trim().length === 0}>
+            <Icon name="send" />
+          </button>
+        )}
       </form>
     </>
   );
