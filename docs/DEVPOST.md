@@ -68,4 +68,4 @@ Splitting the work so the model proposes and code commits made the app easier to
 
 ## Built with
 
-gemini, google-search-grounding, mongodb-atlas, atlas-vector-search, atlas-search, python, fastapi, next.js, typescript, react, tailwind, docker, caddy, vultr, github-actions, yt-dlp, ios-shortcuts, open-meteo
+gemini, mongodb, python, typescript, react, docker, ios, fastapi, next.js, vultr
