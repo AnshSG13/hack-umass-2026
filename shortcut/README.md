@@ -2,7 +2,7 @@
 
 The Shortcut is optional. Realize is a web app: you can save any reel by copying its link and pasting it on the Save tab (see the main README). The Shortcut adds a one-step path from Instagram's share sheet, which a web app on iOS can't offer by itself.
 
-**On the live site, use `https://140-82-6-164.sslip.io` wherever these steps say your address** (so the save-only URL is `https://140-82-6-164.sslip.io/api/save`), and a key from that site's `/setup`. The main README's "Use it on your iPhone" section has the steps for the live site. The laptop addresses below (`http://<YOUR-LAN-IP>:3200`, `http://10.0.0.11:3100`) are for local testing only.
+**On the live site, use `https://reelize.boston` wherever these steps say your address** (so the save-only URL is `https://reelize.boston/api/save`), and a key from that site's `/setup`. The main README's "Use it on your iPhone" section has the steps for the live site. The laptop addresses below (`http://<YOUR-LAN-IP>:3200`, `http://10.0.0.11:3100`) are for local testing only.
 
 There are three versions. Start with the first: it is the one from the original prototype (`prototype/README.md`), which was tested on a real iPhone over plain http on Wi-Fi, with the address and body changed for Realize.
 
