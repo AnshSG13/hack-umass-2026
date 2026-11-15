@@ -12,19 +12,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from "motion/react";
 import useSWR from "swr";
 import { StepLines } from "@/components/agent-activity";
+import { ActionTile } from "@/components/bundle-card";
 import { DeliverableCard, useDeliverables } from "@/components/deliverables";
 import { Icon, type IconName } from "@/components/icons";
 import { saveReel } from "@/components/paste-form";
 import { useDiscussions } from "@/components/reel-chat";
-import { PunchHole } from "@/components/ticket";
 import { Sheet, SheetContent, SheetDescription, SheetHead } from "@/components/ui/sheet";
 import { api, ApiError, fetcher } from "@/lib/api";
-import { planLabel, ticketState, ticketTitle, type TicketState } from "@/lib/format";
+import { ticketState, ticketTitle, type TicketState } from "@/lib/format";
 import { useElapsed, useMe, useRefresh, useSaveDetail } from "@/lib/hooks";
-import { tint, type KindColor } from "@/lib/kinds";
+import { DELIVERY, tint, type KindColor } from "@/lib/kinds";
 import { markStorySeen, type DemoStory } from "@/lib/story";
 import { useTicketActions } from "@/lib/ticket-actions";
-import type { Deliverable, SavesPage, StepLine, Ticket, TripState } from "@/lib/types";
+import type { Deliverable, ReadyAction, SavesPage, StepLine, Ticket, TripState } from "@/lib/types";
 
 type BeatId = "problem" | "moment" | "more";
 
@@ -126,10 +126,11 @@ type Recipe = NonNullable<DemoStory["recipe"]>;
 function momentHeading(saved: boolean, state: TicketState | null): string {
   if (!saved) return "Say you just saved this reel.";
   if (state === null || state === "printing") return "Watch it read the reel.";
-  if (state === "proposed") return "It found a time for it.";
+  if (state === "proposed" || state === "accepted" || state === "followup" || state === "done")
+    return "It's ready for you.";
   if (state === "proposed_quiet" || state === "declined") return "Not every reel needs a plan.";
   if (state === "failed") return "That one didn't read.";
-  return "Now it's a plan.";
+  return "It's ready for you.";
 }
 
 /** The reel, large: before the save, and while it is being read. */
@@ -190,89 +191,38 @@ function ReelFace({
   );
 }
 
-/** The plan, rising into the reel's place. */
-function PlanFace({ ticket, fresh }: { ticket: Ticket; fresh: boolean }) {
+/** What the reel became: its card from Home's Ready for you, rising into the reel's place.
+ *  The same card, the same button (Cook now for a recipe); a tap opens the action. */
+function ReadyFace({ item }: { item: ReadyAction }) {
   const reduce = useReducedMotion();
-  const state = ticketState(ticket);
-  const plan = ticket.plan;
-  const planned = state === "accepted" || state === "followup" || state === "done";
-  const first = plan?.options[0];
-  const big = planned ? (plan?.big_time ?? plan?.chosen?.big_time ?? null) : (first?.big_time ?? null);
-  const secondary = planned ? (plan?.chosen?.secondary ?? "") : (first?.secondary ?? "");
-  const quiet = state === "proposed_quiet" || state === "declined" || state === "skipped";
-  const label = planned
-    ? "Planned"
-    : quiet
-      ? "No plan needed"
-      : plan?.confidence === "best_guess"
-        ? "Suggested plan, a best guess"
-        : "Suggested plan";
-
   return (
     <motion.div
-      className="story-plan"
+      className="story-plan story-ready"
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 28 }}
       animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
     >
-      <motion.div
-        className="story-plan-card"
-        style={tint(planned ? "mint" : "lavender")}
-        animate={fresh && !reduce ? { scale: [1, 1.035, 1] } : { scale: 1 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-      >
-        {planned && <PunchHole fresh={fresh} />}
-        <div className="story-plan-reel">
-          <span className="thumb sm" aria-hidden="true">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {ticket.thumb_url && <img src={ticket.thumb_url} alt="" draggable={false} />}
-          </span>
-          <span className="story-plan-reel-text">
-            <span className="story-plan-reel-title">{ticketTitle(ticket)}</span>
-            {ticket.url ? (
-              <a
-                className="story-plan-reel-by is-link"
-                href={ticket.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Watch the original reel${ticket.creator ? ` by ${ticket.creator}` : ""} on Instagram`}
-              >
-                {ticket.creator ?? "Watch the reel"}
-                <Icon name="out" />
-              </a>
-            ) : (
-              ticket.creator && <span className="story-plan-reel-by">{ticket.creator}</span>
-            )}
-          </span>
-        </div>
-        <p className="plan-label">
-          <Icon name={planned ? "check" : quiet ? "bookmark" : "spark"} />
-          {label}
-        </p>
-        {big && !quiet && <p className="story-plan-time">{big}</p>}
-        {secondary && !quiet && <p className="story-plan-sec">{secondary}</p>}
-        {planned ? (
-          <>
-            <p className="story-plan-line">Planned for {plan?.long_day ?? "this week"}</p>
-            {plan?.reminders_preview[0] && <p className="story-plan-why">Reminder: {plan.reminders_preview[0]}</p>}
-            {/* The app keeps no calendar of its own: the entry goes to the person's own. */}
-            {plan?.gcal_url && (
-              <a className="story-gcal" href={plan.gcal_url} target="_blank" rel="noopener noreferrer">
-                <Icon name="cal" />
-                Add to Google Calendar
-                <Icon name="out" />
-              </a>
-            )}
-          </>
-        ) : (
-          plan?.why && <p className="story-plan-why">{plan.why}</p>
-        )}
-      </motion.div>
+      <p className="story-ready-label">Ready for you</p>
+      <ActionTile item={item} />
     </motion.div>
   );
 }
 
-/** The pinned button once the reel is saved: wait, confirm the first option, or go on. */
+/** The ticket as one of Home's Ready for you items, once the reel has an action. */
+function readyItem(ticket: Ticket | null): ReadyAction | null {
+  const action = ticket?.action;
+  if (!ticket || !action || action.deliver === "keep" || !ticket.type) return null;
+  return {
+    ...action,
+    save_id: ticket.save_id,
+    type: ticket.type,
+    title: ticketTitle(ticket),
+    thumb_url: ticket.thumb_url,
+    meta: "",
+  };
+}
+
+/** The pinned button once the reel is saved: wait while it reads, try again, or go on. */
 function MomentAction({
   ticket,
   apply,
@@ -286,24 +236,12 @@ function MomentAction({
   const state = ticketState(ticket);
   const elapsed = useElapsed(state === "printing", ticket.created_at);
   const busy = actions.busy !== null;
-  const first = ticket.plan?.options[0];
 
   let button: React.ReactNode;
   if (state === "printing" && elapsed < PATIENCE_S) {
     button = (
       <button type="button" className="btn btn-primary story-cta" disabled>
         Reading the reel
-      </button>
-    );
-  } else if (state === "proposed" && first) {
-    button = (
-      <button
-        type="button"
-        className="btn btn-primary story-cta"
-        disabled={busy}
-        onClick={() => void actions.confirm(first.id)}
-      >
-        {planLabel(first.web_label)}
       </button>
     );
   } else if (state === "failed" && (ticket.failure_reason === "processing_error" || ticket.failure_reason === null)) {
@@ -356,14 +294,6 @@ function MomentBeat({
   const ticket = data?.ticket ?? initial;
   const state = ticket ? ticketState(ticket) : null;
 
-  // The confirm tap: the card gives the punch once it turns from proposed to planned.
-  const [seen, setSeen] = useState(state);
-  const [fresh, setFresh] = useState(false);
-  if (state !== seen) {
-    setSeen(state);
-    setFresh(seen === "proposed" && (state === "accepted" || state === "followup"));
-  }
-
   const apply = useCallback(
     (next: Ticket) => {
       setInitial(next);
@@ -399,10 +329,8 @@ function MomentBeat({
   const reading = saved && (state === null ? justSaved : state === "printing");
   const steps: StepLine[] | null = reading ? [{ label: "Saved", state: "done", ms: null }, ...(ticket?.steps ?? [])] : null;
   const failed = state === "failed" ? (ticket?.failure_message ?? "Saved. Couldn't read this reel yet.") : null;
-  const showPlan = ticket !== null && state !== null && state !== "printing" && state !== "failed";
-  const first = ticket?.plan?.options[0];
-  const said =
-    state === "proposed" && first ? `Plan ready: ${first.big_time}` : state === "accepted" ? "Planned." : "";
+  const ready = state !== null && state !== "printing" && state !== "failed" ? readyItem(ticket) : null;
+  const said = ready ? `Ready for you: ${DELIVERY[ready.deliver].button}` : "";
 
   return (
     <Page beat="moment" dir={dir}>
@@ -413,8 +341,8 @@ function MomentBeat({
         </p>
         <div className="story-area">
           <AnimatePresence initial={false} mode="wait">
-            {showPlan && ticket ? (
-              <PlanFace key="plan" ticket={ticket} fresh={fresh} />
+            {ready ? (
+              <ReadyFace key="ready" item={ready} />
             ) : (
               <motion.div
                 key="reel"
