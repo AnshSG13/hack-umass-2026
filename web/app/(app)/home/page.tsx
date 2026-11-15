@@ -153,16 +153,11 @@ export default function HomePage() {
       </div>
 
       {readyCount > 0 && !isEmpty && (
-        <section className="blk" aria-labelledby="ready-h">
-          <div className="gutter block-head">
-            <h2 className="block-title" id="ready-h">
-              Ready for you
-            </h2>
-            <Link href="/plans" className="see-all">
-              See all
-              <Icon name="right" />
-            </Link>
-          </div>
+        <section className="blk ready-blk" aria-labelledby="ready-h">
+          {/* No visible heading: the passes speak for themselves. Kept for screen readers. */}
+          <h2 className="vh" id="ready-h">
+            Ready for you
+          </h2>
           {readyCounts.size > 1 && <ReadyFilter counts={readyCounts} value={kindShown} onChange={pickKind} />}
           <p className="vh" aria-live="polite">
             {kindShown ? `Showing ${shownBundles.length + shownActions.length} ${KINDS[kindShown].label} actions` : ""}
@@ -174,6 +169,13 @@ export default function HomePage() {
             {shownActions.map((a) => (
               <ActionTile key={a.save_id} item={a} />
             ))}
+            <Link href="/plans" className="acard acard-all">
+              <span className="acard-all-ico" aria-hidden="true">
+                <Icon name="right" />
+              </span>
+              <span className="acard-all-text">See all actions</span>
+              <span className="acard-all-sub">What&apos;s coming up and what&apos;s done</span>
+            </Link>
           </div>
         </section>
       )}

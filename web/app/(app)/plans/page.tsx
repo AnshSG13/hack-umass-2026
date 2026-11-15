@@ -143,11 +143,9 @@ export default function PlansPage() {
 
       {ready.length + actions.length > 0 && (
         <section className="blk" aria-labelledby="ready-h">
-          <div className="block-head">
-            <h2 id="ready-h" className="block-title">
-              Ready for you
-            </h2>
-          </div>
+          <h2 id="ready-h" className="vh">
+            Ready for you
+          </h2>
           <div className="agrid">
             {ready.map((b) => (
               <ReadyTile key={b.id} bundle={b} />

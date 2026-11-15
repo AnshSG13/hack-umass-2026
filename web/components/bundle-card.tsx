@@ -174,8 +174,9 @@ export function ReadyTile({ bundle }: { bundle: Bundle }) {
   );
 }
 
-/** One reel's action. Opens action mode straight away. The tag is the reel's taste; the
- *  call to action and the button say what the action is. */
+/** One reel's action. Opens action mode straight away. The tag is the reel's taste, the
+ *  headline is the reel itself (the dish, the product, the show), the line under it is the
+ *  call to action, and the button says what opens. */
 export function ActionTile({ item }: { item: ReadyAction }) {
   const d = DELIVERY[item.deliver];
   const kind = KINDS[item.type];
@@ -185,8 +186,8 @@ export function ActionTile({ item }: { item: ReadyAction }) {
       color={kind.color}
       icon={kind.icon}
       label={kind.label}
-      cta={item.cta}
-      meta={item.title}
+      cta={item.title}
+      meta={item.cta}
       button={d.button}
       prints={[item.thumb_url]}
     />

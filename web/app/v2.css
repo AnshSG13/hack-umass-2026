@@ -2970,3 +2970,70 @@ article.panel {
     transition: none;
   }
 }
+
+/* ---------- Ready for you without a heading: the filter leads, then the passes ---------- */
+.ready-blk {
+  margin-top: 24px;
+}
+.ready-blk .rfilter {
+  margin-top: 0;
+}
+.ready-blk .rail-gallery {
+  margin-top: 12px;
+}
+.ready-blk > .vh:first-child + .vh + .rail-gallery {
+  margin-top: 0;
+}
+/* The reel's name leads the pass; the call to action is the line under it */
+:is(.rail-2up, .agrid) .acard-meta {
+  font-weight: 600;
+}
+/* The last pass in the row: to every action */
+.acard.acard-all {
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.acard-all-ico {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+.acard-all-ico .i {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.2;
+}
+.acard-all-text {
+  font-family: var(--display);
+  font-size: 19px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.acard-all-sub {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+@media (hover: hover) {
+  .acard.acard-all:hover .acard-all-ico .i {
+    transform: translateX(2px);
+  }
+}
+/* Action mode: the call to action and what's ready, under the reel's name */
+.act-pitch .act-cta {
+  display: block;
+  font-weight: 700;
+  color: var(--d, var(--ink));
+}
+.act-pitch .act-cta + span {
+  display: block;
+  margin-top: 2px;
+}

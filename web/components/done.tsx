@@ -129,7 +129,7 @@ export function Completed() {
 function DoneRow({ ticket: t }: { ticket: Ticket }) {
   const deliver = t.action?.deliver ?? "keep";
   const label = deliver === "keep" ? null : DELIVERY[deliver].label;
-  const what = t.action && deliver !== "keep" ? t.action.cta : t.title ?? "Saved reel";
+  const what = t.title ?? (t.action && deliver !== "keep" ? t.action.cta : "Saved reel");
   const when = t.plan?.done_on ?? t.plan?.done_day;
   return (
     <Link href={actionHref(t.save_id, deliver)} className="done-row">

@@ -150,15 +150,20 @@ function ActionView({ id, data }: { id: string; data: SaveDetail }) {
             </span>
           )}
         </div>
-        <h1 className="act-title">{action.cta}</h1>
-        {action.pitch && <p className="act-pitch">{action.pitch}</p>}
+        {/* The reel itself is the headline (the dish, the product); the call to action and
+            what's ready sit under it. */}
+        <h1 className="act-title">{title}</h1>
+        <p className="act-pitch">
+          <b className="act-cta">{action.cta}</b>
+          {action.pitch && <span>{action.pitch}</span>}
+        </p>
         <Link href={`/s/${id}`} className="act-reel">
           {ticket.thumb_url && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={ticket.thumb_url} alt="" />
           )}
           <span className="act-reel-text">
-            <span className="act-reel-title">{title}</span>
+            <span className="act-reel-title">{ticket.creator ? `Saved from ${ticket.creator}` : "The original reel"}</span>
             <span className="act-reel-link">
               See the reel
               <Icon name="right" />
