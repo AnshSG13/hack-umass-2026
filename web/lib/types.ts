@@ -55,7 +55,8 @@ export interface Ticket {
   url: string;
   title: string | null;
   type: SaveType | null;
-  subcategory: string | null; // "Dessert": groups the save inside its type
+  category: string | null; // "Baking": what it is about; older saves show their type's name
+  subcategory: string | null; // "Cakes": a narrower group inside the category
   creator: string | null; // "@chefjohn"
   thumb_url: string | null; // "/api/t/<id>"
   saved_on: string; // "Oct 3"
@@ -197,15 +198,15 @@ export interface TripState {
 // ---- GET /api/tastes ----
 export interface Taste {
   type: SaveType;
-  label: string; // "Food", "Fitness"
+  label: string; // the category: "Baking", or "Food" for saves filed before categories
   count: number;
   thumbs: string[]; // up to 3 "/api/t/<id>"
   tags: { tag: string; count: number }[]; // up to 3
-  subcategories: { name: string; count: number }[]; // every one for this type, largest first
+  subcategories: { name: string; count: number }[]; // every one in this category, largest first
 }
 export interface TastesResponse {
   total: number;
-  tastes: Taste[]; // only types with at least one save, largest first
+  tastes: Taste[]; // one per category, largest first; type is the most common type in it
 }
 
 // ---- GET /api/saves, /api/search, /api/plans ----
@@ -254,7 +255,7 @@ export interface Profile {
   ethnicity: string[];
   interests: string[];
   hobbies: string[];
-  starters?: Partial<Record<SaveType, string[]>>;
+  starters?: string[]; // the first categories: interests and hobbies as written
 }
 
 export interface OnboardingOptions {
@@ -263,13 +264,6 @@ export interface OnboardingOptions {
   ethnicities: string[];
   interests: string[];
   hobbies: string[];
-}
-
-/** Starter sub-categories Gemini made inside one type at the end of the intro. */
-export interface StarterGroup {
-  type: Exclude<SaveType, "other">;
-  label: string;
-  subcategories: string[];
 }
 
 export interface AppConfig {

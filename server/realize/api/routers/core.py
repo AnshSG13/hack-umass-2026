@@ -112,31 +112,37 @@ def new_key(user: dict = Depends(current_user)) -> dict:
 
 @router.get("/api/tastes")
 def tastes(user: dict = Depends(current_user)) -> dict:
-    """Home's "Your tastes": one entry per type the user has saved, largest first, with
-    the three newest thumbnails and the three most used tags. Counted in code."""
-    by_type: dict[str, dict] = {}
+    """Home's "Your tastes": one entry per category, largest first, with its sub-categories,
+    the three newest thumbnails and the three most used tags. `type` is the type most of its
+    saves have, for colour and icon. Counted in code."""
+    cats: dict[str, dict] = {}
     total = 0
     cursor = db.saves().find({"user_id": user["_id"]},
-                             {"type": 1, "thumb_id": 1, "tags": 1, "created_at": 1}).sort("created_at", -1)
+                             {"type": 1, "category": 1, "subcategory": 1, "thumb_id": 1, "tags": 1,
+                              "created_at": 1}).sort("created_at", -1)
     for s in cursor:
         total += 1
-        t = s.get("type") if s.get("type") in TYPES else None
-        if t is None:
+        if s.get("type") not in TYPES:
             continue  # still being read; it has no type yet
-        e = by_type.setdefault(t, {"count": 0, "thumbs": [], "tags": {}})
+        name = subcats.category_of(s)
+        e = cats.setdefault(name, {"count": 0, "thumbs": [], "tags": {}, "types": {}, "subs": {}})
         e["count"] += 1
+        e["types"][s["type"]] = e["types"].get(s["type"], 0) + 1
+        if s.get("subcategory"):
+            e["subs"][s["subcategory"]] = e["subs"].get(s["subcategory"], 0) + 1
         if s.get("thumb_id") and len(e["thumbs"]) < 3:
             e["thumbs"].append(f"/api/t/{s['thumb_id']}")
         for tag in {str(x).strip().lower().lstrip("#") for x in (s.get("tags") or []) if str(x).strip()}:
             e["tags"][tag] = e["tags"].get(tag, 0) + 1
-    subs = subcats.counts(user["_id"])
     out = []
-    for t in sorted(by_type, key=lambda k: (-by_type[k]["count"], TYPES.index(k))):
-        e = by_type[t]
+    for name in sorted(cats, key=lambda k: (-cats[k]["count"], k)):
+        e = cats[name]
         top = sorted(e["tags"].items(), key=lambda kv: (-kv[1], kv[0]))[:3]
-        out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
+        subs = sorted(e["subs"].items(), key=lambda kv: (-kv[1], kv[0]))
+        out.append({"label": name, "type": max(e["types"].items(), key=lambda kv: kv[1])[0],
+                    "count": e["count"], "thumbs": e["thumbs"],
                     "tags": [{"tag": k, "count": n} for k, n in top],
-                    "subcategories": subs.get(t, [])})
+                    "subcategories": [{"name": k, "count": n} for k, n in subs]})
     return {"total": total, "tastes": out}
 
 
@@ -149,15 +155,15 @@ def taste_board(type: str, user: dict = Depends(current_user)) -> dict:
 
 
 @router.get("/api/search")
-def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
+def search_saves(q: str = "", type: str | None = None, cat: str | None = None, sub: str | None = None,
                  user: dict = Depends(current_user)) -> dict:
     t = type if type in TYPES else None
     if not q.strip():
         return {"items": [], "mode": search.active_mode()}
     try:
-        docs, mode = search.hybrid_search(user["_id"], q, type=t, limit=40 if t and sub else 20)
-        if t and sub:
-            docs = [d for d in docs if d.get("subcategory") == sub][:20]
+        docs, mode = search.hybrid_search(user["_id"], q, type=t, limit=40 if cat else 20)
+        if cat:
+            docs = [d for d in docs if subcats.filed_under(d, cat, sub)][:20]
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=503, detail="Search didn't answer. Try again.") from e
     items = tickets.tickets_for(docs, user)

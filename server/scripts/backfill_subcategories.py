@@ -1,11 +1,12 @@
-"""Give existing saves a sub-category, and the demo samples too.
+"""Give existing saves a category and sub-category, and the demo samples too.
 
-New saves get one while they're read. This fills in saves made before that, with one
-GEMINI_MODEL_FAST call per user and type (titles, summaries and tags only; no video).
+New saves get both while they're read. This fills in saves made before that, with one
+GEMINI_MODEL_FAST call per batch of 40 (titles, summaries and tags only; no video). The
+person's categories and intro interests are offered first, so they're reused when they fit.
 Labels the person set themselves are never touched.
 
 Run from server/:
-  python -m scripts.backfill_subcategories --email you@example.com   (once email sign-in is merged)
+  python -m scripts.backfill_subcategories --email you@example.com
   python -m scripts.backfill_subcategories --user u_2577cc094210
   python -m scripts.backfill_subcategories --all-users
   python -m scripts.backfill_subcategories --samples      (demo sample library)
@@ -17,7 +18,6 @@ import argparse
 import sys
 
 from realize import db, gemini, subcats
-from realize.models import TYPES
 
 BATCH = 40
 
@@ -25,93 +25,103 @@ SCHEMA = {
     "type": "object",
     "properties": {"assignments": {"type": "array", "items": {
         "type": "object",
-        "properties": {"id": {"type": "string"}, "subcategory": {"type": "string"}},
-        "required": ["id", "subcategory"]}}},
+        "properties": {"id": {"type": "string"}, "category": {"type": "string"},
+                       "subcategory": {"type": "string"}},
+        "required": ["id", "category", "subcategory"]}}},
     "required": ["assignments"],
 }
 
 
-def ask(kind: str, items: list[dict], existing: list[str]) -> dict[str, str]:
-    """{id: raw label} for a batch of saves of one type."""
+def _existing_line(tree: dict[str, list[str]]) -> str:
+    if not tree:
+        return "EXISTING CATEGORIES: none yet"
+    parts = [f"{c} ({', '.join(subs)})" if subs else c for c, subs in tree.items()]
+    return "EXISTING CATEGORIES (sub-categories in brackets): " + "; ".join(parts)
+
+
+def ask(items: list[dict], tree: dict[str, list[str]]) -> dict[str, tuple]:
+    """{id: (raw category, raw sub-category)} for a batch of saves."""
     lines = [f"- {it['id']} | {it['title']} | {it['summary'][:160]} | tags: {', '.join(it['tags'][:6])}"
              for it in items]
     text = "\n".join([
-        f"These saved reels are all of type {kind}. Give each one a sub-category.",
+        "Give each of these saved reels a category and a sub-category.",
         subcats.GUIDE,
         "Group them: prefer a few labels that several saves share over one label per save.",
-        f"EXISTING SUB-CATEGORIES for {kind}: {', '.join(existing) or 'none yet'}",
+        _existing_line(tree),
         "SAVES (id | title | summary | tags):",
         *lines,
         "Return one assignment per id, using the ids exactly as given.",
     ])
     out = gemini.generate_json(role="fast", input=[{"type": "text", "text": text}], schema=SCHEMA,
                                timeout_s=60, retries=2)
-    return {str(a.get("id")): a.get("subcategory") for a in out.get("assignments") or [] if isinstance(a, dict)}
+    return {str(a.get("id")): (a.get("category"), a.get("subcategory"))
+            for a in out.get("assignments") or [] if isinstance(a, dict)}
 
 
-def run_pool(label: str, kind: str, items: list[dict], existing: list[str], write, dry: bool) -> int:
+def run_pool(label: str, items: list[dict], tree: dict[str, list[str]], write, dry: bool) -> int:
+    """Label items, growing `tree` ({category: [subs]}) as new labels appear."""
     done = 0
     for i in range(0, len(items), BATCH):
         batch = items[i:i + BATCH]
         try:
-            raw = ask(kind, batch, existing)
+            raw = ask(batch, tree)
         except Exception as e:  # noqa: BLE001 - report and keep going with the next batch
-            print(f"  {label} {kind}: Gemini didn't answer ({str(e)[:120]}). Skipped {len(batch)}.")
+            print(f"  {label}: Gemini didn't answer ({str(e)[:120]}). Skipped {len(batch)}.")
             continue
         for it in batch:
-            sub = subcats.snap(subcats.clean(raw.get(it["id"])), existing)
-            if not sub:
+            rc, rs = raw.get(it["id"], (None, None))
+            cat = subcats.snap(subcats.clean(rc), list(tree))
+            if not cat:
                 continue
-            if sub not in existing:
-                existing.append(sub)
-            print(f"  {label} {kind}: {it['title'][:50]!r} -> {sub}")
+            subs = tree.setdefault(cat, [])
+            sub = subcats.snap(subcats.clean(rs), subs)
+            if sub and sub not in subs:
+                subs.append(sub)
+            print(f"  {label}: {it['title'][:50]!r} -> {cat} > {sub or '-'}")
             if not dry:
-                write(it["key"], sub)
+                write(it["key"], cat, sub)
             done += 1
     return done
 
 
 def backfill_user(user: dict, dry: bool) -> int:
-    total = 0
-    for kind in TYPES:
-        if kind == "other":
-            continue
-        docs = list(db.saves().find(
-            {"user_id": user["_id"], "type": kind, "subcategory": {"$in": [None, ""]},
-             "user_edited": {"$ne": "subcategory"}, "status": {"$in": ["planned", "enriching", "ready"]}},
-            {"title": 1, "summary": 1, "tags": 1}))
-        if not docs:
-            continue
-        items = [{"id": str(i), "key": d["_id"], "title": d.get("title") or "Saved reel",
-                  "summary": d.get("summary") or "", "tags": d.get("tags") or []} for i, d in enumerate(docs)]
+    docs = list(db.saves().find(
+        {"user_id": user["_id"], "category": {"$in": [None, ""]}, "user_edited": {"$ne": "category"},
+         "status": {"$in": ["planned", "enriching", "ready"]}},
+        {"title": 1, "summary": 1, "tags": 1}))
+    if not docs:
+        return 0
+    items = [{"id": str(i), "key": d["_id"], "title": d.get("title") or "Saved reel",
+              "summary": d.get("summary") or "", "tags": d.get("tags") or []} for i, d in enumerate(docs)]
+    filed = subcats._filed(user["_id"])  # noqa: SLF001 - same module family
+    tree = {c: list(filed.get(c, [])) for c in subcats.merge(list(filed), subcats._starters(user["_id"]))}  # noqa: SLF001
 
-        def write(save_id, sub):
-            db.saves().update_one({"_id": save_id, "user_id": user["_id"]}, {"$set": {"subcategory": sub}})
+    def write(save_id, cat, sub):
+        db.saves().update_one({"_id": save_id, "user_id": user["_id"]},
+                              {"$set": {"category": cat, "subcategory": sub}})
 
-        total += run_pool(user.get("email") or user["_id"], kind, items,
-                          subcats.existing(user["_id"], kind), write, dry)
-    return total
+    return run_pool(user.get("email") or user["_id"], items, tree, write, dry)
 
 
 def backfill_samples(dry: bool) -> int:
-    total = 0
     samples = list(db.sample_cache().find({}, {"enrichment": 1}))
-    for kind in TYPES:
-        if kind == "other":
-            continue
-        pool = [s for s in samples if (s.get("enrichment") or {}).get("type") == kind]
-        existing = sorted({s["enrichment"]["subcategory"] for s in pool if s["enrichment"].get("subcategory")})
-        todo = [s for s in pool if not s["enrichment"].get("subcategory")]
-        items = [{"id": str(i), "key": s["_id"], "title": s["enrichment"].get("title") or "Sample reel",
-                  "summary": s["enrichment"].get("summary") or "", "tags": s["enrichment"].get("tags") or []}
-                 for i, s in enumerate(todo)]
+    tree: dict[str, list[str]] = {}
+    for s in samples:
+        e = s.get("enrichment") or {}
+        if e.get("category"):
+            subs = tree.setdefault(e["category"], [])
+            if e.get("subcategory") and e["subcategory"] not in subs:
+                subs.append(e["subcategory"])
+    todo = [s for s in samples if not (s.get("enrichment") or {}).get("category")]
+    items = [{"id": str(i), "key": s["_id"], "title": s["enrichment"].get("title") or "Sample reel",
+              "summary": s["enrichment"].get("summary") or "", "tags": s["enrichment"].get("tags") or []}
+             for i, s in enumerate(todo)]
 
-        def write(shortcode, sub):
-            db.sample_cache().update_one({"_id": shortcode}, {"$set": {"enrichment.subcategory": sub}})
+    def write(shortcode, cat, sub):
+        db.sample_cache().update_one({"_id": shortcode}, {"$set": {"enrichment.category": cat,
+                                                                  "enrichment.subcategory": sub}})
 
-        if items:
-            total += run_pool("samples", kind, items, existing, write, dry)
-    return total
+    return run_pool("samples", items, tree, write, dry) if items else 0
 
 
 def main() -> int:

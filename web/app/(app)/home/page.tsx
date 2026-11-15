@@ -40,7 +40,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
   const count = plural(taste.count, "save", "saves");
-  const href = `/t/${taste.type}`;
+  const href = `/library?cat=${encodeURIComponent(label)}`;
 
   if (wide) {
     return (
@@ -289,7 +289,7 @@ export default function HomePage() {
           </div>
           <div className="tastes">
             {tasteList.map((t, i) => (
-              <TasteTile key={t.type} taste={t} wide={i === 0} />
+              <TasteTile key={t.label} taste={t} wide={i === 0} />
             ))}
           </div>
         </section>

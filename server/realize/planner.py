@@ -228,10 +228,11 @@ def _write_plan(save: dict, user: dict, args: dict, known_slots: list[dict],
     confidence = args.get("confidence") if args.get("confidence") in ("sure", "best_guess") else "best_guess"
     actionable = bool(args.get("actionable")) and kind != "other"
     edited = set(save.get("user_edited") or [])
-    sub = subcats.resolve(user["_id"], kind, args.get("subcategory"))
-    if sub and "subcategory" not in edited and not (keep_save_fields and save.get("subcategory")):
-        db.saves().update_one({"_id": save["_id"]}, {"$set": {"subcategory": sub}})
-        save = {**save, "subcategory": sub}
+    cat, sub = subcats.resolve(user["_id"], args.get("category"), args.get("subcategory"))
+    if cat and "category" not in edited and not (keep_save_fields and save.get("category")):
+        filing = {"category": cat, "subcategory": sub}
+        db.saves().update_one({"_id": save["_id"]}, {"$set": filing})
+        save = {**save, **filing}
 
     if keep_save_fields:
         fields = save.get("fields") or {}

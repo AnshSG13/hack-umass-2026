@@ -279,6 +279,11 @@ The user asked for the chat to suggest something to export at the end, "such as 
 
 Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invite, the itinerary refused before the trip existed and made after it (five timed stops with prices, hours, forecast and the sources named), the public data opening with the token and no key, a wrong token and another account refused. 117 unit tests pass (15 new).
 
+## 2026-11-14: categories and sub-categories, both made as reels come in
+- **Owner asked for two levels people see, both dynamic:** "the whole point was to create categories and if reel is not in current list of categories, it can create new categories". Saves now have `category` and `subcategory`. Interests and hobbies from the intro are the first categories, as written (no model call). The model reuses a category when one fits and names a new one when none does; same for sub-categories inside it.
+- **Kept small on purpose (owner: "change as little as possible"):** the existing sub-category code and prompts were extended, not replaced. The type stays for the planner (groceries, dates) and only colours chips. `/api/tastes` returns one entry per category, so Home's tiles, the library chips and File under follow without new endpoints. Older saves have no category and show under their type's name until re-sorted.
+- Checked live on a throwaway account (deleted afterwards) with the 16 real sample reels and interests Baking, Travel, Broadway musicals, Pickleball: through the planner, the tiramisu went to Baking > Desserts and two dinners made a new category, Recipes > Dinners. The backfill script filed the rest into Travel, Broadway musicals and new ones (Pets, Product reviews, Fitness, Neuroscience, Productivity). File under made "Italian desserts" from typed text and snapped "BAKING" onto Baking. 126 server tests pass.
+
 ## 2026-11-14: interests and hobbies are the folders
 - **Owner asked for it directly:** "i want each of the interest or hobbies to just be used as created categories". Starters are no longer invented by Gemini; each interest and hobby is kept as written and Gemini only picks its type. One that fits no type is left out. Checked live: Baking > Food, Travel > Places, Broadway musicals and Comedy > Events, Strength training and Pickleball > Fitness.
 

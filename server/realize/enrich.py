@@ -90,7 +90,7 @@ def analyze_video(path: str, caption: str, existing: str = "") -> tuple[dict, st
             input=[{"type": "video", "uri": f.uri, "mime_type": f.mime_type or "video/mp4"},
                    {"type": "text", "text": PROMPT.format(
                        caption=(caption or "")[:3000], subcategory_guide=subcats.GUIDE,
-                       existing=existing or "EXISTING SUB-CATEGORIES: none yet")}],
+                       existing=existing or "EXISTING CATEGORIES: none yet")}],
             schema=ENRICH_SCHEMA, timeout_s=180, thinking="low", retries=2)
     except Exception:
         gemini.delete_file(f.name)
@@ -115,8 +115,9 @@ def merge_fields(save: dict, result: dict, grounded: dict) -> dict:
         "tags": [str(t).lower().lstrip("#") for t in (result.get("tags") or []) if str(t).strip()][:8],
         "unverified": grounded["unverified"],
         "language": result.get("language") or "en",
+        "category": subcats.clean(result.get("category")) or save.get("category"),
         "subcategory": subcats.clean(result.get("subcategory")) or (
-            save.get("subcategory") if kind == save.get("type") else None),
+            save.get("subcategory") if not subcats.clean(result.get("category")) else None),
     }
     edited = set(save.get("user_edited") or [])
     return {k: v for k, v in update.items() if k not in edited}
@@ -180,9 +181,12 @@ def run_enrich_job(save: dict, user: dict) -> None:
                            "dropped_names": grounded["dropped"][:10], "unverified": grounded["unverified"]}
 
         update = merge_fields(save, result, grounded)
-        if update.get("subcategory"):
-            update["subcategory"] = subcats.snap(
-                update["subcategory"], subcats.existing(save["user_id"], update.get("type", save.get("type"))))
+        if "category" in update:
+            # Snap both onto this person's labels; a category they set themselves stays.
+            cat, sub_ = subcats.resolve(save["user_id"], update["category"], update.get("subcategory"))
+            update["category"] = cat
+            if "subcategory" in update:
+                update["subcategory"] = sub_
         actions.fix_event_year(update.get("fields"), save.get("posted_at"))
         if duration and not save.get("duration_sec"):
             update["duration_sec"] = duration

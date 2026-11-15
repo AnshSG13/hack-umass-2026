@@ -297,7 +297,7 @@ def reanalyze(save_id: str, user: dict = Depends(current_user)) -> dict:
         raise HTTPException(status_code=409, detail="This one couldn't be read. Use Try again instead.")
     if not ratelimit.allow("reanalyze", user["_id"]):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
-    edited = [f for f in (save.get("user_edited") or []) if f not in ("type", "subcategory")]
+    edited = [f for f in (save.get("user_edited") or []) if f not in ("type", "category", "subcategory")]
     db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]},
                           {"$set": {"status": "planned", "user_edited": edited, "enrich_error": None}})
     jobs.enqueue("enrich", save)
@@ -325,12 +325,14 @@ def delete_save(save_id: str, user: dict = Depends(current_user)) -> dict:
 
 
 @router.get("/api/saves")
-def list_saves(type: str | None = None, sub: str | None = None,
+def list_saves(type: str | None = None, cat: str | None = None, sub: str | None = None,
                limit: int = Query(default=30, ge=1, le=100),
                before: str | None = None, user: dict = Depends(current_user)) -> dict:
     q: dict = {"user_id": user["_id"]}
     if type in TYPES:
         q["type"] = type
+    if cat:
+        q.update(subcats.category_query(cat))
         if sub:
             q["subcategory"] = sub
     if before:
@@ -376,20 +378,36 @@ def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)
         update["note"] = body.note.strip()
     retyped = body.type is not None and body.type != save.get("type")
     edited = set(save.get("user_edited") or [])
-    if retyped or body.subcategory is not None:
+    if retyped or body.category is not None or body.subcategory is not None:
         if save["status"] in IN_FLIGHT:
             raise HTTPException(status_code=409, detail="This save is still being read. Try again in a moment.")
     if retyped:
         update["type"] = body.type
         # The video pass and the planner leave fields the person has set alone.
         edited |= {"type"}
-        # A sub-category belongs to its type: moving the save clears it unless one is given.
-        if body.subcategory is None:
+    if body.category is not None:
+        if body.category.strip():
+            cat, _ = subcats.resolve(user["_id"], body.category, None)
+            if not cat:
+                raise HTTPException(status_code=400, detail="Use 1 to 4 words, at most 32 characters.")
+        else:
+            cat = None
+        if cat != save.get("category"):
+            update["category"] = cat
+            # A sub-category belongs to its category: moving clears it unless one is given.
             update["subcategory"] = None
+        edited |= {"category", "subcategory"}
     if body.subcategory is not None:
-        kind = body.type or save.get("type")
+        cat = update.get("category", save.get("category"))
         if body.subcategory.strip():
-            sub = subcats.resolve(user["_id"], kind, body.subcategory)
+            if not cat and "category" not in update:
+                # Filed before categories: keep it under the name it's shown with ("Food").
+                cat = subcats.category_of(save)
+                update["category"] = cat
+                edited |= {"category"}
+            if not cat:
+                raise HTTPException(status_code=400, detail="Pick a category first.")
+            _, sub = subcats.resolve(user["_id"], cat, body.subcategory)
             if not sub:
                 raise HTTPException(status_code=400, detail="Use 1 to 4 words, at most 32 characters.")
         else:

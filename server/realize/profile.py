@@ -1,27 +1,24 @@
-"""The intro profile and the starter sub-categories Gemini makes from it.
+"""The intro profile, and the first categories made from it.
 
 The intro asks how someone identifies, their age, ethnicity, interests and hobbies.
 Identity and ethnicity are stored but never sent to Gemini: what gets filed where comes from
 what someone said they like, not from who they are.
 
-Each interest and hobby becomes a starter sub-category under the type it fits
-("Food > Baking", "Fitness > Running"). They are stored on the profile and
-offered to the model next to the labels the user already has (subcats.prompt_line), so the
-first reels land in them. When a reel fits none, the model makes a new one as before.
+Each interest and hobby becomes one of the person's first categories, as written ("Baking",
+"Broadway musicals"). They are stored on the profile and offered to the model next to the
+categories already in use (subcats.prompt_line), so the first reels land in them. When a reel
+fits none, the model makes a new category, as it does for sub-categories.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from . import db, gemini, subcats
 from .config import get_settings
 
 log = logging.getLogger("realize.profile")
 
-STARTER_TYPES = ["recipe", "event", "place", "workout", "product", "tip"]
 SUGGEST_TIMEOUT_S = 12
-STARTER_TIMEOUT_S = 25
 PREFER_NOT = "Prefer not to say"
 
 # The fixed chips on "Choose what you like". Gemini adds more specific ones on top.
@@ -58,10 +55,14 @@ def about_line(user_id: str) -> str | None:
     return "ABOUT THE USER (from their intro): " + "; ".join(lines) if lines else None
 
 
-def starters(user_id: str) -> dict[str, list[str]]:
+def starters(user_id: str) -> list[str]:
+    """The categories made from the intro. Accounts from the first version of the intro have
+    {type: [labels]}; those labels count too."""
     u = db.users().find_one({"_id": user_id}, {"profile.starters": 1})
-    raw = (((u or {}).get("profile") or {}).get("starters")) or {}
-    return {t: [s for s in v if isinstance(s, str)] for t, v in raw.items() if t in STARTER_TYPES and isinstance(v, list)}
+    raw = (((u or {}).get("profile") or {}).get("starters")) or []
+    if isinstance(raw, dict):
+        raw = [x for v in raw.values() if isinstance(v, list) for x in v]
+    return [x for x in raw if isinstance(x, str) and x.strip()] if isinstance(raw, list) else []
 
 
 # ---------- "More for you" interest chips ----------
@@ -99,44 +100,14 @@ def suggest_interests(picked: list[str], age_range: str | None) -> list[str]:
     return result[:12]
 
 
-# ---------- starter sub-categories ----------
-# Each interest and hobby becomes a folder as written. Gemini only picks the kind it belongs
-# under ("Baking" -> Food, "Pickleball" -> Products); one that fits no kind is left out.
-
-STARTER_SCHEMA = {"type": "object", "properties": {"folders": {"type": "array", "items": {
-    "type": "object", "properties": {
-        "name": {"type": "string"},
-        "type": {"type": "string", "enum": [*STARTER_TYPES, "none"]}},
-    "required": ["name", "type"]}}}, "required": ["folders"]}
-
-STARTER_SYSTEM = """You set up an app where people save short videos (Instagram reels) and turn them into plans.
-Every save has a kind: recipe (food), event, place, workout (fitness), product, tip (learning).
-Each name you are given becomes a folder. For every name, return it unchanged with the one kind
-its reels would most likely be. Use "none" only when no kind fits at all."""
+# ---------- starter categories ----------
 
 
-def make_starters(profile: dict) -> dict[str, list[str]]:
-    """{type: [interest or hobby, ...]} from the profile, or {} without Gemini or on any error."""
-    picked: list[str] = []
+def make_starters(profile: dict) -> list[str]:
+    """The person's interests and hobbies, as written: their first categories."""
+    out: list[str] = []
     for raw in [*(profile.get("interests") or []), *(profile.get("hobbies") or [])]:
         name = subcats.clean(raw)
-        if name and subcats.key(name) not in {subcats.key(n) for n in picked}:
-            picked.append(name)
-    if not picked or not live():
-        return {}
-    try:
-        out: dict[str, Any] = gemini.generate_json(
-            role="fast", input="\n".join(picked[:30]), schema=STARTER_SCHEMA,
-            system=STARTER_SYSTEM, timeout_s=STARTER_TIMEOUT_S, retries=1)
-    except Exception as e:  # noqa: BLE001
-        log.warning("starter sub-categories failed: %s", str(e)[:160])
-        return {}
-    # Keep the person's own wording: match Gemini's answer back to what they picked.
-    by_key = {subcats.key(n): n for n in picked}
-    result: dict[str, list[str]] = {}
-    for row in out.get("folders") or []:
-        t = row.get("type")
-        name = by_key.get(subcats.key(subcats.clean(row.get("name")) or ""))
-        if t in STARTER_TYPES and name and name not in result.get(t, []):
-            result.setdefault(t, []).append(name)
-    return result
+        if name:
+            out = subcats.merge(out, [name])
+    return out

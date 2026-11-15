@@ -1,7 +1,7 @@
 "use client";
 
 // The saves list: search (what was said or shown), filter by kind, rows that open the Reel
-// page. Home sends people here with ?focus=1 (the search box) or ?type=recipe (a taste).
+// page. Home sends people here with ?focus=1 (the search box) or ?cat=Baking (a category).
 
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
@@ -37,10 +37,14 @@ function SavesList() {
   const params = useSearchParams();
   const { openAdd } = useApp();
   const { data: me } = useMe();
+  // A type still narrows the list when a link sends one (a taste board's search button).
   const type = asType(params.get("type"));
-  const sub = type ? params.get("sub") : null;
+  const cat = params.get("cat");
+  const sub = cat ? params.get("sub") : null;
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
-  const subs = type ? (tastes.data?.tastes.find((t) => t.type === type)?.subcategories ?? []) : [];
+  const cats = tastes.data?.tastes ?? [];
+  const current = cat ? cats.find((t) => t.label === cat) : undefined;
+  const subs = current?.subcategories ?? [];
   const wantsFocus = params.get("focus") === "1";
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -58,7 +62,10 @@ function SavesList() {
   }, [wantsFocus]);
 
   const searching = debounced.length > 0;
-  const typeParam = (type ? `&type=${type}` : "") + (sub ? `&sub=${encodeURIComponent(sub)}` : "");
+  const typeParam =
+    (type ? `&type=${type}` : "") +
+    (cat ? `&cat=${encodeURIComponent(cat)}` : "") +
+    (sub ? `&sub=${encodeURIComponent(sub)}` : "");
   const list = useSWR<SavesPage>(searching ? null : `/api/saves?limit=${limit}${typeParam}`, fetcher, {
     keepPreviousData: true,
   });
@@ -71,18 +78,19 @@ function SavesList() {
   const active = searching ? search : list;
   const items = active.data?.items ?? [];
   const total = me?.counts.saves;
-  const nothingSaved = !searching && !type && list.data !== undefined && list.data.items.length === 0;
+  const nothingSaved = !searching && !type && !cat && list.data !== undefined && list.data.items.length === 0;
   const canShowMore = !searching && Boolean(list.data?.next_before) && limit < MAX_LIMIT;
 
-  function pick(next: SaveType | null) {
+  function pick(next: string | null) {
     setLimit(PAGE);
-    router.replace(next ? `/library?type=${next}` : "/library", { scroll: false });
+    router.replace(next ? `/library?cat=${encodeURIComponent(next)}` : "/library", { scroll: false });
   }
 
   function pickSub(next: string | null) {
-    if (!type) return;
+    if (!cat) return;
     setLimit(PAGE);
-    router.replace(`/library?type=${type}${next ? `&sub=${encodeURIComponent(next)}` : ""}`, { scroll: false });
+    const tail = next ? `&sub=${encodeURIComponent(next)}` : "";
+    router.replace(`/library?cat=${encodeURIComponent(cat)}${tail}`, { scroll: false });
   }
 
   const head = (
@@ -117,9 +125,6 @@ function SavesList() {
     );
   }
 
-  // "All", then every kind this account has saved (and the one picked, even at zero).
-  const kinds = KIND_ORDER.filter((t) => t === type || me === undefined || (me.counts.by_type[t] ?? 0) > 0);
-
   return (
     <>
       <div className="gutter">
@@ -140,42 +145,37 @@ function SavesList() {
         </label>
       </div>
 
-      <div className="filters" role="group" aria-label="Filter by kind">
-        <button type="button" className="fchip" aria-pressed={type === null} onClick={() => pick(null)}>
+      <div className="filters" role="group" aria-label="Filter by category">
+        <button type="button" className="fchip" aria-pressed={!cat} onClick={() => pick(null)}>
           All
           {total !== undefined && <b>{total}</b>}
         </button>
-        {kinds.map((t) => {
-          const k = KINDS[t];
-          const count = me?.counts.by_type[t];
-          return (
-            <button
-              key={t}
-              type="button"
-              className="fchip"
-              style={tint(k.color)}
-              aria-pressed={type === t}
-              onClick={() => pick(t)}
-            >
-              <Icon name={k.icon} />
-              {k.label}
-              {count !== undefined && <b>{count}</b>}
-            </button>
-          );
-        })}
+        {cats.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            className="fchip"
+            style={tint(KINDS[c.type].color)}
+            aria-pressed={cat === c.label}
+            onClick={() => pick(c.label)}
+          >
+            {c.label}
+            <b>{c.count}</b>
+          </button>
+        ))}
       </div>
 
-      {type && subs.length > 0 && (
-        <div className="filters" role="group" aria-label={`Filter ${KINDS[type].label} by sub-category`}>
+      {cat && subs.length > 0 && (
+        <div className="filters" role="group" aria-label={`Filter ${cat} by sub-category`}>
           <button type="button" className="fchip" aria-pressed={sub === null} onClick={() => pickSub(null)}>
-            All {KINDS[type].label}
+            All {cat}
           </button>
           {subs.map((s) => (
             <button
               key={s.name}
               type="button"
               className="fchip"
-              style={tint(KINDS[type].color)}
+              style={current ? tint(KINDS[current.type].color) : undefined}
               aria-pressed={sub === s.name}
               onClick={() => pickSub(s.name)}
             >
@@ -204,8 +204,8 @@ function SavesList() {
           <p className="msg">
             {searching
               ? `Nothing matches “${debounced}”. Try a word they said in the video.`
-              : type
-                ? `Nothing filed under ${KINDS[type].label}${sub ? ` › ${sub}` : ""} yet.`
+              : cat
+                ? `Nothing filed under ${cat}${sub ? ` › ${sub}` : ""} yet.`
                 : "Nothing here yet."}
           </p>
         ) : (

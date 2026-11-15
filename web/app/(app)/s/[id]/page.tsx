@@ -31,7 +31,7 @@ import {
   ticketTitle,
 } from "@/lib/format";
 import { useConfig, useRefresh, useSaveDetail } from "@/lib/hooks";
-import { KIND_ORDER, kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
+import { kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
 import type { Fields, Ingredient, SaveDetail, SavePatch, SaveType, TastesResponse, Ticket } from "@/lib/types";
 
 const NOTE_MAX = 500; // the API's limit on a note
@@ -224,14 +224,16 @@ export default function ReelPage() {
   const [sheet, setSheet] = useState<"cat" | "more" | "delete" | "grocery" | null>(null);
   const [newSub, setNewSub] = useState("");
   const newSubId = useId();
-  // The sub-categories this account already uses, offered first in the File under sheet.
+  const [newCat, setNewCat] = useState("");
+  const newCatId = useId();
+  // The categories and sub-categories this account already uses, offered in the File under sheet.
   const tastes = useSWR<TastesResponse>(sheet === "cat" ? "/api/tastes" : null, fetcher);
   const [busy, setBusy] = useState(false);
   const [catError, setCatError] = useState<string | null>(null);
 
   // After "Reanalyze and re-sort": where the reel was filed before, so the toast at the end
   // can say whether it moved. Cleared once the second reading is done.
-  const resorting = useRef<{ type: SaveType | null; sub: string | null } | null>(null);
+  const resorting = useRef<{ cat: string | null; sub: string | null } | null>(null);
   useEffect(() => {
     const before = resorting.current;
     const t = data?.ticket;
@@ -243,8 +245,8 @@ export default function ReelPage() {
       toast.show("It couldn't be watched again. Where it's filed didn't change.");
       return;
     }
-    const where = [kindOf(t.type)?.label, t.subcategory].filter(Boolean).join(" › ");
-    const moved = t.type !== before.type || (t.subcategory ?? null) !== before.sub;
+    const where = [t.category, t.subcategory].filter(Boolean).join(" › ");
+    const moved = (t.category ?? null) !== before.cat || (t.subcategory ?? null) !== before.sub;
     toast.show(moved ? `Re-sorted under ${where}` : `Read again. Still under ${where}`);
   }, [data, id, refresh, toast]);
 
@@ -370,22 +372,30 @@ export default function ReelPage() {
     }
   }
 
-  async function fileUnder(next: SaveType) {
-    if (next === type) {
+  async function fileCat(next: string) {
+    const clean = next.trim();
+    if (!clean || clean === (ticket.category ?? "")) {
       setSheet(null);
       return;
     }
     setBusy(true);
     setCatError(null);
-    const problem = await patch({ type: next }, "Moving it didn't work. Try again.");
-    setBusy(false);
-    if (problem) {
-      setCatError(problem);
+    let saved: string | null = null;
+    try {
+      // The server tidies the label and reuses a matching category ("baking" -> "Baking").
+      const r = await api<SaveDetail>(`/api/saves/${id}`, { method: "PATCH", body: { category: clean } });
+      await mutate(r, { revalidate: false });
+      refresh();
+      saved = r.ticket.category;
+    } catch (e) {
+      setCatError(errorText(e, "Moving it didn't work. Try again."));
+      setBusy(false);
       return;
     }
-    setServings(null);
+    setBusy(false);
+    setNewCat("");
     setSheet(null);
-    toast.show(`Moved to ${KINDS[next].label}`);
+    toast.show(`Filed under ${saved ?? clean}`);
   }
 
   async function fileSub(next: string) {
@@ -412,7 +422,7 @@ export default function ReelPage() {
     setBusy(false);
     setNewSub("");
     setSheet(null);
-    toast.show(saved ? `Filed under ${kind?.label ?? "this kind"} › ${saved}` : "Sub-category removed");
+    toast.show(saved ? `Filed under ${ticket.category ?? "this category"} › ${saved}` : "Sub-category removed");
   }
 
   async function saveNote(text: string): Promise<boolean> {
@@ -441,7 +451,7 @@ export default function ReelPage() {
     setBusy(true);
     try {
       const r = await api<{ ticket: Ticket; message: string }>(`/api/saves/${id}/reanalyze`, { method: "POST" });
-      resorting.current = { type: ticket.type, sub: ticket.subcategory ?? null };
+      resorting.current = { cat: ticket.category ?? null, sub: ticket.subcategory ?? null };
       applyTicket(r.ticket);
       toast.show(r.message);
     } catch (e) {
@@ -492,7 +502,7 @@ export default function ReelPage() {
               className="chip-cat"
               style={tint(kind.color)}
               aria-haspopup="dialog"
-              aria-label={`Filed under ${kind.label}${ticket.subcategory ? ` › ${ticket.subcategory}` : ""}. Change`}
+              aria-label={`Filed under ${ticket.category ?? kind.label}${ticket.subcategory ? ` › ${ticket.subcategory}` : ""}. Change`}
               disabled={reading}
               onClick={() => {
                 setCatError(null);
@@ -501,7 +511,7 @@ export default function ReelPage() {
             >
               <Icon name={kind.icon} />
               <span>
-                {kind.label}
+                {ticket.category ?? kind.label}
                 {ticket.subcategory && ` › ${ticket.subcategory}`}
               </span>
               <Icon name="down" />
@@ -676,34 +686,54 @@ export default function ReelPage() {
         <SheetContent aria-describedby={undefined}>
           <SheetHead>File under</SheetHead>
           <ul className="opts">
-            {KIND_ORDER.map((t) => {
-              const k = KINDS[t];
-              return (
-                <li key={t}>
-                  <button
-                    type="button"
-                    className="opt"
-                    aria-pressed={t === type}
-                    disabled={busy}
-                    onClick={() => void fileUnder(t)}
-                  >
-                    <span className="opt-ico" style={tint(k.color)}>
-                      <Icon name={k.icon} />
-                    </span>
-                    <span className="opt-name">{k.label}</span>
-                    <Icon name="check" />
-                  </button>
-                </li>
-              );
-            })}
+            {(tastes.data?.tastes ?? []).map((c) => (
+              <li key={c.label}>
+                <button
+                  type="button"
+                  className="opt"
+                  aria-pressed={c.label === ticket.category}
+                  disabled={busy}
+                  onClick={() => void fileCat(c.label)}
+                >
+                  <span className="opt-ico" style={tint(KINDS[c.type].color)}>
+                    <Icon name={KINDS[c.type].icon} />
+                  </span>
+                  <span className="opt-name">{c.label}</span>
+                  <Icon name="check" />
+                </button>
+              </li>
+            ))}
           </ul>
-          {kind && type && (
+          <form
+            className="name-field"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newCat.trim()) void fileCat(newCat);
+            }}
+          >
+            <label htmlFor={newCatId} className="vh">
+              New category
+            </label>
+            <input
+              id={newCatId}
+              type="text"
+              maxLength={32}
+              autoComplete="off"
+              placeholder="New category, e.g. Baking"
+              value={newCat}
+              onChange={(e) => setNewCat(e.target.value)}
+            />
+            <button type="submit" className="btn" disabled={busy || !newCat.trim()}>
+              Add
+            </button>
+          </form>
+          {kind && ticket.category && (
             <>
               <h3 className="sheet-title" style={{ marginTop: 18, minHeight: 44, display: "flex", alignItems: "center" }}>
-                Sub-category in {kind.label}
+                Sub-category in {ticket.category}
               </h3>
               <ul className="opts">
-                {(tastes.data?.tastes.find((t) => t.type === type)?.subcategories ?? []).map((s) => (
+                {(tastes.data?.tastes.find((t) => t.label === ticket.category)?.subcategories ?? []).map((s) => (
                   <li key={s.name}>
                     <button
                       type="button"
@@ -746,7 +776,7 @@ export default function ReelPage() {
                   type="text"
                   maxLength={32}
                   autoComplete="off"
-                  placeholder="New, e.g. Dessert"
+                  placeholder="New, e.g. Cakes"
                   value={newSub}
                   onChange={(e) => setNewSub(e.target.value)}
                 />

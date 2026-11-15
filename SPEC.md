@@ -128,7 +128,9 @@ Conventions: `user_id` is a string `u_<12 hex>`. Other `_id`s are ObjectId, expo
   "created_at": ISODate, "expires_at": ISODate | absent }
 ```
 Keys: `rl_` + `secrets.token_urlsafe(24)`, shown once, stored as sha256. Indexes: `{api_key_hash:1}` unique; `{expires_at:1}` TTL.
-Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are the person's interests and hobbies themselves, each used as a sub-category under the one type Gemini says it fits; one that fits no type is left out (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
+Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": ["Baking", "Broadway musicals", "Pickleball"] }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are the person's interests and hobbies as written: their first categories (`server/realize/profile.py`, no model call).
+
+Categories (`server/realize/subcats.py`): every save has `category` ("Baking") and `subcategory` inside it ("Cakes"), two levels people see; the type stays for the planner and only colours the chips. While a reel is read, `subcats.prompt_line` shows the model the categories in use with their sub-categories, plus the starters not used yet. It reuses one when it fits and names a new category or sub-category when none does; code cleans each label and snaps it onto an existing one. Saves filed before categories have none and are shown under their type's name ("Food") until re-sorted (`scripts/backfill_subcategories.py` gives them both). `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
 
 ### 5.2 saves
 ```jsonc
@@ -621,10 +623,10 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | PATCH | /api/me | key | `{timezone?, prefs?}` |
 | GET | /api/onboarding/options | none | the intro's fixed choices `{identities, age_ranges, ethnicities, interests, hobbies}` |
 | POST | /api/onboarding/suggest | key, 20/10 min | `{picked, age_range?}` → `{suggestions}`: Gemini's "More for you" interest chips |
-| POST | /api/onboarding/finish | key | `{profile}` → stores it with each interest and hobby filed under a type as a starter sub-category → `{profile, starters: [{type, label, subcategories}]}` |
+| POST | /api/onboarding/finish | key | `{profile}` → stores it; its interests and hobbies become the first categories → `{profile, starters: [name]}` |
 | POST | /api/me/key | key | new key → `{api_key}`; the old one stops working |
 | POST | /api/save | key | section 6 |
-| GET | /api/saves | key | `?type&limit=30&before=<iso>` → `{items: Ticket[], next_before}` |
+| GET | /api/saves | key | `?type&cat&sub&limit=30&before=<iso>` → `{items: Ticket[], next_before}` |
 | GET | /api/saves/{id} | key | `{ticket, details: {caption, summary, fields, transcript, on_screen_text, entities, unverified, enrich_error}, runs: AgentRun[]}` |
 | POST | /api/saves/{id}/confirm | key | section 7 |
 | POST | /api/saves/{id}/unconfirm | key | section 7 |
@@ -633,7 +635,7 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | DELETE | /api/saves/{id} | key | deletes the save, its plan, its runs and its owned thumbnail |
 | GET | /api/plans | key | `?range=week` → `{waiting: Ticket[], days: [{label: "Thursday, Nov 19", items: Ticket[]}], done: Ticket[], later_count}`; `?range=upcoming` → days beyond this week |
 | POST | /api/plans/{id}/status | key | `{status: "done"|"skipped"|"accepted"}` (accepted = undo) |
-| GET | /api/search | key | `?q&type` → `{items: (Ticket & {snippet})[], mode}` |
+| GET | /api/search | key | `?q&type&cat&sub` → `{items: (Ticket & {snippet})[], mode}` |
 | POST | /api/chat | key | section 12 |
 | GET | /api/agent_runs | key | `?save_id` → runs with full steps |
 | GET | /api/public/plans/{id} | `?t=` | `{ticket}` |

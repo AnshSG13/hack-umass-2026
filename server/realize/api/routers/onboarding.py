@@ -1,11 +1,10 @@
-"""Onboarding: the intro screens, their "More for you" chips, and the starter sub-categories."""
+"""Onboarding: the intro screens, their "More for you" chips, and the first categories."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from ... import db, profile, ratelimit, subcats
-from ...models import TASTE_LABELS
 from ...timeutil import now_utc
 from ..deps import current_user
 
@@ -56,12 +55,6 @@ def clean_profile(p: Profile) -> dict:
     }
 
 
-def starter_view(starters: dict[str, list[str]]) -> list[dict]:
-    """[{type, label, subcategories}] in the app's type order."""
-    return [{"type": t, "label": TASTE_LABELS[t], "subcategories": starters[t]}
-            for t in profile.STARTER_TYPES if starters.get(t)]
-
-
 @router.get("/api/onboarding/options")
 def options() -> dict:
     return {"identities": IDENTITIES, "age_ranges": AGE_RANGES, "ethnicities": ETHNICITIES,
@@ -78,8 +71,8 @@ def suggest(body: SuggestRequest, user: dict = Depends(current_user)) -> dict:
 
 @router.post("/api/onboarding/finish")
 def finish(body: FinishRequest, user: dict = Depends(current_user)) -> dict:
-    """Store the profile and the starter sub-categories Gemini makes from it."""
+    """Store the profile; its interests and hobbies become the first categories."""
     p = clean_profile(body.profile)
-    p["starters"] = {} if user.get("is_demo") else profile.make_starters(p)
+    p["starters"] = profile.make_starters(p)
     db.users().update_one({"_id": user["_id"]}, {"$set": {"profile": p, "onboarded_at": now_utc()}})
-    return {"profile": p, "starters": starter_view(p["starters"])}
+    return {"profile": p, "starters": p["starters"]}

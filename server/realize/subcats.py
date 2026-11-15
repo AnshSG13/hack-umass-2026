@@ -1,20 +1,28 @@
-"""Sub-categories: one short label per save that groups it inside its type
-("Food > Dessert", "Fitness > Strength").
+"""Categories and sub-categories: how a person's saves are filed, two levels, both made as
+they go ("Baking > Cakes", "Broadway musicals > Student shows").
 
-The model proposes the label while it reads the reel (planner and video pass), shown the
-user's existing labels so it can reuse one. Code cleans the label and snaps it onto an
-existing one when they only differ in case, spacing, punctuation or a plural "s", so a
-user never ends up with "Dessert", "desserts" and "Desserts!" side by side.
+A person's first categories are the interests and hobbies from their intro. While a reel is
+read (planner and video pass) the model is shown the categories in use with their
+sub-categories, and reuses one when it fits; when none does, it names a new category or a
+new sub-category. Code cleans every label and snaps it onto an existing one when they only
+differ in case, spacing, punctuation or a plural "s", so nobody ends up with "Dessert",
+"desserts" and "Desserts!" side by side.
+
+The save's type (recipe, event, ...) is separate: the planner needs it, people don't see it
+as a level. Saves filed before categories existed have none; they are shown under their
+type's name ("Food") until they are re-sorted.
 """
 from __future__ import annotations
 
 import re
 
 from . import db
+from .models import TASTE_LABELS
 
 MAX_LEN = 32
 MAX_WORDS = 4
-PROMPT_PER_TYPE = 12  # existing labels shown to the model per type
+PROMPT_CATEGORIES = 25  # categories shown to the model
+PROMPT_SUBS = 8         # sub-categories shown per category
 
 
 def clean(label: object) -> str | None:
@@ -48,30 +56,8 @@ def snap(label: str | None, existing: list[str]) -> str | None:
     return label
 
 
-def counts(user_id: str, type: str | None = None) -> dict[str, list[dict]]:
-    """{type: [{name, count}, ...]} for this user, largest first."""
-    match: dict = {"user_id": user_id, "subcategory": {"$type": "string"}}
-    if type:
-        match["type"] = type
-    out: dict[str, list[dict]] = {}
-    rows = db.saves().aggregate([
-        {"$match": match},
-        {"$group": {"_id": {"t": "$type", "s": "$subcategory"}, "n": {"$sum": 1}}},
-        {"$sort": {"n": -1, "_id.s": 1}},
-    ])
-    for r in rows:
-        out.setdefault(r["_id"]["t"], []).append({"name": r["_id"]["s"], "count": r["n"]})
-    return out
-
-
-def _starters(user_id: str) -> dict[str, list[str]]:
-    from . import profile  # noqa: PLC0415 - profile imports this module
-
-    return profile.starters(user_id)
-
-
-def _merge(used: list[str], extra: list[str]) -> list[str]:
-    """Used labels first, then starters that aren't already there under another spelling."""
+def merge(used: list[str], extra: list[str]) -> list[str]:
+    """Used labels first, then extra ones that aren't already there under another spelling."""
     out = list(used)
     keys = {key(n) for n in out}
     for name in extra:
@@ -81,39 +67,132 @@ def _merge(used: list[str], extra: list[str]) -> list[str]:
     return out
 
 
-def existing(user_id: str, type: str | None) -> list[str]:
-    """Labels this user has for a type: ones in use, then the intro's starters."""
-    if not type:
+# ---------- where a save is filed ----------
+
+
+def category_of(save: dict) -> str | None:
+    """The save's category, or its type's name for a save filed before categories."""
+    c = save.get("category")
+    if isinstance(c, str) and c:
+        return c
+    return TASTE_LABELS.get(save.get("type") or "")
+
+
+def filed_under(save: dict, category: str | None, sub: str | None = None) -> bool:
+    """For list filters: is this save in that category (and sub-category)?"""
+    if category and category_of(save) != category:
+        return False
+    return not sub or save.get("subcategory") == sub
+
+
+def category_query(category: str) -> dict:
+    """The Mongo filter for one category, including older saves shown under their type's name."""
+    legacy = [t for t, label in TASTE_LABELS.items() if label == category]
+    if not legacy:
+        return {"category": category}
+    return {"$or": [{"category": category},
+                    {"category": {"$in": [None, ""]}, "type": {"$in": legacy}}]}
+
+
+# ---------- what this person has ----------
+
+
+def tree(user_id: str) -> list[dict]:
+    """[{name, count, type, subcategories: [{name, count}]}], largest first.
+
+    `type` is the type most of the category's saves have, for its colour and icon.
+    """
+    cats: dict[str, dict] = {}
+    rows = db.saves().find({"user_id": user_id, "type": {"$in": list(TASTE_LABELS)}},
+                           {"type": 1, "category": 1, "subcategory": 1})
+    for s in rows:
+        name = category_of(s)
+        if not name:
+            continue
+        c = cats.setdefault(name, {"name": name, "count": 0, "types": {}, "subs": {}})
+        c["count"] += 1
+        c["types"][s["type"]] = c["types"].get(s["type"], 0) + 1
+        sub = s.get("subcategory")
+        if isinstance(sub, str) and sub:
+            c["subs"][sub] = c["subs"].get(sub, 0) + 1
+    out = []
+    for c in sorted(cats.values(), key=lambda c: (-c["count"], c["name"])):
+        out.append({
+            "name": c["name"], "count": c["count"],
+            "type": max(c["types"].items(), key=lambda kv: kv[1])[0],
+            "subcategories": [{"name": n, "count": k}
+                              for n, k in sorted(c["subs"].items(), key=lambda kv: (-kv[1], kv[0]))],
+        })
+    return out
+
+
+def _filed(user_id: str) -> dict[str, list[str]]:
+    """{category: [sub-categories]} for saves that really have a category, largest first."""
+    out: dict[str, dict[str, int]] = {}
+    rows = db.saves().aggregate([
+        {"$match": {"user_id": user_id, "category": {"$type": "string", "$ne": ""}}},
+        {"$group": {"_id": {"c": "$category", "s": "$subcategory"}, "n": {"$sum": 1}}},
+    ])
+    for r in rows:
+        subs = out.setdefault(r["_id"]["c"], {})
+        if isinstance(r["_id"].get("s"), str) and r["_id"]["s"]:
+            subs[r["_id"]["s"]] = subs.get(r["_id"]["s"], 0) + r["n"]
+        else:
+            subs.setdefault("", 0)
+            subs[""] += r["n"]
+    size = {c: sum(v.values()) for c, v in out.items()}
+    return {c: [s for s, _ in sorted(v.items(), key=lambda kv: -kv[1]) if s]
+            for c, v in sorted(out.items(), key=lambda kv: -size[kv[0]])}
+
+
+def _starters(user_id: str) -> list[str]:
+    from . import profile  # noqa: PLC0415 - profile imports this module
+
+    return profile.starters(user_id)
+
+
+def categories(user_id: str) -> list[str]:
+    """Categories in use, then the intro's interests and hobbies not used yet."""
+    return merge(list(_filed(user_id)), _starters(user_id))
+
+
+def subcategories(user_id: str, category: str | None) -> list[str]:
+    if not category:
         return []
-    used = [x["name"] for x in counts(user_id, type).get(type, [])]
-    return _merge(used, _starters(user_id).get(type, []))
+    return _filed(user_id).get(category, [])
 
 
-def resolve(user_id: str, type: str | None, label: object) -> str | None:
-    """Clean a proposed label and snap it onto this user's labels for that type."""
-    return snap(clean(label), existing(user_id, type))
+def resolve(user_id: str, category: object, sub: object) -> tuple[str | None, str | None]:
+    """Clean a proposed category and sub-category and snap each onto this user's labels."""
+    cat = snap(clean(category), categories(user_id))
+    if not cat:
+        return None, None
+    return cat, snap(clean(sub), subcategories(user_id, cat))
 
 
 def prompt_line(user_id: str) -> str:
-    """The user's labels for the model, so it reuses them instead of inventing near-twins."""
+    """The user's categories for the model, so it reuses them instead of inventing near-twins."""
     from . import profile  # noqa: PLC0415
 
-    by_type = {t: [x["name"] for x in rows] for t, rows in counts(user_id).items()}
-    for t, names in _starters(user_id).items():
-        by_type[t] = _merge(by_type.get(t, []), names)
-    about = profile.about_line(user_id)
-    if not by_type:
-        line = "EXISTING SUB-CATEGORIES: none yet"
+    filed = _filed(user_id)
+    names = merge(list(filed), _starters(user_id))[:PROMPT_CATEGORIES]
+    if not names:
+        line = "EXISTING CATEGORIES: none yet"
     else:
-        parts = [f"{t}: {', '.join(names[:PROMPT_PER_TYPE])}" for t, names in sorted(by_type.items())]
-        line = "EXISTING SUB-CATEGORIES: " + "; ".join(parts)
+        parts = []
+        for n in names:
+            subs = filed.get(n, [])[:PROMPT_SUBS]
+            parts.append(f"{n} ({', '.join(subs)})" if subs else n)
+        line = "EXISTING CATEGORIES (sub-categories in brackets): " + "; ".join(parts)
+    about = profile.about_line(user_id)
     return f"{about}\n{line}" if about else line
 
 
 GUIDE = (
-    "subcategory: one short label, 1 to 3 words, that groups this save inside its type, the way "
-    "a person would file it (recipe: Dessert, Thai, Quick dinners; workout: Strength, Mobility; "
-    "place: Coffee, Date night; product: Skincare; tip: Productivity). It is a group, not the "
-    "title: never the dish or product name. Reuse a label from EXISTING SUB-CATEGORIES for the "
-    "same type when it fits; make a new one only when none does."
+    "category: what this save is about, 1 to 3 words, the way a person would name a folder for "
+    "their interests (Baking, Travel, Broadway musicals, Strength training, Skincare). Reuse one "
+    "from EXISTING CATEGORIES when it fits; name a new one only when none does. "
+    "subcategory: a narrower group inside that category, 1 to 3 words (Baking: Cakes, Cookies; "
+    "Travel: Japan, Weekend trips). Reuse one listed for that category when it fits, or name a "
+    "new one. Neither is ever the title, the dish or the product name."
 )

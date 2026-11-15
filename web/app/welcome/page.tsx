@@ -4,8 +4,9 @@
 //   1. Tell us about yourself: how you identify, age, ethnicity (all skippable)
 //   2. Choose what you like: interest chips, plus more specific ones Gemini suggests
 //   3. Your hobbies
-// Then each interest and hobby becomes a folder under the kind Gemini says it fits (Food >
-// Baking) and the screen shows them. New reels reuse them, or get a new sub-category when none fits.
+// Then each interest and hobby becomes one of the person's first categories, as written, and
+// the last screen shows them. New reels reuse them, or get a new category when none fits; each
+// category grows its own sub-categories.
 // Identity and ethnicity are stored on the profile only; they are never sent to Gemini.
 
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -14,8 +15,10 @@ import useSWR from "swr";
 import { Icon } from "@/components/icons";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { useKey, useMe } from "@/lib/hooks";
-import { KINDS, tint } from "@/lib/kinds";
-import type { OnboardingOptions, Profile, StarterGroup } from "@/lib/types";
+import { tint, type KindColor } from "@/lib/kinds";
+import type { OnboardingOptions, Profile } from "@/lib/types";
+
+const FOLDER_COLORS: KindColor[] = ["peach", "butter", "rose", "sky", "mint", "lavender"];
 
 type StepId = "identity" | "age" | "ethnicity" | "interests" | "hobbies";
 type OwnList = "interests" | "hobbies"; // lists people can add their own entries to
@@ -118,7 +121,7 @@ function Welcome() {
   const [suggested, setSuggested] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
   const [phase, setPhase] = useState<"asking" | "building" | "done">("asking");
-  const [made, setMade] = useState<StarterGroup[]>([]);
+  const [made, setMade] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -174,7 +177,7 @@ function Welcome() {
     setPhase("building");
     setError(null);
     try {
-      const r = await api<{ starters: StarterGroup[] }>("/api/onboarding/finish", { body: { profile } });
+      const r = await api<{ starters: string[] }>("/api/onboarding/finish", { body: { profile } });
       await mutateMe();
       if (r.starters.length === 0) {
         router.replace(next);
@@ -218,7 +221,7 @@ function Welcome() {
             Setting up your folders
           </h1>
           <p className="ob-sub" style={{ textAlign: "center" }}>
-            Reading what you picked. This takes a few seconds.
+            Turning what you picked into categories.
           </p>
         </main>
       </div>
@@ -234,27 +237,15 @@ function Welcome() {
             Your folders
           </h1>
           <p className="ob-sub">
-            Saves get filed by kind, then into one of these. When a reel fits none of them, a new one is made for it.
+            Your interests are your first categories. Saves get filed into one of them, with smaller groups inside.
+            When a reel fits none, a new category is made for it.
           </p>
           <ul className="ob-cats">
-            {made.map((g) => {
-              const k = KINDS[g.type];
-              return (
-                <li key={g.type} style={tint(k.color)}>
-                  <b>
-                    <Icon name={k.icon} />
-                    {k.label}
-                  </b>
-                  <span className="ob-subs">
-                    {g.subcategories.map((s) => (
-                      <span key={s} className="ob-sub-chip">
-                        {s}
-                      </span>
-                    ))}
-                  </span>
-                </li>
-              );
-            })}
+            {made.map((name, i) => (
+              <li key={name} style={tint(FOLDER_COLORS[i % FOLDER_COLORS.length])}>
+                <b>{name}</b>
+              </li>
+            ))}
           </ul>
         </main>
         <footer className="ob-foot">
