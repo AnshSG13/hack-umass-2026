@@ -33,9 +33,12 @@ def _app(text: str) -> str:
 
 
 def _save_response(status: str, *, ask: str = "no", save_id: str = "", prompt: str = "",
-                   menu: list[str] | None = None, message: str = "", ticket: dict | None = None) -> dict:
+                   menu: list[str] | None = None, message: str = "", ticket: dict | None = None,
+                   key_ok: str = "yes") -> dict:
+    # key_ok is "no" only when the Bearer key matched no account, so the Shortcut can tell a
+    # stale key from any other error and send the person to /connect for a fresh one.
     return {"status": status, "ask": ask, "save_id": save_id, "prompt": prompt,
-            "menu": menu or [], "message": message, "ticket": ticket}
+            "menu": menu or [], "message": message, "ticket": ticket, "key_ok": key_ok}
 
 
 def _fake_plan_task(save_id, user_id: str) -> None:
@@ -89,7 +92,7 @@ def post_save(body: SaveRequest = Depends(save_request),
     log.info("save attempt: source=%s key=%s link=%s", body.source,
              "ok" if user else ("bad" if authorization else "missing"), "ok" if link else "none")
     if not user:
-        return _save_response("error", message=bad_key_message())
+        return _save_response("error", message=bad_key_message(), key_ok="no")
     if not ratelimit.allow("save", user["_id"]):
         return _save_response("error", message=RATE_LIMITED)
     if not link:

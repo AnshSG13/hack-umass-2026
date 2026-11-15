@@ -13,10 +13,11 @@ import { PasteForm } from "@/components/paste-form";
 import { ShortcutKey } from "@/components/shortcut-key";
 import { ToastViewport } from "@/components/toast";
 import { fetcher, getKey, isApiKey, setKey } from "@/lib/api";
-import { copyText } from "@/lib/clipboard";
+import { copyText, copyWhenReady } from "@/lib/clipboard";
 import { readStandalone, useConfig, useDevice, useKey, useMe, useStandalone } from "@/lib/hooks";
 import { btnOutline, btnPrimary, inputBase, linkInk, pageTitle, sectionTitle } from "@/lib/styles";
-import type { SavesPage } from "@/lib/types";
+import { hasCachedKey, shortcutKeyFor } from "@/lib/shortcut";
+import type { Me, SavesPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const KEY_SHAPE = /^[A-Za-z0-9_\-.~]{12,128}$/;
@@ -166,7 +167,12 @@ function Account({ accountKey }: { accountKey: string }) {
   const base = installed ? 0 : 1;
   return (
     <>
-      {quickUrl && <QuickShortcut appName={appName} url={quickUrl} />}
+      {quickUrl &&
+        (config?.quick_shortcut_keyed ? (
+          me && <KeyedShortcut appName={appName} url={quickUrl} accountKey={accountKey} me={me} />
+        ) : (
+          <QuickShortcut appName={appName} url={quickUrl} />
+        ))}
       <ol className="flex flex-col gap-6">
         {!installed && (
           <Step n={1}>
@@ -203,6 +209,81 @@ function Account({ accountKey }: { accountKey: string }) {
 }
 
 /**
+ * The key-saving Shortcut (shortcut/build_shortcut.py), one tap to add. Shown instead of
+ * QuickShortcut when QUICK_SHORTCUT_KEYED is on. The same tap copies this account's Shortcut key; the Shortcut
+ * reads it from the clipboard the first time it runs and keeps it in a file, so reels then
+ * save in the background without opening Safari. If the clipboard has changed by then, the
+ * Shortcut opens /connect, which hands the key over directly.
+ */
+function KeyedShortcut({ appName, url, accountKey, me }: { appName: string; url: string; accountKey: string; me: Me }) {
+  // A key that is safe to have ready before the tap: the account's own key, one this browser
+  // made earlier, or a first key for an email account (making it replaces nothing). An
+  // account that already has a key somewhere gets a new one only when the button is tapped.
+  const [ready, setReady] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (isApiKey(accountKey) || !me.shortcut_key || hasCachedKey(me.user_id)) {
+      shortcutKeyFor(accountKey, me.user_id).then(
+        (k) => live && setReady(k),
+        () => {},
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [accountKey, me.user_id, me.shortcut_key]);
+
+  async function add() {
+    setError(null);
+    const copied = ready ? await copyText(ready) : await copyWhenReady(shortcutKeyFor(accountKey, me.user_id));
+    if (!copied) {
+      // The Shortcut can still get the key from /connect on its first run.
+      setError("Your key wasn't copied. The Shortcut will ask you to connect the first time.");
+      window.setTimeout(() => window.location.assign(url), 2500);
+      return;
+    }
+    window.location.assign(url);
+  }
+
+  return (
+    <section className="mb-8 rounded-[16px] border border-line bg-ticket p-4" aria-labelledby="quick-shortcut">
+      <h2 id="quick-shortcut" className={sectionTitle}>
+        Save from Instagram in one tap
+      </h2>
+      <ol className="mt-4 flex flex-col gap-5">
+        <Step n={1}>
+          <button type="button" className={cn(btnPrimary, "w-full")} onClick={() => void add()}>
+            Add the Shortcut
+          </button>
+          <p className="mt-2 text-[14px] text-muted">
+            Then tap Add Shortcut. Your key is copied for it, so there is nothing to type.
+          </p>
+          {error && (
+            <p role="alert" className="mt-2 text-[14px] text-danger-ink">
+              {error}
+            </p>
+          )}
+        </Step>
+        <Step n={2}>
+          <p className="text-[16px] text-ink">Share a reel to {appName}</p>
+          <p className="mt-1 text-[14px] text-muted">
+            In Instagram, tap Share on a reel, then Share to, then {appName}. The first time, tap Allow so it can read
+            your key. After that reels save in the background.
+          </p>
+        </Step>
+      </ol>
+      <p className="mt-4 text-[14px] text-muted">
+        Copied something else first?{" "}
+        <Link href="/connect" className={linkInk}>
+          Connect the Shortcut
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+/**
  * The ready-made Shortcut, one tap to add. It has a single action, Open URLs to /save?url=,
  * so it carries no key: Safari opens this site and the reel goes to whoever is signed in
  * there. Shown first on the iPhone page whenever QUICK_SHORTCUT_URL is set.
@@ -223,8 +304,8 @@ function QuickShortcut({ appName, url }: { appName: string; url: string }) {
         <Step n={2}>
           <p className="text-[16px] text-ink">Share a reel to {appName}</p>
           <p className="mt-1 text-[14px] text-muted">
-            In Instagram, tap Share on a reel, open the share sheet and tap {appName}. Safari opens and the reel is
-            saved to the account you&apos;re signed in to here.
+            In Instagram, tap Share on a reel, then Share to, then {appName}. Safari opens and the reel is saved to
+            the account you&apos;re signed in to here.
           </p>
         </Step>
       </ol>

@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # iCloud link of the one-action Shortcut (Open URLs to /save?url=). It needs no key, so
     # /setup and /stand offer it as a single "Add the Shortcut" tap.
     quick_shortcut_url: str = ""
+    # True when QUICK_SHORTCUT_URL is the key-saving Shortcut (shortcut/build_shortcut.py):
+    # "Add the Shortcut" then also copies the account's key, which the Shortcut keeps.
+    quick_shortcut_keyed: bool = False
     judge_shortcut_url: str = ""
     first_save_reel_url: str = ""
     demo_enabled: bool = True

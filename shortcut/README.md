@@ -4,7 +4,65 @@ The Shortcut is optional. Realize is a web app: you can save any reel by copying
 
 **On the live site, use `https://reelize.boston` wherever these steps say your address** (so the save-only URL is `https://reelize.boston/api/save`), and a key from that site's `/setup`. The main README's "Use it on your iPhone" section has the steps for the live site. The laptop addresses below (`http://<YOUR-LAN-IP>:3200`, `http://10.0.0.11:3100`) are for local testing only.
 
-There are three versions. Start with the first: it is the one from the original prototype (`prototype/README.md`), which was tested on a real iPhone over plain http on Wi-Fi, with the address and body changed for Realize.
+## Build the key-saving Shortcut on a Mac (the one for the stand)
+
+This is the version visitors get from `/setup`'s **Add the Shortcut** button. Nobody types or pastes a key, and reels save in the background without opening Safari:
+
+- The button copies the visitor's key and opens the Shortcut's iCloud link.
+- The first time a reel is shared to it, the Shortcut reads the key from the clipboard (iOS asks once, "Allow paste") and keeps it in `realize-key.txt` in the Shortcuts folder.
+- If the clipboard had changed by then, or the key later stops working (the server answers `"key_ok": "no"`), the Shortcut opens `/connect?url=<reel>`. That page saves the reel and has a **Connect the Shortcut** button, which runs the Shortcut once with a fresh key.
+
+iOS only imports Shortcut files signed on a Mac, so the file is made here and signed there. It only needs building once. Afterwards everyone uses its iCloud link.
+
+**On the Mac:**
+
+1. Get this branch and make the file. `python3` comes with the Xcode command line tools; macOS offers to install them the first time.
+   ```
+   git fetch origin
+   git checkout feature/shortcut-key
+   python3 shortcut/build_shortcut.py --base https://reelize.boston
+   ```
+   It writes `shortcut/Realize.shortcut`. A copy built for https://reelize.boston is already committed, so you can skip the python step if the address is the same.
+2. Sign it. The output file's name becomes the Shortcut's name, and it must be **Realize**, because `/connect` runs it by that name.
+   ```
+   mkdir -p ~/Desktop/signed
+   shortcuts sign --mode anyone --input shortcut/Realize.shortcut --output ~/Desktop/signed/Realize.shortcut
+   ```
+   `shortcuts` is built into macOS 12 and later. Sign in to iCloud on the Mac first if it asks.
+3. AirDrop `~/Desktop/signed/Realize.shortcut` to the iPhone and tap **Add Shortcut**. If an older Shortcut named Realize is already there, choose **Replace**. Alternatively, open it on the Mac in the Shortcuts app.
+4. On the iPhone, open the Shortcut and check two things:
+   - In **Get Contents of URL**, there is exactly one header, `Authorization`.
+   - Under ⓘ, **Show in Share Sheet** is on.
+5. Test it:
+   1. In Safari, open `https://reelize.boston/setup` signed in, and tap **Add the Shortcut**. This copies your key. Close the iCloud page.
+   2. In Instagram, tap **Share** on a reel, then **Share to…**, then **Realize**.
+   3. Tap **Allow** for paste and for files.
+   4. A notification says "Saved. Still reading it...".
+6. Share it: open the Shortcut, tap **Share**, then **Copy iCloud Link**.
+7. On the server, set these in `/opt/realize/.env`, then redeploy (`python deploy/vultr.py deploy` from the hosting checkout, which uploads its `.env`):
+   ```
+   QUICK_SHORTCUT_URL=<that link>
+   QUICK_SHORTCUT_KEYED=true
+   ```
+   The button then copies the key before it opens the link. With `QUICK_SHORTCUT_KEYED=false`, the button opens the link without copying a key, which is right for the one-action Open URLs Shortcut below.
+
+The file format isn't documented by Apple. The script follows the format other Shortcut tools write, and it hasn't been imported on a phone yet. If an action comes in blank or broken, fix that one action on the phone; step by step it is:
+
+| # | Action | Settings |
+|---|---|---|
+| 1 | Text | Shortcut Input |
+| 2 | If | Text begins with `rl_`: Save File (Text, Ask Where to Save off, path `realize-key.txt`, Overwrite on), Show Notification "Connected", Stop This Shortcut. End If |
+| 3 | Get File | `realize-key.txt`, Error If Not Found off |
+| 4 | If | File does not have any value: Get Clipboard; If Clipboard begins with `rl_`, Save File (Clipboard, same settings); Otherwise URL Encode Shortcut Input, Open URLs `https://reelize.boston/connect?url=` + URL Encoded Text, Stop This Shortcut. End If. End If |
+| 5 | Get File | `realize-key.txt`, Error If Not Found off |
+| 6 | Get Text from Input | File |
+| 7 | Get Contents of URL | `https://reelize.boston/api/save`, POST, one header `Authorization` = `Bearer ` + Text, JSON body `input` = Shortcut Input, `source` = `shortcut`, `wait` (Number) = `0` |
+| 8 | Get Dictionary Value | `key_ok` in Contents of URL |
+| 9 | If | Dictionary Value is `no`: URL Encode Shortcut Input, Open URLs `https://reelize.boston/connect?url=` + URL Encoded Text. Otherwise: Get Dictionary Value `message` in Contents of URL, Show Notification with it. End If |
+
+## The other versions
+
+There are three more versions. Start with the first: it is the one from the original prototype (`prototype/README.md`), which was tested on a real iPhone over plain http on Wi-Fi, with the address and body changed for Realize.
 
 ## Save only (one action, the prototype's Shortcut)
 

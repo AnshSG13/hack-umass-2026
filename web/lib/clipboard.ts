@@ -38,3 +38,25 @@ export async function copyText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Copy text that is still on its way (a key being made). Safari only lets a page write to
+ * the clipboard during a tap, so the write starts now with a promise for the text, which
+ * Safari and Chrome both accept. Falls back to copying once the text arrives.
+ */
+export async function copyWhenReady(text: Promise<string>): Promise<boolean> {
+  try {
+    if (window.isSecureContext && navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+      const blob = text.then((t) => new Blob([t], { type: "text/plain" }));
+      await navigator.clipboard.write([new ClipboardItem({ "text/plain": blob })]);
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    return await copyText(await text);
+  } catch {
+    return false;
+  }
+}

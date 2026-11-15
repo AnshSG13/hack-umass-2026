@@ -60,6 +60,12 @@ function Field({
   );
 }
 
+/** Where signing in lands: ?next= when it is a path on this site (/connect uses it), else Home. */
+function afterSignIn(): string {
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/home";
+}
+
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const key = useKey();
@@ -77,7 +83,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   // Skipped once this form signs someone in: submit() picks the destination then.
   const leaving = useRef(false);
   useEffect(() => {
-    if (me && !me.is_demo && !leaving.current) router.replace("/home");
+    if (me && !me.is_demo && !leaving.current) router.replace(afterSignIn());
   }, [me, router]);
 
   async function submit() {
@@ -91,7 +97,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       });
       leaving.current = true;
       setKey(r.token);
-      router.replace(signup ? "/welcome?next=/setup" : "/home");
+      router.replace(signup ? "/welcome?next=/setup" : afterSignIn());
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "That didn't work. Try again.");
       setBusy(false);

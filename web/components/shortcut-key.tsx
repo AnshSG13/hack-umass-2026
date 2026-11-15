@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { useToast } from "@/components/toast";
 import { api, ApiError, getKey, isApiKey, setKey } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
+import { rememberShortcutKey } from "@/lib/shortcut";
 import { btnOutline, btnPrimary, btnText, sectionTitle } from "@/lib/styles";
 import type { Me } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ export function ShortcutKey({ me, className }: { me: Me; className?: string }) {
     try {
       const r = await api<{ api_key: string }>("/api/me/key", { method: "POST" });
       if (signedInWithKey) setKey(r.api_key);
+      else rememberShortcutKey(me.user_id, r.api_key);
       setShown(r.api_key);
       setConfirm(false);
       onChanged();

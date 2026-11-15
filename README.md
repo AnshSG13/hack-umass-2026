@@ -165,6 +165,8 @@ The Shortcut has one action, **Open URLs** with `https://reelize.boston/save?url
 
 Visitors should stay in Safari: a Home Screen web app keeps its own sign in on iOS, and the Shortcut always opens Safari.
 
+**Saving in the background instead.** A second Shortcut keeps the visitor's own key, so a shared reel saves without Safari opening, and still nobody types anything. With `QUICK_SHORTCUT_KEYED=true`, **Add the Shortcut** copies the visitor's key before it opens the iCloud link. On its first run the Shortcut reads the key from the clipboard and keeps it in a file. When it has no key, or its key stops working, it opens `/connect`, which saves the reel and hands the key over in one tap. `shortcut/build_shortcut.py` writes this Shortcut, and it has to be signed once on a Mac: see "Build the key-saving Shortcut on a Mac" in `shortcut/README.md`.
+
 ## Deploy (Vultr VPS, Docker Compose, Caddy)
 
 One Vultr VPS runs everything: Caddy for HTTPS on one domain, the FastAPI API, the worker and the Next.js app, from `docker-compose.yml`. Atlas stays hosted by MongoDB. `deploy/vultr.py` does the whole setup from a laptop with Python and the `ssh` that ships with Windows; it needs no packages.

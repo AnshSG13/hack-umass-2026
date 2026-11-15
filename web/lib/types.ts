@@ -112,6 +112,8 @@ export interface SaveResponse {
   menu: string[];
   message: string;
   ticket: Ticket | null;
+  /** "no" when the Bearer key matched no account (the Shortcut then opens /connect). */
+  key_ok?: "yes" | "no";
 }
 
 // ---- POST /api/saves/{id}/confirm ----
@@ -319,6 +321,8 @@ export interface AppConfig {
   public_base_url: string;
   shortcut_url: string;
   quick_shortcut_url: string;
+  /** The quick Shortcut keeps a key: "Add the Shortcut" copies it first. */
+  quick_shortcut_keyed: boolean;
   judge_shortcut_url: string;
   first_save_reel_url: string;
   demo_enabled: boolean;
