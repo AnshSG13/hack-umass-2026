@@ -3776,7 +3776,8 @@ article.panel {
   gap: 5px;
   justify-content: center;
   font-size: 13px;
-  overflow: hidden;
+  /* Not overflow: hidden. The labels are short taste names, and hiding overflow would clip
+     the invisible tap layer that makes each chip 44 px to a finger (see Tap targets). */
 }
 .rfilter[data-icons="off"] .rchip .i {
   display: none;
@@ -4337,6 +4338,27 @@ article.panel {
   pointer-events: none;
   transition: opacity 0.2s, transform 0.25s var(--ease);
 }
+/* ---------- Tap targets: at least 44 px to a finger without changing how they look. Each
+   control keeps its size; an invisible layer around it takes the tap. ---------- */
+:is(.rchip, .see-all, .fchip, .chip-cat, .set-stepper button, .kg-list li > button, .tap-link) {
+  position: relative;
+}
+:is(.rchip, .see-all, .fchip, .chip-cat, .set-stepper button, .kg-list li > button, .tap-link)::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+.tap-link {
+  display: inline-block;
+}
+.set-name {
+  min-height: 44px;
+}
+
 .scroll-back[data-shown] {
   opacity: 1;
   transform: none;

@@ -142,14 +142,14 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </form>
         <p className="mt-6 text-[15px] text-ink">
           {signup ? "Already have an account? " : "New here? "}
-          <Link href={signup ? "/login" : "/signup"} className={linkInk}>
+          <Link href={signup ? "/login" : "/signup"} className={cn(linkInk, "tap-link")}>
             {signup ? "Sign in" : "Create an account"}
           </Link>
         </p>
         {!signup && (
           <p className="mt-3 text-[14px] text-muted">
             Made your account with a key?{" "}
-            <Link href="/setup" className={linkInk}>
+            <Link href="/setup" className={cn(linkInk, "tap-link")}>
               Use your key
             </Link>
             , then add an email in Settings.
