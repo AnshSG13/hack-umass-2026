@@ -81,9 +81,9 @@ export default function TasteBoardPage() {
   const head = (
     <header className="page-head with-back gutter">
       <div className="block-head" style={{ minHeight: 44 }}>
-        <Link href="/home" className="back-pill">
+        <Link href="/library" className="back-pill">
           <Icon name="back" />
-          Home
+          Folders
         </Link>
         <span style={{ display: "inline-flex", gap: 8 }}>
           {type && (
@@ -114,9 +114,9 @@ export default function TasteBoardPage() {
       <>
         {head}
         <div className="gutter msg" role="alert">
-          <p>That taste doesn&apos;t exist.</p>
-          <Link href="/home" className="btn">
-            Back to Home
+          <p>That folder doesn&apos;t exist.</p>
+          <Link href="/library" className="btn">
+            Back to Folders
           </Link>
         </div>
       </>

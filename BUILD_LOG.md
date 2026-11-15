@@ -363,3 +363,15 @@ The owner asked for the chat to go to the internet when you explicitly ask for a
 - **One helper.** Both use `websearch.grounded`: [n] markers where the model cited, Google redirect links resolved to the real pages, and text that comes back twice kept once (seen live: a reel answer printed its sentence twice).
 
 Checked live on fresh demo sessions: Ask "Search the web for whether the NYBG holiday train show needs timed tickets" answered with 2 nybg.org sources, kept them when reopened; a plain Ask question still searched the saves; a reel chat "look it up online: is the pool open in December?" answered with 3 sources (the hotel's pool page first). pytest: 170 passed.
+
+## 2026-11-15: Home for doing, Folders for browsing
+
+The owner asked to move the categories off Home, keep action items on Home, and make the third tab the folders; Home and Actions had shown the same reels. Each tab now has one job (DESIGN.md 4, 7.4, 7.5):
+
+- **Home** (`/home`; `/plans` redirects): Save a reel; Just saved; "Did you do it?"; the week strip with the chosen day's plans or its free time; Waiting on you, Ready for you, Missed; the shopping list; Started, Done this week, After this week.
+- **`GET /api/week`** (server/realize/week.py), all in code: plan counts per day for the rolling week; the first free slot per day from the person's settings (`slots.find_free_slot`) with up to two saves of that kind that have no time yet (waiting ones first, then ones saved without a plan); and the ingredients of this week's planned recipes merged into one list (same units add up, "count" reads as a plain number, sorted by name). "Add to Thu" confirms with that slot's `start_local`, the path "Change time" already uses, so no model call.
+- **Folders** (`/library`): the remember card, Recently saved, Your folders, See how they connect, Ask about your saves, All saves; search as before. Adding a reel from Folders stays on Folders.
+- **Tab bar:** Home, the Ask orb, Folders (new folder icon). Links that said Actions now say Home; the folder board and the graph go back to Folders.
+- **Why ringed days can be few on a demo account:** a free slot only shows when a save of that kind has no time yet; the demo's two recipes are already planned, so its weekday evenings show nothing to fill.
+
+Checked on the branch's own servers (API 8010, web 3010, worktree on branch home-folders): pytest 173 passed; the live suites 23/23, 22/22 and 8/8; Home at 390x844 and 375x667 with one Add to tomorrow and its Undo, the list ticking, and /plans landing on Home; 12 screens opened with no page errors or horizontal overflow; the web-design-guidelines pass found one issue (the Add button's spoken name didn't contain its visible words), fixed.

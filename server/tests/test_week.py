@@ -15,9 +15,14 @@ def test_groceries_merge_by_ingredient_and_add_up_same_units():
     assert by["onion"]["amount"] == "3" and by["onion"]["for"] == ["Chickpea curry", "Chicken au poivre"]
     assert by["olive oil"]["amount"] == "2 tbsp + 1 tsp"
     assert by["rosemary"]["amount"] == "" and by["rosemary"]["item"] == "Fresh rosemary"
-    assert [g["key"] for g in out] == sorted(g["key"] for g in out)
+    assert [g["item"].lower() for g in out] == sorted(g["item"].lower() for g in out)
 
 
 def test_nothing_planned_means_an_empty_list():
     assert week.merge_groceries([]) == []
     assert week.merge_groceries([("a", "Toast", [{"item": "  "}])]) == []
+
+
+def test_count_units_read_as_plain_numbers():
+    out = week.merge_groceries([("a", "Tiramisu", [{"qty": 12, "unit": "count", "item": "ladyfingers"}])])
+    assert out[0]["amount"] == "12"

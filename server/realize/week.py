@@ -19,6 +19,7 @@ from .timeutil import DAY_LONG, DAY_SHORT, as_utc, big_time, now_utc, tz_of, wee
 SLOT_KINDS = [("recipe", "Free to cook"), ("workout", "Free to work out"), ("place", "Free to go out")]
 SUGGEST = 2
 FREE_MAX = 4
+COUNT_UNITS = {"count", "whole", "pieces", "piece", "item", "items"}
 
 
 def _norm(item: str) -> str:
@@ -38,6 +39,8 @@ def merge_groceries(recipes: list[tuple[str, str, list[dict]]]) -> list[dict]:
                 continue
             row = lines.setdefault(key, {"item": " ".join(str(i["item"]).split()), "amounts": {}, "for": []})
             unit = (i.get("unit") or "").strip().lower()
+            if unit in COUNT_UNITS:
+                unit = ""  # "12 count" reads as "12"
             try:
                 q = float(i.get("qty"))
             except (TypeError, ValueError):
@@ -47,7 +50,7 @@ def merge_groceries(recipes: list[tuple[str, str, list[dict]]]) -> list[dict]:
             if title not in row["for"]:
                 row["for"].append(title)
     out = []
-    for key in sorted(lines):
+    for key in sorted(lines, key=lambda k: lines[k]["item"].lower()):  # by the name people see
         row = lines[key]
         amount = " + ".join(" ".join(p for p in (actions.fmt_qty(q), u) if p) for u, q in row["amounts"].items())
         out.append({"key": key, "item": row["item"], "amount": amount, "for": row["for"]})

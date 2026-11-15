@@ -32,7 +32,7 @@ Archivo through next/font/google as a variable font with `axes: ["wdth"]`.
 ## 4. Layout
 - Phone first (390 px). Side padding 16. Content max width 440, centered. 4-pt spacing grid; 24 between sections.
 - Header (56 px): wordmark left, "Demo" badge after it for demo users, Settings icon button right (aria-label "Settings").
-- Bottom tab bar (64 px + safe area): Plans (CalendarCheck), Library (Library), Ask (MessageCircle). Demo users get a first tab, Samples (Sparkles). Icon above a 13px label; active = ink label with a 2px ink bar on top; inactive = muted.
+- Bottom tab bar (64 px + safe area): Home, the Ask orb in the middle, Folders. Each tab has one job: Home is for doing (the week, what's waiting, what to buy), Ask is for asking, Folders is for browsing what you saved. Active = ink label; inactive = muted. (Changed 2026-11-15 at the owner's request; before, the tabs were Home, Ask, Actions.)
 - Desktop at 1100 px or wider: app column (440) plus side panel (560) titled "How it was planned", showing the selected ticket's agent trace (and the map if built). Below 1100: the trace opens in a bottom sheet.
 - Radii: ticket 16, buttons 12, inputs 12, chips full. Buttons: primary 48 px high, others at least 44 px.
 - Left-aligned text. The ticket's side notches are the only non-rectangular shape in the app.
@@ -94,17 +94,17 @@ Toast (custom component, bottom, above the tab bar, opacity 120 ms, 6 s): "Added
   4. "Try it: open this reel, tap Share, then Realize." (button "Open the reel" → first_save_reel_url). Polls for a save newer than page load; then "Got your first save!" and its ticket.
 - Android: "Realize works on iPhone for now. Paste reel links here instead." + paste box.
 - Demo users also see: "Judges: use the judge Shortcut, no key needed." (→ judge_shortcut_url).
-### 7.4 Plans `/plans` (home)
-- Title "This week", sub "Nov 16 to Nov 22" (muted).
-- "Waiting on you" (only if any): full tickets in the proposed state.
-- "This week": day headings ("Thursday, Nov 19"), compact tickets in time order.
-- "Done this week · 3": a horizontal row of mini torn stubs (title + day).
-- "Coming up: {n} more" link when later_count > 0.
-- Empty: "No plans yet." / "Share a reel from Instagram to make your first ticket." Primary "Set up sharing", secondary "Try a sample reel".
-- Loading: two static ticket-shaped placeholders (no shimmer).
-- Error: "Plans didn't load. Check your connection." + "Try again".
-### 7.5 Library `/library` and save detail `/s/[id]`
-- Title "Library", sub "{n} saves".
+### 7.4 Home `/home` (doing; `/plans` redirects here)
+- Greeting, "This week, Nov 14 to Nov 20" (muted), and a full-width "Save a reel" button.
+- "Just saved": the reels added in this visit, with their reading progress, until they're read.
+- "Did you do it?": plans whose time has passed, as cards with Done, Skipped and Move it.
+- "Your week": a strip of the next seven days (today first, dots for plans, a ring for free time). The chosen day shows its plans; a day with free time from the person's settings shows "Free to cook · Thu 6:30 pm" with up to two saves that fit and "Add to Thu" (one tap, toast with Undo). An empty day offers "See free time on {day}".
+- "Waiting on you": full tickets in the proposed state; only the first has the filled button. "Ready for you" bundles, then the folded Missed group.
+- "Shopping list": the ingredients of this week's planned recipes, merged, with tick boxes (kept in this browser) and "Send".
+- "Started", "Done this week", then "After this week: {n} more".
+- Empty account: "Nothing saved yet" + "Add a reel".
+### 7.5 Folders `/library` and save detail `/s/[id]`
+- Title "Folders", sub "{n} saves". Not searching: the remember card, "Recently saved" rail with Add, "Your folders" (one tile per type, opening `/t/{type}`) with "See how they connect", "Ask about your saves", then "All saves". The type chips below are replaced by the folders.
 - Search field, placeholder "Search what was said or shown" (300 ms debounce). No results: "Nothing matches “{q}”. Try a word they said in the video."
 - Type chips (44 px): All, Recipes, Events, Places, Workouts, Products, Tips, Other, each with a count.
 - Rows: thumbnail 56x75, title, "{Type} · Saved Oct 3", plan status text ("Thu 6:30 pm", "Waiting on you", "No plan", "Done", "Reading", "Watching the video").

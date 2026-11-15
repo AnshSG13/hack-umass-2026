@@ -35,7 +35,7 @@ export interface TicketPlan {
   long_day: string | null; // "Thursday", "today", "Nov 26" for accepted plans
   scheduled_iso: string | null;
   followup_due: boolean;
-  /** Still waiting, but an event whose dates have passed: Actions lists it under Missed. */
+  /** Still waiting, but an event whose dates have passed: Home lists it under Missed. */
   missed?: boolean;
   confirmed_via: "web" | "shortcut" | null;
   gcal_url: string | null;
@@ -583,4 +583,35 @@ export interface KnowledgeGraph {
   nodes: GraphNode[];
   links: GraphLink[];
   counts: { saves: number; types: number; subcategories: number; related: number; interests: number; interests_total: number };
+}
+
+// ---- GET /api/week: Home's week, computed in code ----
+export interface WeekDay {
+  date: string; // "2026-11-19"
+  short: string; // "Thu"
+  long: string; // "Thursday"
+  num: number; // 19
+  today: boolean;
+  planned: number; // plans on that day
+}
+/** The first free slot on a day, from the person's own week settings, with saves that fit it. */
+export interface FreeSlot {
+  date: string;
+  kind: "recipe" | "workout" | "place";
+  label: string; // "Free to cook"
+  start_local: string; // "2026-11-19T18:30", sent back to confirm to add a save at this time
+  when: string; // "Thu 6:30 pm"
+  day: string; // "Thursday"
+  suggestions: { save_id: string; title: string; type: SaveType | null; thumb_url: string | null }[];
+}
+export interface GroceryLine {
+  key: string;
+  item: string;
+  amount: string; // "2 tbsp + 1 tsp", or "" when no recipe gave an amount
+  for: string[]; // the recipes that need it
+}
+export interface WeekResponse {
+  days: WeekDay[];
+  free: FreeSlot[];
+  groceries: { items: GroceryLine[]; recipes: { save_id: string; title: string }[] };
 }
