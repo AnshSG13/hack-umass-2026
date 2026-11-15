@@ -11,7 +11,7 @@ import { StepLines } from "@/components/agent-activity";
 import { KindChip, ReelThumb } from "@/components/bits";
 import { ChangeSheet } from "@/components/change-sheet";
 import { Icon } from "@/components/icons";
-import { followupQuestion, ticketState, ticketTitle } from "@/lib/format";
+import { followupQuestion, ticketState, ticketTitle, planLabel } from "@/lib/format";
 import { useElapsed, useHealth } from "@/lib/hooks";
 import { actionHref, DELIVERY, kindTint, tint } from "@/lib/kinds";
 import { useTicketActions } from "@/lib/ticket-actions";
@@ -163,7 +163,7 @@ export function PlanCard({
         <div className="plan-btns">
           {dated ? (
             <button type="button" className={mainBtn} disabled={busy} onClick={() => void pick(first.id)}>
-              {first.web_label}
+              {planLabel(first.web_label)}
             </button>
           ) : onDo ? (
             <button type="button" className={mainBtn} onClick={() => onDo(action.deliver)}>
@@ -219,11 +219,11 @@ export function PlanCard({
         {plan.why && <p className="plan-why">{plan.why}</p>}
         <div className="plan-btns">
           <button type="button" className={mainBtn} disabled={busy} onClick={() => void pick(first.id)}>
-            {first.web_label}
+            {planLabel(first.web_label)}
           </button>
           {second && (
             <button type="button" className="btn" disabled={busy} onClick={() => void pick(second.id)}>
-              {second.web_label} · {second.big_time}
+              {planLabel(second.web_label)} · {second.big_time}
             </button>
           )}
         </div>
@@ -277,7 +277,7 @@ export function PlanCard({
         <div className="plan-btns">
           {first && (
             <button type="button" className={mainBtn} disabled={busy} onClick={() => void pick(first.id)}>
-              {first.web_label}
+              {planLabel(first.web_label)}
             </button>
           )}
           {plan.extras.map((x) => (
@@ -313,7 +313,7 @@ export function PlanCard({
             {chosen?.secondary && <small>{chosen.secondary}</small>}
           </p>
         )}
-        <p className="plan-line">Added to {plan.long_day ?? "your week"}</p>
+        <p className="plan-line">Planned for {plan.long_day ?? "this week"}</p>
         {plan.confirmed_via === "shortcut" && <p className="plan-meta">On your phone&apos;s calendar</p>}
         {plan.reminders_preview.map((r) => (
           <p key={r} className="plan-meta">

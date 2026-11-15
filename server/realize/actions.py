@@ -720,7 +720,10 @@ def accepted_message(plan: dict, option: dict, user: dict, source: str,
             return f"Reminder set for {day}."
         if plan["kind"] == "event":
             return f"Added to your calendar for {day}."
-    return f"Added to {day}."
+        return f"Added to {day}."
+    # On the web nothing is added anywhere yet: the plan has a time, and its card offers
+    # "Add to Google Calendar".
+    return f"Planned for {day}."
 
 
 def state_phrase(plan: dict | None, user: dict, *, now: datetime | None = None) -> str:

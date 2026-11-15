@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { KindChip } from "@/components/bits";
-import { followupQuestion, ticketState, ticketTitle, type TicketState } from "@/lib/format";
+import { followupQuestion, ticketState, ticketTitle, type TicketState, planLabel } from "@/lib/format";
 import { useElapsed, useHealth } from "@/lib/hooks";
 import { btnIcon, btnOutline, btnPrimary, btnText, linkInk } from "@/lib/styles";
 import { useTicketActions } from "@/lib/ticket-actions";
@@ -410,7 +410,7 @@ export function Ticket({
         {preview ? null : (
           <>
             <button type="button" className={btnPrimary} disabled={busy} onClick={() => void add(first.id)}>
-              {first.web_label}
+              {planLabel(first.web_label)}
             </button>
             <div className="mt-1 grid grid-cols-3 gap-1">
               <button type="button" className={btnText} disabled={busy} onClick={() => setChangeOpen(true)}>
@@ -443,7 +443,7 @@ export function Ticket({
           <div className="mt-3">
             {first && (
               <button type="button" className={btnPrimary} disabled={busy} onClick={() => void add(first.id)}>
-                {first.web_label}
+                {planLabel(first.web_label)}
               </button>
             )}
             <div className={cn("flex flex-wrap items-center justify-between gap-x-3", first && "mt-1")}>
@@ -496,7 +496,7 @@ export function Ticket({
             <div className="mt-1 flex min-h-11 items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-[15px] font-medium text-done-ink">
                 <Check aria-hidden="true" className="size-4 shrink-0" strokeWidth={2.5} />
-                Added to {plan.long_day ?? "your week"}
+                Planned for {plan.long_day ?? "this week"}
               </p>
               {!publicToken && (
                 <DropdownMenu>
@@ -701,7 +701,7 @@ function statusLine(t: TicketData, state: TicketState): { icon: LucideIcon; text
   const plan = t.plan;
   switch (state) {
     case "accepted":
-      return { icon: Check, text: `Added to ${plan?.long_day ?? "your week"}`, tone: "text-done-ink" };
+      return { icon: Check, text: `Planned for ${plan?.long_day ?? "this week"}`, tone: "text-done-ink" };
     case "followup":
       return { icon: CircleDashed, text: followupQuestion(plan?.kind), tone: "text-ink" };
     case "proposed":
@@ -766,7 +766,7 @@ export function CompactTicket({
             disabled={actions.busy !== null}
             onClick={() => void actions.confirm(first.id)}
           >
-            {first.web_label}
+            {planLabel(first.web_label)}
           </button>
           {actions.error && (
             <p role="alert" className="mt-2 text-[14px] text-danger-ink">

@@ -245,7 +245,7 @@ export default function BundlePage() {
           >
             {busy ? "Adding" : b.cta}
           </button>
-          <p className="bstart-note">One tap adds all of these to your week. Nothing is added before that.</p>
+          <p className="bstart-note">One tap plans all of these. Nothing is planned before that.</p>
         </div>
       )}
       {isRecipe && (
@@ -266,7 +266,7 @@ export default function BundlePage() {
       {started && (
         <p className="bdone">
           <Icon name="check" />
-          On your week. Change any one of them from its reel.
+          Planned. Change any one of them from its reel, or add it to your Google Calendar there.
         </p>
       )}
 

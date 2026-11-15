@@ -119,21 +119,39 @@ function RememberCard() {
       // Private mode: it stays closed for this visit only.
     }
   }
+  const asked = /[?!.]$/.test(item.line) ? item.line : `${item.line}?`;
   return (
     <div className="gutter">
+      {/* A memory, not a notice: the reel as a print with tape on it, and when it was. */}
       <div className="remember" style={tint("butter")}>
         <Link href={`/s/${item.save_id}`} className="remember-main">
-          {item.thumb_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.thumb_url} alt="" className="remember-thumb" />
-          ) : (
-            <span className="remember-thumb" aria-hidden="true">
-              <Icon name="spark" />
-            </span>
-          )}
+          <span className="remember-print" aria-hidden="true">
+            <span className="remember-tape" />
+            {item.thumb_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.thumb_url} alt="" />
+            ) : (
+              <span className="remember-blank">
+                <Icon name="spark" />
+              </span>
+            )}
+          </span>
           <span className="remember-text">
-            <span className="remember-line">{item.line}</span>
-            <span className="remember-meta">You saved this {item.saved_on}</span>
+            <span className="remember-when">
+              <Icon name="clock" />
+              {item.ago ? `From ${item.ago}` : "From a while back"}
+            </span>
+            <span className="remember-line">{asked}</span>
+            {/* A line that doesn't name the reel gets the reel's own name under it. */}
+            {/^remember this one/i.test(item.line) && <span className="remember-title">{item.title}</span>}
+            <span className="remember-meta">
+              You saved it {item.weekday ? `on a ${item.weekday}, ` : ""}
+              {item.saved_on}
+            </span>
+            <span className="remember-go">
+              Look again
+              <Icon name="right" />
+            </span>
           </span>
         </Link>
         <button type="button" className="remember-x" aria-label="Close" onClick={close}>

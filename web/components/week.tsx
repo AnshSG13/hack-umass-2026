@@ -102,7 +102,7 @@ function FreeCard({ slot }: { slot: FreeSlot }) {
       const r = await api<{ status: string; message: string }>(`/api/saves/${saveId}/confirm`, {
         body: { start_local: slot.start_local, source: "web" },
       });
-      if (r.status === "accepted") toast.show(r.message || `Added to ${slot.day}.`, { undo: () => void undo(saveId) });
+      if (r.status === "accepted") toast.show(r.message || `Planned for ${slot.day}.`, { undo: () => void undo(saveId) });
       else toast.show(r.message || "That time isn't free any more.");
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : "That didn't work. Try again.");
