@@ -7,8 +7,8 @@
 // node is a sprite, so it always faces the camera and stays crisp: kinds and folders are
 // flat discs in their kind's pastel with a thin ink ring and a name chip under them, reels
 // are round thumbnails of the reel, interests are butter discs. Lines are hairlines;
-// "related" folders get a hairline in a softened kind ink with a few particles drifting
-// along it. A gentle pull toward the centre keeps separate tastes from drifting apart, so the
+// "related" folders get a blue hairline (one colour for all of them, as in the key) with a
+// few particles drifting along it. A gentle pull toward the centre keeps separate tastes from drifting apart, so the
 // whole picture fills the frame. After the layout settles the graph turns slowly by itself
 // so it reads as 3D; the first touch stops that. Without WebGL the flat map is shown.
 
@@ -240,6 +240,8 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
       line: cssVar("--line", "#ece9e3"),
       lineStrong: cssVar("--line-strong", "#cfcbc2"),
       butter: cssVar("--butter", "#fff3c4"),
+      // Every "similar reels" line is this one colour, the one the key under the map shows.
+      similar: cssVar("--sky-ink", "#1f5f9e"),
       butterInk: cssVar("--butter-ink", "#735700"),
     };
   }, []);
@@ -354,15 +356,9 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
     [selected],
   );
 
-  // The kind's ink, at full strength for the drifting particles and softened for the line.
-  const inkOf = useCallback(
-    (l: L) => {
-      if (l.kind === "likes") return colors.butterInk;
-      const t = (l.source as N & GraphNode).type;
-      return t ? colors.kinds[t].ink : colors.ink;
-    },
-    [colors],
-  );
+  // Full strength for the drifting particles, softened for the line: blue for similar reels
+  // whatever the category, butter ink for an interest.
+  const inkOf = useCallback((l: L) => (l.kind === "likes" ? colors.butterInk : colors.similar), [colors]);
 
   const linkColor = useCallback(
     (l: L) => {

@@ -255,6 +255,10 @@ def replan(save_id: str, user: dict = Depends(current_user)) -> dict:
     if not plan:
         raise HTTPException(status_code=409, detail="This save is still being read.")
     plan = planops.replan_code(save, plan, user)
+    # Plan again also tidies where it's filed: older Just vibes reels in this reel's
+    # sub-category join its category (categories.adopt).
+    if save.get("type") == "other":
+        categories.adopt(user["_id"], save.get("category"), save.get("subcategory"))
     return {"ticket": tickets.ticket(save, plan, user)}
 
 
@@ -428,6 +432,10 @@ def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)
     if update:
         db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]}, {"$set": update})
         save = {**save, **update}
+    # Filed into a category and sub-category by hand: older Just vibes reels in that same
+    # sub-category join it too, so one kind of reel isn't split (categories.adopt).
+    if (recategorized or body.subcategory is not None) and save.get("type") == "other":
+        categories.adopt(user["_id"], save.get("category"), save.get("subcategory"))
     if retyped:
         plan = planops.get_for_save(save["_id"])
         if plan and plan["status"] == "proposed":

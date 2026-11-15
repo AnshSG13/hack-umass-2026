@@ -66,8 +66,8 @@ export default function GraphPage() {
       </h1>
       {data && data.counts.saves > 0 && (
         <p className="page-sub">
-          {plural(data.counts.saves, "save", "saves")} in {plural(data.counts.subcategories, "folder", "folders")},{" "}
-          {plural(data.counts.related, "link", "links")} between folders
+          {plural(data.counts.saves, "save", "saves")} in {plural(data.counts.subcategories, "sub-category", "sub-categories")},{" "}
+          {plural(data.counts.related, "link", "links")} between them
         </p>
       )}
     </header>
@@ -176,14 +176,14 @@ export default function GraphPage() {
     return (
       <section className="kg-detail" aria-live="polite" style={node.type ? tint(KINDS[node.type].color) : undefined}>
         <p className="kg-detail-kind">
-          {node.kind === "type" ? "Kind" : node.kind === "sub" ? "Folder" : node.kind === "interest" ? "Your interest" : "Reel"}
+          {node.kind === "type" ? "Category" : node.kind === "sub" ? "Sub-category" : node.kind === "interest" ? "Your interest" : "Reel"}
         </p>
         <h2 className="kg-detail-title">{node.kind === "save" ? node.label : name(node.id)}</h2>
         {node.count !== undefined && <p className="kg-detail-sub">{plural(node.count, "save", "saves")}</p>}
         {parent && <p className="kg-detail-sub">In {name(parent)}</p>}
         {subs.length > 0 && (
           <div className="kg-detail-row">
-            <h3>{node.kind === "interest" ? "Closest folders" : "Folders"}</h3>
+            <h3>{node.kind === "interest" ? "Closest sub-categories" : "Sub-categories"}</h3>
             <div className="kg-chips">
               {subs.map((id) => (
                 <button key={id} type="button" className="fchip" onClick={() => setSelected(id)}>
@@ -195,7 +195,7 @@ export default function GraphPage() {
         )}
         {rel.length > 0 && (
           <div className="kg-detail-row">
-            <h3>Related folders</h3>
+            <h3>Sub-categories with similar reels</h3>
             <div className="kg-chips">
               {rel.map((id) => (
                 <button key={id} type="button" className="fchip" onClick={() => setSelected(id)}>
@@ -297,7 +297,7 @@ export default function GraphPage() {
         {data && (related.length > 0 || likes.size > 0) && (
           <section className="kg-list" aria-labelledby="kg-links-h">
             <h2 className="block-title" id="kg-links-h">
-              Folders with similar reels
+              Sub-categories with similar reels
             </h2>
             <ul>
               {related.map((l) => (
@@ -352,11 +352,11 @@ function GraphKey({ reels, interests }: { reels: boolean; interests: boolean }) 
     <ul className="kg-key-list" aria-label="Key">
       <li>
         {disc(7, "--peach", "--peach-ink")}
-        Kind or category
+        Category
       </li>
       <li>
         {disc(4.5, "--peach", "--peach-ink")}
-        Folder
+        Sub-category
       </li>
       {reels && (
         <li>
@@ -373,7 +373,7 @@ function GraphKey({ reels, interests }: { reels: boolean; interests: boolean }) 
       </li>
       <li>
         {line("--sky-ink", true)}
-        Folders with similar reels
+        Similar reels
       </li>
       {interests && (
         <li>
