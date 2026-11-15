@@ -10,7 +10,7 @@ import useSWR from "swr";
 import { Icon } from "@/components/icons";
 import { fetcher } from "@/lib/api";
 import { ingredientParts, plural } from "@/lib/format";
-import type { Ingredient, Nutrition } from "@/lib/types";
+import type { Ingredient, Nutrition, NutritionResponse, PublishedNutrition } from "@/lib/types";
 
 // ---- the card ----
 
@@ -61,27 +61,29 @@ export function CookCard({
 // ---- nutrition ----
 
 export function NutritionPanel({ saveId }: { saveId: string }) {
-  const { data, error, isLoading, mutate } = useSWR<{ nutrition: Nutrition }>(`/api/saves/${saveId}/nutrition`, fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<NutritionResponse>(`/api/saves/${saveId}/nutrition`, fetcher, {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
-  const n = data?.nutrition;
+  const pub = data?.published ?? null;
+  const n = pub ? null : (data?.nutrition ?? null);
+  const shown = Boolean(pub || n);
   return (
     <section className="sec" aria-labelledby="nut-h">
       <div className="sec-head">
         <h2 className="sec-title" id="nut-h">
           Nutrition
         </h2>
-        <span className="pill">Per serving</span>
+        <span className="pill">{pub?.per === "recipe" ? "Whole recipe" : "Per serving"}</span>
       </div>
-      {isLoading && !n && (
+      {isLoading && !shown && (
         <div className="nut" role="status">
           <span className="vh">Working out the nutrition</span>
           <span className="skel" style={{ height: 44, width: "46%" }} />
           <span className="skel" style={{ height: 12, width: "100%", marginTop: 16, borderRadius: 12 }} />
         </div>
       )}
-      {error && !n && (
+      {error && !shown && (
         <p className="msg">
           Nutrition isn&apos;t available for this one right now.{" "}
           <button type="button" className="link" onClick={() => void mutate()}>
@@ -89,14 +91,50 @@ export function NutritionPanel({ saveId }: { saveId: string }) {
           </button>
         </p>
       )}
+      {pub && <PublishedBody p={pub} />}
       {n && <NutritionBody n={n} />}
     </section>
   );
 }
 
+function siteName(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** The recipe's own published numbers, with where they came from. */
+function PublishedBody({ p }: { p: PublishedNutrition }) {
+  const v = p.values;
+  const rows: [string, string][] = [];
+  if (v.protein_g !== undefined) rows.push(["Protein", `${v.protein_g} g`]);
+  if (v.carbs_g !== undefined) rows.push(["Carbs", `${v.carbs_g} g`]);
+  if (v.fat_g !== undefined) rows.push(["Fat", `${v.fat_g} g`]);
+  if (v.fiber_g !== undefined) rows.push(["Fiber", `${v.fiber_g} g`]);
+  if (v.sugar_g !== undefined) rows.push(["Sugar", `${v.sugar_g} g`]);
+  if (v.sodium_mg !== undefined) rows.push(["Sodium", `${v.sodium_mg.toLocaleString()} mg`]);
+  const src = p.sources[0];
+  return (
+    <Facts kcal={v.calories} split={p.split_pct} rows={rows}>
+      Published for this recipe
+      {p.per === "serving" && p.servings ? `, which makes ${plural(p.servings, "serving", "servings")}` : ""}
+      {src ? (
+        <>
+          , from{" "}
+          <a className="link" href={src.url} target="_blank" rel="noopener noreferrer">
+            {siteName(src.url)}
+          </a>
+        </>
+      ) : null}
+      .
+    </Facts>
+  );
+}
+
 function NutritionBody({ n }: { n: Nutrition }) {
   const p = n.per_serving;
-  const split = n.split_pct;
   const rows: [string, string][] = [
     ["Protein", `${p.protein_g} g`],
     ["Carbs", `${p.carbs_g} g`],
@@ -106,10 +144,32 @@ function NutritionBody({ n }: { n: Nutrition }) {
     ["Sodium", `${p.sodium_mg.toLocaleString()} mg`],
   ];
   return (
+    <Facts kcal={p.kcal} split={n.split_pct} rows={rows}>
+      An estimate from the ingredients, for {plural(n.servings, "serving", "servings")}
+      {n.servings_from === "estimate" ? " (the reel doesn't say how many, so that's a guess too)" : ""}.
+      {n.assumed > 0 ? ` ${plural(n.assumed, "ingredient has", "ingredients have")} no amount in the reel, so a typical one was used.` : ""}
+    </Facts>
+  );
+}
+
+function Facts({
+  kcal,
+  split,
+  rows,
+  children,
+}: {
+  kcal: number | undefined;
+  split: { protein?: number; carbs?: number; fat?: number };
+  rows: [string, string][];
+  children: React.ReactNode;
+}) {
+  return (
     <div className="nut">
-      <p className="nut-kcal">
-        <b>{p.kcal.toLocaleString()}</b> kcal
-      </p>
+      {kcal !== undefined && (
+        <p className="nut-kcal">
+          <b>{kcal.toLocaleString()}</b> kcal
+        </p>
+      )}
       {split.protein !== undefined && (
         <>
           <div className="macro-bar" role="img" aria-label={`Calories: ${split.protein}% protein, ${split.carbs}% carbs, ${split.fat}% fat`}>
@@ -141,11 +201,7 @@ function NutritionBody({ n }: { n: Nutrition }) {
           </div>
         ))}
       </dl>
-      <p className="nut-note">
-        An estimate from the ingredients, for {plural(n.servings, "serving", "servings")}
-        {n.servings_from === "estimate" ? " (the reel doesn't say how many, so that's a guess too)" : ""}.
-        {n.assumed > 0 ? ` ${plural(n.assumed, "ingredient has", "ingredients have")} no amount in the reel, so a typical one was used.` : ""}
-      </p>
+      <p className="nut-note">{children}</p>
     </div>
   );
 }

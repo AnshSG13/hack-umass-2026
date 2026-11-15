@@ -100,6 +100,13 @@ def attach_story(save: dict | None, user: dict, sample: dict) -> None:
         if user.get("expires_at"):
             doc["expires_at"] = user["expires_at"]
         db.discussions().insert_one(doc)
+        # Published macros in the story's answer are the recipe's own numbers, so the reel
+        # page shows the same ones as the chat.
+        for m in msgs:
+            if (m.get("macros") or {}).get("basis") == "published" and m.get("sources"):
+                db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]},
+                                      {"$set": {"published_nutrition": {**m["macros"], "sources": m["sources"],
+                                                                        "at": now}}})
     story = sample.get("story_trip")
     if story and not trip_mod.get_for_save(save["_id"], user["_id"]):
         plan = {k: story[k] for k in ("days", "sources", "city", "region", "country", "weather_place",

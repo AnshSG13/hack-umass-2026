@@ -171,6 +171,8 @@ class ChatTurn(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatTurn] = []
+    # A kept Ask chat to continue; its own messages are the history then.
+    chat_id: str | None = None
 
 
 class DiscussRequest(BaseModel):

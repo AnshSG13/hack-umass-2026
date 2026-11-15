@@ -273,17 +273,30 @@ def _run(user: dict, message: str, history: list[dict], emit) -> None:
         emit(ERROR_LINE)
 
 
-def stream(user: dict, message: str, history: list[dict]) -> Iterator[str]:
-    """Yield NDJSON lines as the agent works."""
+def stream(user: dict, message: str, history: list[dict], chat: dict | None = None) -> Iterator[str]:
+    """Yield NDJSON lines as the agent works. An answered turn is kept as part of `chat` (a
+    new chat when None), and the last line says which chat it went into."""
     q: queue.Queue = queue.Queue()
     done = object()
+    seen: dict = {}
 
     def emit(obj: dict) -> None:
+        if obj.get("type") in ("answer", "cards"):
+            seen[obj["type"]] = obj
         q.put(obj)
 
     def work() -> None:
         try:
             _run(user, message, history, emit)
+            if "answer" in seen:
+                from . import discuss  # late: discuss imports the planner and trips
+
+                try:
+                    kept = discuss.append_ask(user, chat, message, seen["answer"],
+                                              (seen.get("cards") or {}).get("cards") or [])
+                    q.put({"type": "saved", "chat_id": str(kept["_id"]), "title": kept.get("title")})
+                except Exception as e:  # noqa: BLE001 - the answer was shown; only keeping it failed
+                    log.warning("keeping the chat failed: %s", str(e)[:200])
         finally:
             q.put(done)
 

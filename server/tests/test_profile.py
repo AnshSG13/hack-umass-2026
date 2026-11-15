@@ -6,6 +6,7 @@ import pytest
 from realize import profile, subcats
 from realize.api.routers.onboarding import Profile, clean_profile, starter_view
 
+# "identity" is an answer stored by the earlier intro's gender question; it must stay harmless.
 PROFILE = {"identity": "Woman", "ethnicity": ["Asian"], "age_range": "18 to 24",
            "interests": ["Food and cooking", "Meal prep"], "hobbies": ["Running"]}
 
@@ -31,13 +32,20 @@ def test_taste_lines_skip_prefer_not_to_say():
 
 
 def test_clean_profile_drops_unknown_choices_and_near_duplicates():
-    p = clean_profile(Profile(identity="Robot", age_range="25 to 34", ethnicity=["White", "Martian"],
+    p = clean_profile(Profile(age_range="25 to 34", ethnicity=["White", "Martian"],
                               interests=["Travel", "travel", "Travels!"], hobbies=[""]))
-    assert p["identity"] is None
     assert p["age_range"] == "25 to 34"
     assert p["ethnicity"] == ["White"]
     assert p["interests"] == ["Travel"]
     assert p["hobbies"] == []
+
+
+def test_no_gender_question_and_an_old_answer_is_dropped():
+    from realize.api.routers.onboarding import options
+    assert "identities" not in options()
+    p = clean_profile(Profile.model_validate({"identity": "Woman", "interests": ["Travel"]}))
+    assert "identity" not in p
+    assert p["interests"] == ["Travel"]
 
 
 def test_make_starters_files_each_interest_and_hobby_under_its_kind(monkeypatch):

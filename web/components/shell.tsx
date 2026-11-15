@@ -44,6 +44,9 @@ export interface AskHandoff {
 interface AskStore {
   turns: AskTurn[];
   setTurns: React.Dispatch<React.SetStateAction<AskTurn[]>>;
+  /** The kept chat these turns belong to; null until the first answer is kept. */
+  chatId: string | null;
+  setChatId: (id: string | null) => void;
   handoff: AskHandoff | null;
   /** Hand a question to Ask and go there. */
   ask: (text: string, send: boolean, spoken?: boolean) => void;
@@ -53,6 +56,8 @@ interface AskStore {
 const AskContext = createContext<AskStore>({
   turns: [],
   setTurns: () => {},
+  chatId: null,
+  setChatId: () => {},
   handoff: null,
   ask: () => {},
   clearHandoff: () => {},
@@ -106,6 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const refresh = useRefresh();
 
   const [turns, setTurns] = useState<AskTurn[]>([]);
+  const [chatId, setChatId] = useState<string | null>(null);
   const [handoff, setHandoff] = useState<AskHandoff | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [fresh, setFresh] = useState<FreshSave[]>([]);
@@ -117,9 +123,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (key === null) router.replace("/");
   }, [key, router]);
 
-  // A real account that hasn't done the intro screens yet goes there first.
+  // Only a new real account (no intro done and nothing saved yet) goes to the intro first.
+  // Accounts that already have saves are left alone; Settings has "Redo the intro" for them.
   useEffect(() => {
-    if (me && !me.onboarded && !me.is_demo) router.replace("/welcome");
+    if (me && !me.onboarded && !me.is_demo && me.counts.saves === 0) router.replace("/welcome");
   }, [me, router]);
 
   // A key the server no longer knows (rotated, or an expired demo) is the same as no key.
@@ -162,8 +169,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   const askStore = useMemo(
-    () => ({ turns, setTurns, handoff, ask, clearHandoff }),
-    [turns, handoff, ask, clearHandoff],
+    () => ({ turns, setTurns, chatId, setChatId, handoff, ask, clearHandoff }),
+    [turns, chatId, handoff, ask, clearHandoff],
   );
   const forget = useCallback((saveId: string) => setFresh((list) => list.filter((f) => f.save_id !== saveId)), []);
   const app = useMemo(() => ({ openAdd, fresh, goBack, forget }), [openAdd, fresh, goBack, forget]);

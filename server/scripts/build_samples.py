@@ -179,9 +179,17 @@ def main() -> int:
                               "expected_type": row["expected_type"], "metadata": meta,
                               "thumb_id": thumb_id, "enrichment": enr, "embedding": emb}
                     if existing and existing.get("thumb_id") and existing["thumb_id"] != thumb_id:
+                        # Saves copied from the old sample point at its thumbnail: move them to
+                        # the new one before the old one goes, or their images break.
+                        db.saves().update_many({"thumb_id": existing["thumb_id"]}, {"$set": {"thumb_id": thumb_id}})
                         db.thumbnails().delete_one({"_id": existing["thumb_id"], "owner_user_id": None})
                 sample["cached_plan"] = build_cached_plan(sample, template, reuse=not a.no_reuse)
                 sample["built_at"] = now_utc()
+                # The demo story's prebuilt results (scripts.build_demo_story) cost model calls;
+                # a rebuild of the reel keeps them.
+                for keep in ("story_discussion", "story_trip"):
+                    if existing and existing.get(keep) and keep not in sample:
+                        sample[keep] = existing[keep]
                 db.sample_cache().replace_one({"_id": code}, sample, upsert=True)
                 cp = sample["cached_plan"]
                 print(f"    cached plan ({cp['source']}): {cp['question']} | {cp['why']} | actionable={cp['actionable']}")

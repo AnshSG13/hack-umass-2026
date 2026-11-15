@@ -305,6 +305,12 @@ The owner's calls: a saved recipe is opened when someone wants to cook it, so it
 ## 2026-11-14: interests and hobbies are the folders
 - **Owner asked for it directly:** "i want each of the interest or hobbies to just be used as created categories". Starters are no longer invented by Gemini; each interest and hobby is kept as written and Gemini only picks its type. One that fits no type is left out. Checked live: Baking > Food, Travel > Places, Broadway musicals and Comedy > Events, Strength training and Pickleball > Fitness.
 
+## 2026-11-14: intro asks what you like first; no gender question
+- **Gender question removed.** Nothing read the answer: `profile.taste_lines` (the only profile text sent to Gemini) skips it, and no server or web code read `profile.identity`. Asking something personal before the app shows any value makes people quit, so it went, server and client. An `identity` stored earlier is never read and is dropped the next time the intro is finished; a client that still sends one has it ignored.
+- **New order:** interests, hobbies (they become the folders), then "A bit about you": age range (optional, feeds the planner's "ABOUT THE USER" line) and ethnicity (optional, stored only, the screen says it isn't used). The progress bar follows the step list.
+- **Only new accounts are sent to the intro:** not onboarded, not demo, and no saves yet (`me.counts.saves === 0` in `web/components/shell.tsx`). Accounts that already have saves keep using the app; Settings still has "Redo the intro".
+- Checked at 390 px on a throwaway account (deleted afterwards): /home sends it to /welcome, each of the 4 steps renders, and a demo key opening /home stays on /home.
+
 ## 2026-11-14: intro screens and starter sub-categories
 
 The user asked for intro pages like a video app's onboarding (how you identify, age, ethnicity, hobbies, skills, interests) and for categories the model makes, with a new one whenever a saved reel fits none. Decisions:
@@ -328,3 +334,21 @@ The user asked for a knowledge graph that helps retrieval of the vector embeddin
 - **The page** is `/graph` ("How your saves connect"), linked from Home's "Your tastes". react-force-graph-2d is the dependency CLAUDE.md lists for this (1.29.2, pinned). The canvas has a text list of every connection under it, so the page works without the canvas.
 
 Checked at 390 and 1440 px on that temporary account (deleted afterwards): the graph draws 41 nodes and 51 links, tapping a node on the canvas or in the list highlights its neighbours and opens its details with links to its reels. 136 unit tests pass (9 new in `server/tests/test_graph.py`).
+
+## 2026-11-15: pressing fixes after the design review
+
+- **Demo limit.** "Try the demo" allowed 10 sessions an hour per address. A venue's Wi-Fi puts a room behind one address, and locally the web app's `/api` pass-through made every phone look like 127.0.0.1. The count is now `DEMO_SESSIONS_PER_HOUR` (default 60; a session costs no model call). The local API start trusts forwarded addresses from 127.0.0.1 only. Next's rewrite does not send the visitor's address, so locally all phones still share one count; behind Caddy each visitor is counted on their own.
+- **One calorie number per recipe.** The reel page estimated 386 kcal for the curry while the chat quoted the 484 Budget Bytes publishes. Published numbers the chat finds are kept on the save (`published_nutrition`) and the page shows them with their source. With none published, the chat answers with the page's estimate instead of a second estimate. Nine existing saves got their published numbers from earlier chats.
+- **Actions page.** Events whose dates have passed leave "Waiting on you" for a collapsed Missed group (`actions.is_missed`, the same rule that writes "It's passed"). "Just vibes" reads "Save without a plan" on the web, which is what it does; the Shortcut menu keeps the old words. Only the first waiting card keeps the dark button.
+- **Samples rebuilt** with the live models; see BLOCKERS.md for the measured numbers.
+
+## 2026-11-15: saved chats
+
+The owner asked for a better chat flow, perhaps with saved chats. Before: Ask (the orb) lived in memory only, so "New chat" or a reload lost it, and reel chats were kept but folded away in a collapsed "Discussions" box on each reel. Decisions:
+
+- **One collection, two kinds.** Ask chats go in `discussions` with `save_id: null`; each answered turn is kept with its reels (the cards as shown) and next questions. The stream's last line is `{"type": "saved", "chat_id"}`, and the client sends `chat_id` to continue; the server then uses the chat's own messages as history. A turn that fails is not kept.
+- **Every chat in one list.** `GET /api/chats` returns Ask and reel chats together, newest first (index `user_id, updated_at`). The Ask page's start screen shows "Your chats" under the idea chips; a row reopens an Ask chat in place or a reel chat over its reel (`/s/<id>?chat=`). A question handed over from Home or the orb starts its own chat.
+- **Reel chats are easy to pick up.** The reel page shows "Your chats about this" open, three at a time. The chat's start screen offers "Pick up where you left off", and an open chat has New chat and Delete in its header. Ask chats can be deleted too.
+- **Next questions in reel chats.** The reel chat's answer now asks the model for up to 2 follow-ups in the same call (no extra request); code keeps them short, distinct and in sentence case. Web and nutrition answers have none.
+
+Checked live on a fresh demo session at 390 px (`scratchpad/chats_look.py`): one Ask question was kept and listed, reopened with its turn and 2 reel tiles; one reel question came back with 2 follow-ups, showed under "Pick up where you left off", on the reel page and in the Ask list; no page errors. `pytest`: 165 passed.

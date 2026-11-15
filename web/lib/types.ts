@@ -35,6 +35,8 @@ export interface TicketPlan {
   long_day: string | null; // "Thursday", "today", "Nov 26" for accepted plans
   scheduled_iso: string | null;
   followup_due: boolean;
+  /** Still waiting, but an event whose dates have passed: Actions lists it under Missed. */
+  missed?: boolean;
   confirmed_via: "web" | "shortcut" | null;
   gcal_url: string | null;
   ics_url: string | null;
@@ -278,12 +280,11 @@ export interface Me {
   expires_at: string | null;
   counts: { saves: number; by_type: Record<SaveType, number>; plans: Partial<Record<PlanStatus, number>> };
   profile: Profile | null;
-  onboarded: boolean; // false: a real account that hasn't done the intro yet
+  onboarded: boolean; // false: a real account that hasn't done the intro (only new ones with no saves are sent there)
 }
 
 // ---- the intro (/welcome) ----
 export interface Profile {
-  identity: string | null;
   age_range: string | null;
   ethnicity: string[];
   interests: string[];
@@ -292,7 +293,6 @@ export interface Profile {
 }
 
 export interface OnboardingOptions {
-  identities: string[];
   age_ranges: string[];
   ethnicities: string[];
   interests: string[];
@@ -356,7 +356,9 @@ export type ChatEvent =
   | { type: "plans"; tickets: Ticket[] }
   | { type: "answer"; text: string; confidence: "high" | "low" | "none"; save_ids: string[]; follow_ups?: string[] }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** The answered turn was kept: the chat it went into (a new one on the first question). */
+  | { type: "saved"; chat_id: string; title?: string };
 
 // ---- discussions: chats about one reel, saved with it ----
 export interface DiscussionMessage {
@@ -370,6 +372,11 @@ export interface DiscussionMessage {
   from_reel?: boolean;
   /** true: the reel didn't say, so the answer was looked up on the web. Assistant only. */
   web?: boolean;
+  /** Up to 2 questions worth asking next. Assistant only. */
+  follow_ups?: string[];
+  /** An Ask chat's turn: the reels the answer showed, and how sure it was. */
+  cards?: AskCard[];
+  confidence?: "high" | "low" | "none" | null;
   /** The pages a web answer used; the answer's [n] markers point at these. */
   sources?: { n: number; title: string; url: string }[];
   /** For a recipe's nutrition: numbers kept only with a source (n points into sources). */
@@ -391,8 +398,15 @@ export interface DiscussionSummary {
   preview: string;
 }
 export interface Discussion extends DiscussionSummary {
-  save_id: string;
+  /** null for an Ask chat, which is about all the saves rather than one reel. */
+  save_id: string | null;
+  kind: "reel" | "ask";
   messages: DiscussionMessage[];
+}
+/** GET /api/chats: every chat, Ask and reel ones together, newest first. */
+export interface ChatSummary extends DiscussionSummary {
+  kind: "reel" | "ask";
+  reel: { save_id: string; title: string; type: SaveType | null; thumb_url: string | null } | null;
 }
 
 // ---- GET /api/tastes/{type}: one taste as a board ----
@@ -498,6 +512,19 @@ export interface Nutrition {
   lines_total: number;
   assumed: number; // lines with no amount in the reel, so a typical amount was assumed
   servings_from: "reel" | "estimate";
+}
+/** The recipe's own published nutrition, once the reel's chat has found it. It replaces the
+ * estimate everywhere, so a recipe only ever shows one number. */
+export interface PublishedNutrition {
+  per: "serving" | "recipe";
+  servings: number | null;
+  values: Partial<Record<"calories" | "protein_g" | "carbs_g" | "fat_g" | "fiber_g" | "sugar_g" | "sodium_mg", number>>;
+  split_pct: { protein?: number; carbs?: number; fat?: number };
+  sources: { n: number; title: string; url: string }[];
+}
+export interface NutritionResponse {
+  nutrition: Nutrition | null;
+  published: PublishedNutrition | null;
 }
 
 // ---- GET/POST /api/saves/{id}/shop: price research ----
