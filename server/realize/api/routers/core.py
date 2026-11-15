@@ -2,16 +2,17 @@
 from __future__ import annotations
 
 import time
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import accounts, ask, board, db, demo, jobs, planops, ratelimit, search, subcats, thumbs, tickets
+from ... import accounts, ask, board, db, demo, intent, jobs, planops, ratelimit, search, subcats, thumbs, tickets, visits
 from ...config import get_settings
 from ...models import (
     ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
 )
-from ...timeutil import as_utc, valid_tz
+from ...timeutil import as_utc, now_utc, tz_of, valid_tz
 from ..deps import client_ip, current_user, optional_user
 
 router = APIRouter()
@@ -69,8 +70,13 @@ def _me(user: dict) -> dict:
     return {"user_id": user["_id"], "is_demo": bool(user.get("is_demo")), "is_judge": bool(user.get("is_judge")),
             "name": user.get("name") or "", "email": user.get("email"),
             "timezone": user["timezone"], "prefs": user["prefs"], "key_preview": user.get("key_preview"),
+            # An email account has a key from sign-up that was never shown. Once one is shown
+            # (for the Shortcut), making another replaces the one already pasted somewhere.
+            "shortcut_key": bool(user.get("key_shown_at")) or not user.get("email"),
             "expires_at": as_utc(user["expires_at"]).isoformat() if user.get("expires_at") else None,
-            "counts": _counts(user)}
+            "counts": _counts(user),
+            "profile": user.get("profile"),
+            "onboarded": bool(user.get("onboarded_at")) or bool(user.get("is_demo"))}
 
 
 @router.get("/api/me")
@@ -111,9 +117,15 @@ def new_key(user: dict = Depends(current_user)) -> dict:
 @router.get("/api/tastes")
 def tastes(user: dict = Depends(current_user)) -> dict:
     """Home's "Your tastes": one entry per type the user has saved, largest first, with
-    the three newest thumbnails and the three most used tags. Counted in code."""
+    the three newest thumbnails, the three most used tags, and how many are new since the
+    last visit. Also the greeting's recap. Counted in code."""
     by_type: dict[str, dict] = {}
     total = 0
+    prev = visits.touch(user)
+    seen = (user.get("visits") or {}).get("taste_seen") or {}
+    week_ago = now_utc() - timedelta(days=visits.RECAP_DAYS)
+    new_since: dict[str, int] = {}
+    this_week: dict[str, int] = {}
     cursor = db.saves().find({"user_id": user["_id"]},
                              {"type": 1, "thumb_id": 1, "tags": 1, "created_at": 1}).sort("created_at", -1)
     for s in cursor:
@@ -123,6 +135,12 @@ def tastes(user: dict = Depends(current_user)) -> dict:
             continue  # still being read; it has no type yet
         e = by_type.setdefault(t, {"count": 0, "thumbs": [], "tags": {}})
         e["count"] += 1
+        made = as_utc(s["created_at"])
+        line = visits.new_line(prev, seen.get(t))
+        if made > line:
+            new_since[t] = new_since.get(t, 0) + 1
+        if made > week_ago:
+            this_week[t] = this_week.get(t, 0) + 1
         if s.get("thumb_id") and len(e["thumbs"]) < 3:
             e["thumbs"].append(f"/api/t/{s['thumb_id']}")
         for tag in {str(x).strip().lower().lstrip("#") for x in (s.get("tags") or []) if str(x).strip()}:
@@ -134,8 +152,13 @@ def tastes(user: dict = Depends(current_user)) -> dict:
         top = sorted(e["tags"].items(), key=lambda kv: (-kv[1], kv[0]))[:3]
         out.append({"type": t, "label": TASTE_LABELS[t], "count": e["count"], "thumbs": e["thumbs"],
                     "tags": [{"tag": k, "count": n} for k, n in top],
-                    "subcategories": subs.get(t, [])})
-    return {"total": total, "tastes": out}
+                    "subcategories": subs.get(t, []), "new": new_since.get(t, 0)})
+    # The greeting says what was sorted for them: since last time if anything is new,
+    # otherwise over the past week.
+    fresh = visits.recap_parts({k: v for k, v in new_since.items()})
+    parts, window = (fresh, "new") if fresh else (visits.recap_parts(this_week), "week")
+    return {"total": total, "tastes": out,
+            "recap": {"window": window, "parts": parts, "text": visits.join_words(parts)} if parts else None}
 
 
 @router.get("/api/tastes/{type}")
@@ -143,6 +166,7 @@ def taste_board(type: str, user: dict = Depends(current_user)) -> dict:
     """One taste as a board: its saves as cards, and the tags that filter them."""
     if type not in TYPES:
         raise HTTPException(status_code=404, detail="That taste doesn't exist.")
+    visits.mark_taste_seen(user, type)
     return board.board(user, type)
 
 
@@ -164,9 +188,34 @@ def search_saves(q: str = "", type: str | None = None, sub: str | None = None,
     return {"items": items, "mode": mode}
 
 
+@router.get("/api/remember")
+def remember(user: dict = Depends(current_user)) -> dict:
+    """One just-vibes reel saved before today, to bring back on Home: a different one each
+    day, picked in code. Not a reminder; nothing is scheduled."""
+    import hashlib
+    from datetime import datetime as _dt
+
+    tz = tz_of(user)
+    today = now_utc().astimezone(tz).date()
+    start_of_day = _dt.combine(today, _dt.min.time(), tzinfo=tz)
+    docs = list(db.saves().find(
+        {"user_id": user["_id"], "type": "other", "status": {"$in": ["planned", "enriching", "ready"]},
+         "created_at": {"$lt": start_of_day}},
+        {"title": 1, "thumb_id": 1, "created_at": 1}).sort("created_at", -1).limit(60))
+    if not docs:
+        return {"item": None}
+    seed = int(hashlib.sha256(f"{user['_id']}:{today.isoformat()}".encode()).hexdigest()[:8], 16)
+    s = docs[seed % len(docs)]
+    a = intent.view(planops.get_for_save(s["_id"]), {"type": "other"}) or {}
+    line = a.get("cta") if a.get("deliver") == "keep" else None
+    return {"item": {"save_id": str(s["_id"]), "title": s.get("title") or "Saved reel",
+                     "thumb_url": tickets.thumb_url(s), "saved_on": tickets.saved_on(s, user),
+                     "line": line or intent.WORDS["keep"]["cta"], "day": today.isoformat()}}
+
+
 @router.get("/api/chips")
 def chips(user: dict = Depends(current_user)) -> dict:
-    return {"chips": ask.chips(user)}
+    return {"chips": ask.chips(user), "actions": ask.recommended(user)}
 
 
 @router.post("/api/chat")
@@ -209,6 +258,14 @@ def demo_session(body: DemoSessionRequest, request: Request) -> dict:
 @router.get("/api/demo/samples")
 def demo_samples(user: dict | None = Depends(optional_user)) -> list[dict]:
     return demo.list_samples(user)
+
+
+@router.get("/api/demo/story")
+def demo_story(user: dict = Depends(current_user)) -> dict:
+    """The guided first open's pieces for this demo session."""
+    if not user.get("is_demo"):
+        raise HTTPException(status_code=404, detail="Not found.")
+    return demo.story(user)
 
 
 @router.get("/api/demo/hero")

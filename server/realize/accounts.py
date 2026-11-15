@@ -134,7 +134,8 @@ def find_by_key(key: str | None) -> dict | None:
 def rotate_key(user: dict) -> str:
     key = new_key()
     db.users().update_one({"_id": user["_id"]},
-                          {"$set": {"api_key_hash": hash_key(key), "key_preview": key[-4:]}})
+                          {"$set": {"api_key_hash": hash_key(key), "key_preview": key[-4:],
+                                    "key_shown_at": now_utc()}})
     return key
 
 
@@ -147,5 +148,6 @@ def delete_user_data(user_id: str) -> dict:
                        ("bundles", db.bundles()), ("deliverables", db.deliverables())):
         counts[name] = coll.delete_many({"user_id": user_id}).deleted_count
     counts["thumbnails"] = db.thumbnails().delete_many({"owner_user_id": user_id}).deleted_count
+    counts["graph_cache"] = db.graph_cache().delete_one({"_id": user_id}).deleted_count
     counts["users"] = db.users().delete_one({"_id": user_id}).deleted_count
     return counts

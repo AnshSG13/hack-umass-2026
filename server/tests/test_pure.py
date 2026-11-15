@@ -755,3 +755,154 @@ def test_bundle_words_from_the_model_are_checked():
                                   "product", ids, names)["pick"] is None
     assert len(bundles.clean("x" * 200, 34)) == 34
     assert bundles.count_label("recipe", 3) == "3 dinners" and bundles.count_label("workout", 1) == "1 workout"
+
+
+# ---------- visits: what is new since last time ----------
+
+
+def test_new_line_is_the_later_of_last_visit_and_board_opened():
+    from datetime import datetime, timezone
+
+    from realize import visits
+
+    a = datetime(2026, 11, 10, tzinfo=timezone.utc)
+    b = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    assert visits.new_line(a, b) == b and visits.new_line(b, a) == b
+    now = datetime(2026, 11, 14, 12, tzinfo=timezone.utc)
+    assert visits.new_line(None, None, now=now) == datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
+    assert visits.new_line(a, None) == a
+
+
+def test_recap_names_what_was_sorted():
+    from realize import visits
+
+    parts = visits.recap_parts({"recipe": 3, "workout": 4, "product": 3, "other": 9, "tip": 1})
+    assert parts == ["4 workouts", "3 recipes", "3 product picks"]       # largest first, at most 3, no "other"
+    assert visits.join_words(parts) == "4 workouts, 3 recipes and 3 product picks"
+    assert visits.join_words(["1 recipe"]) == "1 recipe"
+    assert visits.recap_parts({"place": 1}) == ["1 place to go"]
+    assert visits.recap_parts({}) == []
+
+
+# ---------- nutrition: the model estimates lines, code does the sums ----------
+
+
+def test_nutrition_sums_lines_and_divides_by_servings():
+    from realize import nutrition
+
+    line = lambda i, kcal, p, c, f, **kw: {"index": i, "kcal": kcal, "protein_g": p, "carbs_g": c, "fat_g": f,
+                                           "fiber_g": 0, "sugar_g": 0, "sodium_mg": 0, **kw}
+    out = nutrition.total([line(0, 400, 20, 40, 18), line(1, 400, 20, 40, 18, assumed=True)], 2, 2)
+    assert out["per_serving"]["kcal"] == 400 and out["per_serving"]["protein_g"] == 20
+    assert out["split_pct"] == {"protein": 20, "carbs": 40, "fat": 40} and sum(out["split_pct"].values()) == 100
+    assert out["assumed"] == 1 and out["servings"] == 2
+
+
+def test_nutrition_drops_impossible_and_made_up_lines():
+    from realize import nutrition
+
+    good = {"index": 0, "kcal": 100, "protein_g": 5, "carbs_g": 10, "fat_g": 4, "fiber_g": 1, "sugar_g": 1, "sodium_mg": 5}
+    bad = [{**good, "index": 1, "kcal": 99999}, {**good, "index": 9}, {**good, "index": 0}, {**good, "index": 2, "fat_g": -3}]
+    assert nutrition.total([good, *bad], 3, 1) is None          # 1 of 3 lines is too little to show
+    assert nutrition.total([good, {**good, "index": 1}], 3, 1)["lines_counted"] == 2
+    # Calories that disagree with the macros are recomputed from them.
+    off = nutrition.total([{**good, "kcal": 1000}], 1, 1)
+    assert off["per_serving"]["kcal"] == 4 * 5 + 4 * 10 + 9 * 4
+
+
+# ---------- shopping research: credible sources only, only readable prices ----------
+
+
+def test_only_trusted_sources_count():
+    from realize import shop
+
+    assert shop.trusted("https://www.target.com/p/x", []) == "Target"
+    assert shop.trusted("https://www.nytimes.com/wirecutter/reviews/x", []) == "Wirecutter"
+    assert shop.trusted("https://shop.dyson.com/hair", ["Dyson"]) == "Dyson"          # the brand's own site
+    assert shop.trusted("https://cheap-dyson-deals.xyz/a", []) is None                 # not on the list, no brand
+    assert shop.trusted("https://amazon.com.evil.biz/x", []) is None                   # lookalike host
+    assert shop.trusted("not a url", []) is None
+
+
+def test_any_credible_store_counts_but_risky_sites_do_not():
+    from realize import shop
+
+    # Smaller real stores and brand sites pass and show their own name or domain.
+    assert shop.source_of("https://www.pickleballcentral.com/paddle", []) == ("pickleballcentral.com", "site")
+    assert shop.source_of("https://joola.com/products/x", ["JOOLA"]) == ("JOOLA", "brand")
+    assert shop.source_of("https://www.selkirk.com/p", ["Selkirk Sport"]) == ("Selkirk Sport", "brand")
+    # Coupon sites, unknown-seller marketplaces, social posts, shorteners, http, IPs, spam endings.
+    for bad in ("https://www.retailmenot.com/view/joola.com", "https://www.aliexpress.com/item/1",
+                "https://www.reddit.com/r/Pickleball/x", "https://bit.ly/abc", "http://smallshop.com/p",
+                "https://192.168.0.1/p", "https://paddles.shop.xyz/p", "https://best-paddle-deals.com/p",
+                "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc", "https://localhost/p"):
+        assert shop.source_of(bad, []) is None, bad
+
+
+def test_offers_keep_only_backed_readable_prices():
+    from realize import shop
+
+    sources = [{"n": 1, "url": "https://www.target.com/p/1", "title": "t"},
+               {"n": 2, "url": "https://sketchy-store.biz/x", "title": "s"},
+               {"n": 3, "url": "https://www.pickleballcentral.com/p", "title": "p"}]
+    raw = [{"product": "Hulken bag", "store": "Target", "price_text": "$79.99", "source": 1, "alternative": False},
+           {"product": "Hulken bag", "store": "Target", "price_text": "$79.99", "source": 1, "alternative": False},
+           {"product": "Hulken bag", "store": "Sketchy", "price_text": "$20", "source": 2, "alternative": False},
+           {"product": "Tote", "store": "Target", "price_text": "about forty dollars", "source": 1, "alternative": True},
+           {"product": "Tote", "store": "Target", "price_text": "$1,299.00", "source": 9, "alternative": True},
+           {"product": "Costco tote", "store": "Target", "price_text": "Now $39", "source": 1, "alternative": True,
+            "note": "Alternative: half the price"}]
+    out = shop.keep_offers(raw, sources, [])
+    assert [(o["product"], o["price"]) for o in out] == [("Hulken bag", 79.99), ("Costco tote", 39.0)]
+    assert out[1]["note"] == "half the price" and out[1]["price_text"] == "$39"
+    assert shop.best_by_product(out) == [out[0]]
+    assert shop.parse_price("$1,299.50 on sale") == 1299.5 and shop.parse_price("free") is None
+    # A store's page sets the store name, even when the notes named another.
+    moved = shop.keep_offers([{"product": "X", "store": "Walmart", "price_text": "$5", "source": 1, "alternative": False}], sources, [])
+    assert moved[0]["store"] == "Target"
+    # A smaller store's page is named by its own domain, not by what the notes claimed.
+    small = shop.keep_offers([{"product": "Paddle", "store": "Amazon", "price_text": "$149.99", "source": 3, "alternative": False}], sources, [])
+    assert small[0]["store"] == "pickleballcentral.com" and small[0]["via"] == "pickleballcentral.com"
+
+
+# ---------- actions: what the person wants from the reel, delivered ----------
+
+
+def test_action_keeps_a_fitting_model_pick_in_its_own_words():
+    from realize import intent
+
+    a = intent.clean({"deliver": "cook", "need": "make this tiramisu", "cta": "Cook this tiramisu tonight!",
+                      "pitch": "7 ingredients — 15 minutes", "schedule": False}, "recipe", is_dated=False)
+    assert a["deliver"] == "cook" and a["cta"] == "Cook this tiramisu tonight" and a["source"] == "model"
+    assert "—" not in a["pitch"] and a["schedule"] is False
+
+
+def test_action_falls_back_when_the_pick_does_not_fit():
+    from realize import intent
+
+    # A product never gets cook mode, and a reminder-ish calendar entry needs a dated event.
+    assert intent.clean({"deliver": "cook", "cta": "x"}, "product", is_dated=False)["deliver"] == "shop"
+    undated = intent.clean({"deliver": "calendar", "cta": "Save the date"}, "event", is_dated=False)
+    assert undated["deliver"] == "itinerary" and undated["source"] == "default"
+    assert intent.clean({"deliver": "calendar"}, "event", is_dated=True)["deliver"] == "calendar"
+    assert intent.clean(None, "tip", is_dated=False)["deliver"] == "learn"
+    assert intent.clean({"deliver": "teleport"}, "other", is_dated=False)["deliver"] == "keep"
+    # schedule only sticks where a set time can mean something
+    assert intent.clean({"deliver": "shop", "schedule": True}, "product", is_dated=False)["schedule"] is False
+    long_cta = intent.clean({"deliver": "shop", "cta": "Compare every single one of these lovely curling irons now"},
+                            "product", is_dated=False)["cta"]
+    assert len(long_cta) <= intent.CTA_MAX and not long_cta.endswith(" ")
+
+
+def test_action_view_defaults_for_old_plans_and_stale_types():
+    from datetime import timedelta
+
+    from realize import intent
+    from realize.timeutil import now_utc
+
+    assert intent.view(None, {"type": "recipe"})["deliver"] == "cook"
+    assert intent.view(None, {"type": None}) is None
+    soon = [{"action": "event", "start_utc": now_utc() + timedelta(days=2)}]
+    assert intent.view({"options": soon}, {"type": "event"})["deliver"] == "calendar"
+    # A stored cook action on a save since moved to products becomes the product default.
+    assert intent.view({"action": {"deliver": "cook", "cta": "Cook it"}}, {"type": "product"})["deliver"] == "shop"

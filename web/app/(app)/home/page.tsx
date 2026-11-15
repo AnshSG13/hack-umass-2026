@@ -1,13 +1,13 @@
 "use client";
 
-// Home, after the mockup: greeting, search, the rail of recent saves, ideas to ask about,
+// Home, after the mockup: greeting, search, the rail of recent saves, recommended actions,
 // and the tastes grid. Everything on it comes from the API.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
-import { BundleCard, useBundles } from "@/components/bundle-card";
+import { ActionTile, ReadyTile, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { PullToRefresh } from "@/components/pull-refresh";
 import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
@@ -15,10 +15,25 @@ import { useApp, useAskStore } from "@/components/shell";
 import { fetcher } from "@/lib/api";
 import { greeting, inFlight, plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
-import { KINDS, tint, type KindColor } from "@/lib/kinds";
-import type { SavesPage, Taste, TastesResponse } from "@/lib/types";
+import { KINDS, tint } from "@/lib/kinds";
+import { STORY_REPLAY_HREF, useStorySeen } from "@/lib/story";
+import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
 
-const IDEA_COLORS: KindColor[] = ["peach", "butter", "rose", "sky", "mint", "lavender"];
+interface Action {
+  type: SaveType;
+  verb: string;
+  title: string;
+  detail: string;
+  question: string;
+}
+
+/** "4 workouts", "3 recipes" -> "You have 4 new workouts and 3 recipes". */
+function newThings(parts: string[]): string {
+  const [first, ...rest] = parts;
+  const lead = first.replace(/^(\d+) /, "$1 new ");
+  const all = [lead, ...rest];
+  return all.length === 1 ? all[0] : `${all.slice(0, -1).join(", ")} and ${all[all.length - 1]}`;
+}
 
 function sentence(tag: string): string {
   return tag ? tag[0].toUpperCase() + tag.slice(1) : tag;
@@ -41,10 +56,16 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const label = taste.label || kind.label;
   const count = plural(taste.count, "save", "saves");
   const href = `/t/${taste.type}`;
+  const fresh = taste.new > 0 ? (
+    <span className="taste-new" aria-label={`${taste.new} new`}>
+      {taste.new > 9 ? "9+" : taste.new}
+    </span>
+  ) : null;
 
   if (wide) {
     return (
       <Link href={href} className="taste taste-wide" style={tint(kind.color)}>
+        {fresh}
         <span className="taste-row">
           <span>
             <Icon name={kind.icon} />
@@ -77,6 +98,7 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   }
   return (
     <Link href={href} className="taste" style={tint(kind.color)}>
+      {fresh}
       <span className="taste-top">
         <Icon name={kind.icon} />
         <Thumbs urls={taste.thumbs} className="stack" />
@@ -89,15 +111,65 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   );
 }
 
+const REMEMBER_KEY = "rl_remember_hidden";
+
+/** A just-vibes reel from before today, back for a moment: "Remember this puppy growing up".
+ *  Closing it hides today's one on this device. */
+function RememberCard() {
+  const { data } = useSWR<{ item: RememberItem | null }>("/api/remember", fetcher, { revalidateOnFocus: false });
+  const item = data?.item ?? null;
+  const [hidden, setHidden] = useState<string | null>(() => {
+    try {
+      return typeof window === "undefined" ? null : window.localStorage.getItem(REMEMBER_KEY);
+    } catch {
+      return null;
+    }
+  });
+  if (!item || hidden === `${item.day}:${item.save_id}`) return null;
+  function close() {
+    const v = `${item!.day}:${item!.save_id}`;
+    setHidden(v);
+    try {
+      window.localStorage.setItem(REMEMBER_KEY, v);
+    } catch {
+      // Private mode: it stays closed for this visit only.
+    }
+  }
+  return (
+    <div className="gutter">
+      <div className="remember" style={tint("butter")}>
+        <Link href={`/s/${item.save_id}`} className="remember-main">
+          {item.thumb_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.thumb_url} alt="" className="remember-thumb" />
+          ) : (
+            <span className="remember-thumb" aria-hidden="true">
+              <Icon name="spark" />
+            </span>
+          )}
+          <span className="remember-text">
+            <span className="remember-line">{item.line}</span>
+            <span className="remember-meta">You saved this {item.saved_on}</span>
+          </span>
+        </Link>
+        <button type="button" className="remember-x" aria-label="Close" onClick={close}>
+          <Icon name="x" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const { openAdd, fresh } = useApp();
   const { ask } = useAskStore();
   const now = useNow();
   const { data: me } = useMe();
+  const storySeen = useStorySeen();
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
   const saves = useSWR<SavesPage>("/api/saves?limit=10", fetcher);
   const bundles = useBundles();
-  const { data: chips } = useSWR<{ chips: string[] }>("/api/chips", fetcher, { revalidateOnFocus: false });
+  const { data: chips } = useSWR<{ chips: string[]; actions?: Action[] }>("/api/chips", fetcher, { revalidateOnFocus: false });
 
   // A reel just added goes first in the rail: bring the rail and the page back to it.
   const railRef = useRef<HTMLDivElement>(null);
@@ -123,9 +195,12 @@ export default function HomePage() {
   const listed = (saves.data?.items ?? []).filter((t) => !freshIds.has(t.save_id));
   const loaded = saves.data !== undefined;
   const isEmpty = loaded && listed.length === 0 && fresh.length === 0;
-  const ideas = chips?.chips ?? [];
+  const actions = chips?.actions ?? [];
   const tasteList = tastes.data?.tastes ?? [];
   const readyList = bundles.data?.ready ?? [];
+  const readyActions = bundles.data?.actions ?? [];
+  const readyCount = readyList.length + readyActions.length;
+  const recap = tastes.data?.recap ?? null;
   // Still being read right now: just added in this visit, or in the list and not done.
   // The list is asked again when a new save finishes, so its status is the current one.
   const statusOf = new Map((saves.data?.items ?? []).map((t) => [t.save_id, t.processing]));
@@ -150,12 +225,28 @@ export default function HomePage() {
         <header className="home-head">
           <div style={{ minWidth: 0 }}>
             <h1 className="greet">{hello}</h1>
-            {total !== undefined && tasteCount !== undefined && total > 0 && (
+            {recap ? (
+              recap.window === "new" ? (
+                <p className="greet-sub recap">
+                  You have <b>{newThings(recap.parts)}</b>
+                </p>
+              ) : (
+                <p className="greet-sub recap">
+                  This week: <b>{recap.text}</b>
+                </p>
+              )
+            ) : total !== undefined && tasteCount !== undefined && total > 0 && (
               <p className="greet-sub">
                 {plural(total, "save", "saves")}
                 {/* A save that is still being read, or could not be, has no taste yet. */}
                 {tasteCount > 0 && ` across ${plural(tasteCount, "taste", "tastes")}`}
               </p>
+            )}
+            {me?.is_demo && storySeen && (
+              <Link href={STORY_REPLAY_HREF} className="text-btn story-replay">
+                <Icon name="redo" />
+                Replay the story
+              </Link>
             )}
           </div>
           <Link href="/settings" className="avatar" aria-label="Settings">
@@ -169,6 +260,47 @@ export default function HomePage() {
           </Link>
         )}
       </div>
+
+      {!isEmpty && <RememberCard />}
+
+      {readyCount > 0 && !isEmpty && (
+        <section className="blk" aria-labelledby="ready-h">
+          <div className="gutter block-head">
+            <h2 className="block-title" id="ready-h">
+              Ready for you
+              <span className="pill">{readyCount}</span>
+            </h2>
+            <Link href="/plans" className="see-all">
+              See all
+              <Icon name="right" />
+            </Link>
+          </div>
+          <div className="rail rail-gallery">
+            {readyList.map((b) => (
+              <ReadyTile key={b.id} bundle={b} />
+            ))}
+            {readyActions.map((a) => (
+              <ActionTile key={a.save_id} item={a} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tasteList.length > 0 && (
+        <section className="blk gutter" aria-labelledby="tastes-h">
+          <div className="block-head">
+            <h2 className="block-title" id="tastes-h">
+              Your tastes
+              <span className="pill">{tasteList.length}</span>
+            </h2>
+          </div>
+          <div className="tastes">
+            {tasteList.map((t, i) => (
+              <TasteTile key={t.type} taste={t} wide={i === 0} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {isEmpty ? (
         <div className="gutter">
@@ -235,65 +367,42 @@ export default function HomePage() {
         </section>
       )}
 
-      {readyList.length > 0 && !isEmpty && (
-        <section className="blk" aria-labelledby="ready-h">
-          <div className="gutter block-head">
-            <h2 className="block-title" id="ready-h">
-              Ready for you
-              <span className="pill">{plural(readyList.length, "plan", "plans")}</span>
+      {actions.length > 0 && !isEmpty && (
+        <section className="blk gutter" aria-labelledby="actions-h">
+          <div className="block-head">
+            <h2 className="block-title" id="actions-h">
+              Recommended actions
             </h2>
-            <Link href="/plans" className="see-all">
-              See all
-              <Icon name="right" />
+            <Link href="/graph" className="add">
+              <Icon name="spark" />
+              See how they connect
             </Link>
           </div>
-          <div className="rail">
-            {readyList.map((b) => (
-              <BundleCard key={b.id} bundle={b} compact />
-            ))}
-          </div>
+          <ul className="recs">
+            {actions.map((a) => {
+              const kind = KINDS[a.type];
+              return (
+                <li key={a.type}>
+                  <button type="button" className="rec" style={tint(kind.color)} onClick={() => ask(a.question, true)}>
+                    <span className="rec-ico" aria-hidden="true">
+                      <Icon name={kind.icon} />
+                    </span>
+                    <span className="rec-text">
+                      <span className="rec-title">{a.title}</span>
+                      <span className="rec-detail">{a.detail}</span>
+                    </span>
+                    <span className="rec-go" aria-hidden="true">
+                      <Icon name="right" />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="recs-note">Each one opens Ask with an answer from your saves.</p>
         </section>
       )}
 
-      {ideas.length > 0 && !isEmpty && (
-        <section className="blk" aria-labelledby="ideas-h">
-          <div className="gutter block-head">
-            <h2 className="block-title" id="ideas-h">
-              Make something of it
-            </h2>
-          </div>
-          <div className="ideas">
-            {ideas.map((idea, i) => (
-              <button
-                key={idea}
-                type="button"
-                className="idea"
-                style={tint(IDEA_COLORS[i % IDEA_COLORS.length])}
-                onClick={() => ask(idea, true)}
-              >
-                <Icon name="spark" />
-                {idea}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {tasteList.length > 0 && (
-        <section className="blk gutter" aria-labelledby="tastes-h">
-          <div className="block-head">
-            <h2 className="block-title" id="tastes-h">
-              Your tastes
-              <span className="pill">{tasteList.length}</span>
-            </h2>
-          </div>
-          <div className="tastes">
-            {tasteList.map((t, i) => (
-              <TasteTile key={t.type} taste={t} wide={i === 0} />
-            ))}
-          </div>
-        </section>
-      )}
     </>
   );
 }

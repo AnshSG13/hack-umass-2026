@@ -128,6 +128,7 @@ Conventions: `user_id` is a string `u_<12 hex>`. Other `_id`s are ObjectId, expo
   "created_at": ISODate, "expires_at": ISODate | absent }
 ```
 Keys: `rl_` + `secrets.token_urlsafe(24)`, shown once, stored as sha256. Indexes: `{api_key_hash:1}` unique; `{expires_at:1}` TTL.
+Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are the person's interests and hobbies themselves, each used as a sub-category under the one type Gemini says it fits; one that fits no type is left out (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
 
 ### 5.2 saves
 ```jsonc
@@ -543,6 +544,11 @@ pipeline = [{"$rankFusion": {"input": {"pipelines": {"vector": vector, "text": t
 Manual mode: run both legs, score = Σ weight / (60 + rank), ranks starting at 1. HYBRID_MODE auto: try $rankFusion; on OperationFailure switch to manual for the process lifetime and log it. /api/health reports the active mode.
 Snippet: the sentence from summary, transcript_text or on_screen_text with the most query-token overlap, max 140 chars.
 
+### 11.3 Knowledge graph (graph.py, GET /api/graph, /graph)
+Nodes: each type the user has saved, each sub-category inside a type, each save (newest 300), and each intro interest or hobby that links to something. Edges: `has` (type to sub-category), `holds` (sub-category to save, or type to save without one), `related` (sub-category to sub-category), `likes` (interest to sub-category). A sub-category's vector is the normalized mean of its saves' embeddings. Embeddings of short reels sit close together, so edges are relative: `related` joins mutual 2-nearest neighbours with centroid cosine at least 0.75; `likes` keeps up to 3 sub-categories within 0.05 of the interest's best match and at least 0.55. Interests are embedded once (RETRIEVAL_QUERY) and kept in `graph_cache` (`_id` = user_id, with the related pairs and a signature of the saves; demo rows carry `expires_at`). No model call otherwise.
+Graph-assisted retrieval (`GRAPH_EXPAND`, default on): after hybrid search, while the result list has room, saves in the top 3 hits' sub-categories and their 2 closest related sub-categories are added after every direct hit when their own query cosine is at least 0.55 and their sub-category's centroid matches the query within 0.03 of the best anchor's. Search and Ask both get it. Added saves never push a direct hit down.
+The page: a react-force-graph-2d canvas (kinds big, sub-categories medium, saves small, interests as labelled pills; related dashed, likes dotted), toggles for reels and interests, a details panel for the tapped node with links to its reels, and the same connections as a text list for screen readers. Home's "Your tastes" links to it.
+
 ## 12. Ask (POST /api/chat)
 Request `{ "message": "…", "history": [{ "role": "user" | "assistant", "text": "…" }] }` (client keeps the last 6). Response: `application/x-ndjson` stream, one JSON per line:
 ```
@@ -574,7 +580,7 @@ Server side: after `respond`, emit cards for save_ids. If confidence is none, em
 
 ## 13. Web app
 ### 13.1 Routes
-`/` landing (no key) or redirect to `/plans`; `/demo` sample feed; `/setup`; `/plans` (home); `/library`; `/s/[id]` save detail; `/ask`; `/settings`; `/p/[id]` public plan page (token); `/map` stretch. All pages are client components; data via SWR with a fetch wrapper that adds `Authorization: Bearer <localStorage rl_key>`. Thumbnails use plain `<img>` with `/api/t/{thumb_id}`.
+`/` landing (no key) or redirect to `/plans`; `/demo` sample feed; `/setup`; `/plans` (home); `/library`; `/s/[id]` save detail; `/ask`; `/settings`; `/p/[id]` public plan page (token); `/graph` knowledge graph (section 11.3). All pages are client components; data via SWR with a fetch wrapper that adds `Authorization: Bearer <localStorage rl_key>`. Thumbnails use plain `<img>` with `/api/t/{thumb_id}`.
 ### 13.2 Auth on the web
 - "Use it for real": POST /api/users with the browser timezone → store the key in localStorage `rl_key`.
 - Laptop to phone: the QR code encodes `{PUBLIC_BASE_URL}/setup#k=<key>`. /setup reads the fragment, stores it, then clears it with history.replaceState.
@@ -618,6 +624,9 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | POST | /api/users | none, 5/h/IP | `{timezone?}` → `{user_id, api_key}` (shown once) |
 | GET | /api/me | key | `{user_id, is_demo, is_judge, timezone, prefs, key_preview, expires_at, counts}` |
 | PATCH | /api/me | key | `{timezone?, prefs?}` |
+| GET | /api/onboarding/options | none | the intro's fixed choices `{identities, age_ranges, ethnicities, interests, hobbies}` |
+| POST | /api/onboarding/suggest | key, 20/10 min | `{picked, age_range?}` → `{suggestions}`: Gemini's "More for you" interest chips |
+| POST | /api/onboarding/finish | key | `{profile}` → stores it with each interest and hobby filed under a type as a starter sub-category → `{profile, starters: [{type, label, subcategories}]}` |
 | POST | /api/me/key | key | new key → `{api_key}`; the old one stops working |
 | POST | /api/save | key | section 6 |
 | GET | /api/saves | key | `?type&limit=30&before=<iso>` → `{items: Ticket[], next_before}` |
@@ -638,7 +647,7 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | GET | /api/t/{thumb_id} | none | image, `Cache-Control: public, max-age=86400` |
 | POST | /api/demo/session | none, 10/h/IP | section 14 |
 | GET | /api/demo/samples | optional | section 14 |
-| GET | /api/map | key | stretch (phase 8) |
+| GET | /api/graph | key | knowledge graph `{nodes, links, counts}` (section 11.3) |
 | GET | /api/debug/sleep | DEBUG_ENDPOINTS only | `?s=` |
 
 ## 16. Messages for failures (exact copy; never apologize)
@@ -751,7 +760,7 @@ requirements.txt: fastapi, uvicorn[standard], pymongo, dnspython, google-genai, 
 5. Demo mode. PASS: build_samples done; with the worker stopped, in a fresh logged-out browser: landing → Try the demo → save a sample → steps print → Add → toast and Plans shows it → an Ask chip returns cards. Repeat with an invalid GEMINI_API_KEY: the cached fallback still produces a ticket.
 6. Ship files: Dockerfiles, compose, Caddyfile, README.md (UTF-8: video and demo links as TODO, what it does, architecture diagram, local run, deploy, one section per prize with file paths, accuracy method linking eval/results.md, no invented numbers, TODO for the real saved-count stat), shortcut/README.md, .env.example. PASS: `docker compose config` validates; `docker compose build` succeeds if Docker is installed.
 7. Eval. PASS: eval/results.md written from a real run.
-8. Stretch, only if 1 to 7 pass: /api/map clusters ready embeddings (scikit-learn AgglomerativeClustering, cosine metric, average linkage, distance_threshold 0.45; singletons go to "Other"), names clusters with one GEMINI_MODEL_FAST call, edges to each node's top 2 neighbors with cosine ≥ 0.75, cached per user and save count; /map with react-force-graph-2d, clusters first, layout frozen after cooldown, nodes from the last Ask answer highlighted.
+8. Stretch, built as the knowledge graph in section 11.3 (sub-categories already group the saves, so the clustering below is not used). Original plan: /api/map clusters ready embeddings (scikit-learn AgglomerativeClustering, cosine metric, average linkage, distance_threshold 0.45; singletons go to "Other"), names clusters with one GEMINI_MODEL_FAST call, edges to each node's top 2 neighbors with cosine ≥ 0.75, cached per user and save count; /map with react-force-graph-2d, clusters first, layout frozen after cooldown, nodes from the last Ask answer highlighted.
 
 ## 21. Out of scope
 TikTok and other platforms, the Instagram API, native iOS app, Android share target, Web Push, Google Calendar OAuth, location reminders, voice input, recommendations, price alerts, bulk import from the Instagram export, collaboration, payments, dark mode, offline mode.

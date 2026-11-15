@@ -2,7 +2,7 @@
 
 // Landing. With a key this page only redirects to Home.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -23,8 +23,10 @@ export function Landing({ hasClip }: { hasClip: boolean }) {
   });
   const [starting, setStarting] = useState(false);
   const [failed, setFailed] = useState(false);
+  // A demo started here opens on the guided story; anyone already signed in goes Home.
+  const startedDemo = useRef(false);
   useEffect(() => {
-    if (key) router.replace("/home");
+    if (key) router.replace(startedDemo.current ? "/story" : "/home");
   }, [key, router]);
 
   async function startDemo() {
@@ -32,6 +34,7 @@ export function Landing({ hasClip }: { hasClip: boolean }) {
     setFailed(false);
     try {
       const r = await api<{ api_key: string }>("/api/demo/session", { body: { timezone: browserTimezone() } });
+      startedDemo.current = true;
       setKey(r.api_key);
     } catch {
       setFailed(true);

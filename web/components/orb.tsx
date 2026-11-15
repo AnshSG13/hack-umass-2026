@@ -50,6 +50,14 @@ export function Orb({
   onProblem: (message: string) => void;
 }) {
   const [listening, setListening] = useState(false);
+  // A tap lights the orb the way a hold does, briefly, while Ask opens.
+  const [flash, setFlash] = useState(0);
+  const flashTimer = useRef<number | null>(null);
+  function lightUp() {
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    setFlash((n) => n + 1);
+    flashTimer.current = window.setTimeout(() => setFlash(0), 650);
+  }
   // What has been heard so far: words that are settled, and the tail that may still change.
   const [words, setWords] = useState({ settled: "", tail: "" });
   const pressed = useRef(false);
@@ -68,6 +76,7 @@ export function Orb({
   useEffect(
     () => () => {
       if (holdTimer.current) window.clearTimeout(holdTimer.current);
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
       cancelled.current = true;
       rec.current?.abort();
     },
@@ -156,7 +165,8 @@ export function Orb({
       <span className="orb-slot">
         <button
           type="button"
-          className={cn("orb", listening && "is-listening")}
+          key={flash ? `f${flash}` : "orb"}
+          className={cn("orb", listening && "is-listening", flash > 0 && !listening && "is-tapped")}
           aria-label={`Ask ${appName}. Hold to speak.`}
           onPointerDown={(e) => {
             if (e.button) return;
@@ -177,6 +187,7 @@ export function Orb({
             if (holdTimer.current !== null) {
               window.clearTimeout(holdTimer.current);
               holdTimer.current = null;
+              lightUp();
               cb.current.onOpen();
               return;
             }
@@ -199,7 +210,10 @@ export function Orb({
           onContextMenu={(e) => e.preventDefault()}
           onClick={(e) => {
             // Pointer taps are handled above; this is the keyboard (Enter or Space).
-            if (e.detail === 0) cb.current.onOpen();
+            if (e.detail === 0) {
+              lightUp();
+              cb.current.onOpen();
+            }
           }}
         />
       </span>

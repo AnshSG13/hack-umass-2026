@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
 
 from ... import accounts, actions, db, demo, jobs, planner, planops, ratelimit, subcats, tickets, urls
+from ... import nutrition as nutrition_mod
+from ... import shop
 from ...config import get_settings
 from ...models import ConfirmRequest, SavePatch, SaveRequest, TYPES, failure_message
 from ...runs import run_view
@@ -407,6 +409,41 @@ def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)
             # A plan nobody has answered follows the new type; an accepted one is left alone.
             planops.retype(save, plan, user, body.type)
     return _detail(save, user)
+
+
+@router.get("/api/saves/{save_id}/nutrition")
+def nutrition(save_id: str, user: dict = Depends(current_user)) -> dict:
+    """An estimate per serving for a recipe, made once and kept until the ingredients change."""
+    save = _own_save(save_id, user)
+    if save.get("type") != "recipe":
+        raise HTTPException(status_code=409, detail="Nutrition is for recipes.")
+    value = nutrition_mod.get_or_build(save)
+    if value is None:
+        raise HTTPException(status_code=503, detail="Nutrition isn't available for this one right now.")
+    return {"nutrition": value}
+
+
+@router.get("/api/saves/{save_id}/shop")
+def get_shop(save_id: str, user: dict = Depends(current_user)) -> dict:
+    return {"shop": shop.view(_own_save(save_id, user), user)}
+
+
+@router.post("/api/saves/{save_id}/shop")
+def research_prices(save_id: str, user: dict = Depends(current_user)) -> dict:
+    """Start price research for a product reel. Poll GET until status is ready or failed."""
+    save = _own_save(save_id, user)
+    if not shop.can_research(save):
+        raise HTTPException(status_code=409, detail="Price research is for product reels.")
+    if shop.building(save):
+        return {"shop": shop.view(save, user)}
+    if not ratelimit.allow("trip", user["_id"]):
+        raise HTTPException(status_code=429, detail="Slow down a little. Try again in a minute.")
+    if user.get("is_demo") and db.saves().count_documents(
+            {"user_id": user["_id"], "shop.status": {"$exists": True}}) >= demo.SHOP_LIMIT:
+        raise HTTPException(status_code=429, detail=demo.SHOP_LIMIT_MESSAGE)
+    if shop.start(save):
+        background.submit(shop.build, save["_id"], user["_id"])
+    return {"shop": shop.view(db.saves().find_one({"_id": save["_id"], "user_id": user["_id"]}), user)}
 
 
 @router.get("/api/agent_runs")

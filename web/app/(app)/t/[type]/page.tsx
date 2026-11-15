@@ -55,12 +55,6 @@ function Pin({ item, type }: { item: BoardItem; type: SaveType }) {
           <Icon name={kind.icon} />
         )}
         {item.is_new && <span className="pin-new">New</span>}
-        {item.has_note && (
-          <span className="pin-note" title="Has your note">
-            <Icon name="pen" />
-            <span className="vh">Has your note</span>
-          </span>
-        )}
       </span>
       <span className="pin-title">{item.title}</span>
       {item.meta && <span className="pin-meta">{item.meta}</span>}

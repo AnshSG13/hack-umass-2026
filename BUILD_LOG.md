@@ -278,3 +278,53 @@ The user asked for the chat to suggest something to export at the end, "such as 
 - **No new dependencies.**
 
 Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invite, the itinerary refused before the trip existed and made after it (five timed stops with prices, hours, forecast and the sources named), the public data opening with the token and no key, a wrong token and another account refused. 117 unit tests pass (15 new).
+
+## 2026-11-14: Home leads with what's ready, New chat, the orb's tap
+
+- **Home order:** Ready for you, then Your tastes, then Recently saved. People open the app for what's ready, not for the list of what they saved.
+- **New since last time.** `server/realize/visits.py` keeps `visits.last` and `visits.prev` on the user (a visit ends after 30 minutes of no activity, counted when Home loads `/api/tastes`). Each taste tile shows a badge with the saves added since the previous visit; opening that taste's board clears its badge (`visits.taste_seen`). Kept on the server so a phone and a laptop agree.
+- **The greeting says what was done for them:** "New since last time: 3 recipes, 4 workouts and 3 product picks", or "This week: ..." when nothing is new. Largest first, at most three kinds, "Just vibes" left out.
+- **Ask has New chat**, which clears the conversation (it lived only in memory, so nothing on the server changes).
+- **Tapping the orb lights it** the way holding it does (a short scale and halo), then settles; a hold still opens the voice layer.
+
+110 unit tests pass (2 new; the commit message for this entry said 112, which was wrong). Checked in headless Chrome at 390x844 with the account's last visit moved back 90 minutes: badges on four tastes, the recap line, the Food badge gone after opening Food, the orb's tap state, New chat emptying Ask.
+
+## 2026-11-14: recipes are for cooking now, nutrition, price research
+
+The owner's calls: a saved recipe is opened when someone wants to cook it, so it should not be asked for a calendar slot; the demo leads with travel, recipes (with nutrition) and shopping; price research runs only when asked and must avoid sketchy sites.
+
+- **Recipes.** The Reel page shows a "Ready when you are" card (time, ingredients, steps) with Start cooking and Shopping list, in place of the plan card. A recipe already on the calendar keeps its plan card so it can still be moved or marked done. Recipes are left out of "Waiting on you" (`/api/plans`). The planner and the Shortcut are unchanged for now.
+- **Cook mode:** one step at a time in large type, an ingredient checklist first, Back and Next (arrow keys too), the screen kept awake where the browser allows. `/s/{id}?cook=1` opens it directly.
+- **Dinner bundles** are no longer scheduled: "Start now" opens the first recipe in cook mode, "Shop the list" goes to the merged list, each dinner has Cook. Workout and place bundles still start on free slots (`bundles.SCHEDULED`).
+- **Nutrition** (`server/realize/nutrition.py`, `GET /api/saves/{id}/nutrition`): Gemini estimates each ingredient line for its stated amount; code drops impossible values and made-up line numbers, refuses to show anything when fewer than 60% of lines are usable, sums, divides by servings, and recomputes calories from the macros when the two disagree by more than 40%. Kept on the save until the ingredients change. Shown per serving with a calorie split bar and labelled as an estimate. Measured: 6.0 s the first time, 0.08 s after.
+- **Price research** (`server/realize/shop.py`, `GET`/`POST /api/saves/{id}/shop`): only on a tap. A search-grounded call (the trip code's `research`) for prices at major US stores, brand sites and review sites, then a structured pass. Code keeps a price only when its source page is on the store or review allowlist or is the brand's own site, and a dollar amount can be read. The store name comes from the source page when that page is a store's. Demo accounts get 3. Measured on the curling irons reel: 12 s, 5 prices kept (Target, Walmart, Kohl's), 3 dropped as unknown sites.
+- **Badges** count the last 24 hours when there is no earlier visit, so a new account sees them.
+
+114 unit tests pass (4 new). Checked in headless Chrome at 390x844: recipe page with cook card and nutrition, cook mode pages, price research results, the dinners plan with Start now. No console or network errors.
+
+## 2026-11-14: interests and hobbies are the folders
+- **Owner asked for it directly:** "i want each of the interest or hobbies to just be used as created categories". Starters are no longer invented by Gemini; each interest and hobby is kept as written and Gemini only picks its type. One that fits no type is left out. Checked live: Baking > Food, Travel > Places, Broadway musicals and Comedy > Events, Strength training and Pickleball > Fitness.
+
+## 2026-11-14: intro screens and starter sub-categories
+
+The user asked for intro pages like a video app's onboarding (how you identify, age, ethnicity, hobbies, skills, interests) and for categories the model makes, with a new one whenever a saved reel fits none. Decisions:
+
+- **One question per screen, three sections:** "Tell us about yourself" (how you identify, age, ethnicity), "Choose what you like" (interest chips plus your own), "Your hobbies" (chips plus your own). A first version also asked "What are you good at?"; the owner cut it to keep the intro short. A progress bar, Back and Skip on every screen; single choices move on by themselves. `web/app/welcome/page.tsx`.
+- **Gemini in two places.** While interests are picked, "More for you" adds more specific chips. At the end, Gemini proposes starter sub-categories inside each type, shown as "Your folders".
+- **Built on the existing sub-categories, not a second system.** The owner asked for type first (Food) and sub-categories under it. A first version kept its own categories collection; it was dropped for `profile.starters`, which `subcats` offers to the model next to the labels in use. So the hierarchy, the library chips, Home's taste tiles and "File under" all work unchanged.
+- **Identity and ethnicity never reach Gemini.** They are stored on the profile only, so filing follows what someone likes, not who they are.
+- **Who sees it:** new accounts after signup, then `/setup` as before; existing real accounts once, on their next visit; demo accounts never. Settings has "Redo the intro".
+- **No new dependencies.**
+
+Checked live against Atlas with a throwaway account (deleted afterwards): the intro end to end at 390 px; Gemini made sentence-case starters in 6 types; six real sample reels were filed as Food > Weeknight dinners (2) and Food > Baking (2) from the starters, and Events > Theater and Events > Holiday events as new ones. The first run returned Title Case starters; the prompt now asks for sentence case, checked on two more runs. 127 unit tests pass (10 new).
+
+## 2026-11-14: knowledge graph
+
+The user asked for a knowledge graph that helps retrieval of the vector embeddings and a page where people see how their categories, sub-categories and interests relate. Decisions:
+
+- **Built on what exists.** Types and sub-categories already form the hierarchy, and every save already has an embedding, so the graph is computed in code (`server/realize/graph.py`): sub-category centroids from the saves' embeddings, "related" edges between sub-categories, "likes" edges from intro interests. The only model call embeds interests once. This replaces the spec's phase 8 clustering idea, so scikit-learn is not added.
+- **Relative edges, measured first.** On a temporary demo account holding the 16-reel sample library, labelled with `scripts.backfill_subcategories`, the median centroid-to-centroid cosine was 0.717 (10th percentile 0.667, 90th 0.803), and a fixed cutoff linked "Quick dinners" to "Bags & Luggage" (0.794). Mutual nearest neighbours (k = 2, floor 0.75) keep 7 pairs such as Desserts ~ Appetizers, Cardio ~ Strength and Staycation ~ Holiday exhibit, and drop that one. Interest links keep matches within 0.05 of the best one, which drops "Food and cooking" > "Hair care" (0.56 against a best of 0.642).
+- **Retrieval, measured honestly.** `python -m scripts.eval_recall --user <temp account>`: hit@1 20/20 and hit@3 20/20 with `GRAPH_EXPAND=false` and with it on, so no regression, and no gain this set can show (it was already 20/20). A first expansion rule (neighbours with query cosine at least 0.55) added 10 results over 24 queries, several off topic ("something sweet to bring to a party" pulled in two dinners). Query cosine alone didn't separate good additions from bad ones, so neighbours now also need their sub-category's centroid to match the query within 0.03 of the anchor's; that left 1 addition over the same 24 queries (the chickpea question adds the other quick dinner). Expansion only fills empty slots after the direct hits. It is behind `GRAPH_EXPAND` so it can be turned off.
+- **The page** is `/graph` ("How your saves connect"), linked from Home's "Your tastes". react-force-graph-2d is the dependency CLAUDE.md lists for this (1.29.2, pinned). The canvas has a text list of every connection under it, so the page works without the canvas.
+
+Checked at 390 and 1440 px on that temporary account (deleted afterwards): the graph draws 41 nodes and 51 links, tapping a node on the canvas or in the list highlights its neighbours and opens its details with links to its reels. 136 unit tests pass (9 new in `server/tests/test_graph.py`).

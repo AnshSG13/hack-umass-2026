@@ -6,7 +6,7 @@
 // link comes from the server (GET /api/saves/{id}/trip) and is shown as sent. A fact that
 // arrives without its source is left out.
 
-import { useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import useSWR from "swr";
 import { StepLines } from "@/components/agent-activity";
 import { Icon, type IconName } from "@/components/icons";
@@ -335,11 +335,17 @@ export function TripPlan({
   saveId,
   type,
   settled,
+  go = 0,
+  reveal = false,
 }: {
   saveId: string;
   type: SaveType | null;
   /** False while the reel is still being read: there is nothing to plan a trip from yet. */
   settled: boolean;
+  /** Bumped by the action's "Build the itinerary": builds it if it hasn't been built. */
+  go?: number;
+  /** Scroll the section into view once, when it has loaded (a link asked for the trip). */
+  reveal?: boolean;
 }) {
   const travel = type === "place" || type === "event";
   const path = `/api/saves/${saveId}/trip`;
@@ -375,6 +381,29 @@ export function TripPlan({
             : "",
     );
   }
+
+  // The action's "Build the itinerary": build once data says nothing is built yet, and bring
+  // the section into view either way.
+  const handledGo = useRef(0);
+  useEffect(() => {
+    if (go === 0 || go === handledGo.current || !data) return;
+    handledGo.current = go;
+    if (data.status === "none" && data.can_build && busy === null) void build("build");
+    else section.current?.scrollIntoView({ block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [go, data]);
+
+  const shown = travel && data !== undefined && data.can_build;
+  const revealed = useRef(false);
+  useEffect(() => {
+    if (!reveal || !shown || revealed.current) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const id = window.requestAnimationFrame(() => {
+      revealed.current = true;
+      section.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [reveal, shown]);
 
   if (!travel || !data || !data.can_build) return null;
 
@@ -444,7 +473,7 @@ export function TripPlan({
   const problemAt = (at: string) => (problem?.at === at ? problem.text : null);
 
   return (
-    <section className="trip" ref={section} tabIndex={-1} aria-label="Trip plan">
+    <section className="trip" id="trip" ref={section} tabIndex={-1} aria-label="Trip plan">
       <p className="vh" role="status">
         {live}
       </p>

@@ -127,12 +127,12 @@ function Groceries({ bundle, groups }: { bundle: Bundle; groups: GroceryGroup[] 
   );
 }
 
-function ItemRow({ item, index, slotKind }: { item: BundleItem; index: number; slotKind: boolean }) {
+function ItemRow({ item, index, slotKind, cook }: { item: BundleItem; index: number; slotKind: boolean; cook: boolean }) {
   const added = item.plan_status === "accepted";
   const finished = item.plan_status === "done";
   return (
     <li>
-      <Link href={`/s/${item.save_id}`} className="bitem">
+      <Link href={cook ? `/s/${item.save_id}?cook=1` : `/s/${item.save_id}`} className="bitem">
         <span className="bitem-thumb">
           {item.thumb_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -152,7 +152,7 @@ function ItemRow({ item, index, slotKind }: { item: BundleItem; index: number; s
           <span className="bitem-note">{item.note || item.meta}</span>
         </span>
         <span className="vh">{`Step ${index + 1}`}</span>
-        <Icon name="right" />
+        {cook ? <span className="bitem-go">Cook</span> : <Icon name="right" />}
       </Link>
     </li>
   );
@@ -212,7 +212,8 @@ export default function BundlePage() {
 
   const b = data.bundle;
   const kind = kindOf(b.type);
-  const slotKind = b.type !== "product";
+  const slotKind = b.type === "workout" || b.type === "place";
+  const isRecipe = b.type === "recipe";
   const busy = busyId === b.id;
   const started = b.status === "started";
 
@@ -247,6 +248,21 @@ export default function BundlePage() {
           <p className="bstart-note">One tap adds all of these to your week. Nothing is added before that.</p>
         </div>
       )}
+      {isRecipe && (
+        <div className="bstart bstart-two">
+          {b.items[0] && (
+            <Link href={`/s/${b.items[0].save_id}?cook=1`} className="btn btn-primary">
+              Start now
+            </Link>
+          )}
+          {(b.groceries?.length ?? 0) > 0 && (
+            <a href="#groceries" className="btn">
+              <Icon name="basket" />
+              Shop the list
+            </a>
+          )}
+        </div>
+      )}
       {started && (
         <p className="bdone">
           <Icon name="check" />
@@ -267,11 +283,11 @@ export default function BundlePage() {
 
       <section className="sec" aria-labelledby="in-h" style={{ marginTop: 28 }}>
         <h2 className="sec-title" id="in-h">
-          {slotKind ? "What's in it" : "From these reels"}
+          {isRecipe ? "Pick one to cook" : slotKind ? "What's in it" : "From these reels"}
         </h2>
         <ol className="bitems">
           {b.items.map((item, i) => (
-            <ItemRow key={item.save_id} item={item} index={i} slotKind={slotKind} />
+            <ItemRow key={item.save_id} item={item} index={i} slotKind={slotKind} cook={isRecipe} />
           ))}
         </ol>
       </section>

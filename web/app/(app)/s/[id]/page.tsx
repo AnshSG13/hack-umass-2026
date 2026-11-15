@@ -1,17 +1,19 @@
 "use client";
 
 // The Reel page, after the mockup: hero, category chip, title, summary, facts, the plan
-// card, actions, the trip plan (places and events), your note, what was pulled from the
+// card, actions, the trip plan (places and events), what was pulled from the
 // reel, how it was read and planned.
 
 import { useEffect, useId, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { AgentTrace } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
 import { SendSomething } from "@/components/deliverables";
 import { Icon, type IconName } from "@/components/icons";
+import { CookCard, CookMode, NutritionPanel } from "@/components/cook";
 import { PlanCard } from "@/components/plan-card";
+import { ShopResearch } from "@/components/shop-research";
 import { AskAboutButton, Discussions, ReelChat } from "@/components/reel-chat";
 import { ReelSections } from "@/components/reel-sections";
 import { useApp } from "@/components/shell";
@@ -33,9 +35,7 @@ import {
 } from "@/lib/format";
 import { useConfig, useRefresh, useSaveDetail } from "@/lib/hooks";
 import { KIND_ORDER, kindOf, KINDS, kindTint, tint } from "@/lib/kinds";
-import type { Fields, Ingredient, SaveDetail, SavePatch, SaveType, TastesResponse, Ticket } from "@/lib/types";
-
-const NOTE_MAX = 500; // the API's limit on a note
+import type { Deliver, Fields, Ingredient, SaveDetail, SavePatch, SaveType, TastesResponse, Ticket } from "@/lib/types";
 
 function errorText(e: unknown, fallback: string): string {
   return e instanceof ApiError && e.status !== 404 && e.status !== 405 ? e.message : fallback;
@@ -152,63 +152,6 @@ function GrocerySheet({
   );
 }
 
-// ---- your note ----
-
-function Note({ note, onSave }: { note: string; onSave: (note: string) => Promise<boolean> }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const fieldId = useId();
-
-  if (draft === null) {
-    return (
-      <button type="button" className="note" onClick={() => setDraft(note)} aria-label={note ? "Edit your note" : "Add a note"}>
-        <span className="note-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          Your note
-          <Icon name={note ? "pen" : "plus"} className="note-ico" />
-        </span>
-        <span className={note ? "note-text" : "note-text is-empty"} style={{ display: "block" }}>
-          {note || "Add a note"}
-        </span>
-      </button>
-    );
-  }
-
-  return (
-    <form
-      className="note"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        const ok = await onSave(draft.trim());
-        setBusy(false);
-        if (ok) setDraft(null);
-      }}
-    >
-      <label className="note-label" htmlFor={fieldId}>
-        Your note
-      </label>
-      <textarea
-        id={fieldId}
-        value={draft}
-        maxLength={NOTE_MAX}
-        autoFocus
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setDraft(null);
-        }}
-      />
-      <div className="note-actions">
-        <button type="submit" className="btn btn-primary" style={{ gridColumn: "auto" }} disabled={busy}>
-          {busy ? "Saving" : "Save"}
-        </button>
-        <button type="button" className="btn" disabled={busy} onClick={() => setDraft(null)}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
 // ---- the page ----
 
 export default function ReelPage() {
@@ -230,28 +173,53 @@ export default function ReelPage() {
   const [busy, setBusy] = useState(false);
   const [catError, setCatError] = useState<string | null>(null);
 
-  // After "Reanalyze and re-sort": where the reel was filed before, so the toast at the end
-  // can say whether it moved. Cleared once the second reading is done.
-  const resorting = useRef<{ type: SaveType | null; sub: string | null } | null>(null);
+  // A link can open the page on one saved discussion (?chat=<id>) or on its trip plan
+  // (?show=trip). Read once; both are then taken out of the address, keeping ?t=.
+  // From the router, not window.location: on a client-side move the address changes only
+  // after this first render.
+  const search = useSearchParams();
+  const [linked] = useState(() => {
+    const chat = search.get("chat");
+    return { chat: chat && /^[A-Za-z0-9_-]{1,64}$/.test(chat) ? chat : null, trip: search.get("show") === "trip" };
+  });
   useEffect(() => {
-    const before = resorting.current;
-    const t = data?.ticket;
-    if (!before || !t) return;
-    if (inFlight(t.processing) || t.processing === "planned" || t.processing === "enriching") return;
-    resorting.current = null;
-    refresh(`/api/saves/${id}`);
-    if (data.details.enrich_error) {
-      toast.show("It couldn't be watched again. Where it's filed didn't change.");
-      return;
-    }
-    const where = [kindOf(t.type)?.label, t.subcategory].filter(Boolean).join(" › ");
-    const moved = t.type !== before.type || (t.subcategory ?? null) !== before.sub;
-    toast.show(moved ? `Re-sorted under ${where}` : `Read again. Still under ${where}`);
-  }, [data, id, refresh, toast]);
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("chat") && !url.searchParams.has("show")) return;
+    url.searchParams.delete("chat");
+    url.searchParams.delete("show");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
 
   // The reel's own chat: open or not, and which saved discussion (null is a new one).
   const [chatOpen, setChatOpen] = useState(false);
-  const [discussionId, setDiscussionId] = useState<string | null>(null);
+  // The action asked for on arrival (?do=cook from a Ready for you tile). Cook mode opens
+  // straight away; the others run once the reel has loaded (see the effect below).
+  const [arrivalDo] = useState<Deliver | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("cook") === "1") return "cook";
+    const d = q.get("do");
+    return d && ["cook", "shop", "itinerary", "workout", "learn"].includes(d) ? (d as Deliver) : null;
+  });
+  const [cooking, setCooking] = useState(arrivalDo === "cook");
+  // Bumped to tell price research or the trip plan to start.
+  const [shopGo, setShopGo] = useState(0);
+  const [tripGo, setTripGo] = useState(0);
+  const arrivalDone = useRef(arrivalDo === "cook" || arrivalDo === null);
+  const [discussionId, setDiscussionId] = useState<string | null>(linked.chat);
+
+  // Open the linked discussion once the page is up. Not on the first render: the router
+  // moves focus to the new page as it arrives, and focus leaving the chat closes it.
+  const loaded = data !== undefined;
+  const chatShown = useRef(false);
+  useEffect(() => {
+    if (!linked.chat || !loaded || chatShown.current) return;
+    const timer = window.setTimeout(() => {
+      chatShown.current = true;
+      setChatOpen(true);
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [linked.chat, loaded]);
 
   // A moment in the video to show: from a link (?t=11) or from an answer's "Said at 0:11".
   const [atSec, setAtSec] = useState<number | null>(() => {
@@ -277,6 +245,54 @@ export default function ReelPage() {
       window.clearTimeout(clear);
     };
   }, [atSec, hasTranscript]);
+
+  // After "Reanalyze and re-sort": where the reel was filed before, so the toast at the end
+  // can say whether it moved. Cleared once the second reading is done.
+  const resorting = useRef<{ type: SaveType | null; sub: string | null } | null>(null);
+  useEffect(() => {
+    const before = resorting.current;
+    const t = data?.ticket;
+    if (!before || !t) return;
+    if (inFlight(t.processing) || t.processing === "planned" || t.processing === "enriching") return;
+    resorting.current = null;
+    refresh(`/api/saves/${id}`);
+    if (data.details.enrich_error) {
+      toast.show("It couldn't be watched again. Where it's filed didn't change.");
+      return;
+    }
+    const where = [kindOf(t.type)?.label, t.subcategory].filter(Boolean).join(" › ");
+    const moved = t.type !== before.type || (t.subcategory ?? null) !== before.sub;
+    toast.show(moved ? `Re-sorted under ${where}` : `Read again. Still under ${where}`);
+  }, [data, id, refresh, toast]);
+
+  // Do the reel's action here: open cook mode, start price research, build the itinerary,
+  // or bring the moves or key points into view.
+  function doAction(deliver: Deliver) {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const show = (elId: string) =>
+      window.setTimeout(
+        () => document.getElementById(elId)?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" }),
+        80,
+      );
+    if (deliver === "cook") setCooking(true);
+    else if (deliver === "shop") {
+      setShopGo((n) => n + 1);
+      show("shop");
+    } else if (deliver === "itinerary") {
+      setTripGo((n) => n + 1);
+      show("trip");
+    } else if (deliver === "workout") show("workout-h");
+    else if (deliver === "learn") show("tip-h");
+  }
+
+  // Arrived with ?do=: run it once the reel has been read.
+  const readyForDo = data ? !inFlight(data.ticket.processing) : false;
+  useEffect(() => {
+    if (arrivalDone.current || !readyForDo || !arrivalDo) return;
+    arrivalDone.current = true;
+    doAction(arrivalDo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyForDo]);
 
   const backButton = (
     <button type="button" className="round back" aria-label="Back" onClick={goBack}>
@@ -322,7 +338,6 @@ export default function ReelPage() {
   const type = ticket.type;
   const kind = kindOf(type);
   const title = ticketTitle(ticket);
-  const note = details.note ?? "";
   const reading = inFlight(ticket.processing);
   const enriching = ticket.processing === "enriching" || ticket.processing === "planned";
   const working = enriching || reading;
@@ -414,12 +429,6 @@ export default function ReelPage() {
     setNewSub("");
     setSheet(null);
     toast.show(saved ? `Filed under ${kind?.label ?? "this kind"} › ${saved}` : "Sub-category removed");
-  }
-
-  async function saveNote(text: string): Promise<boolean> {
-    const problem = await patch({ note: text }, "Your note didn't save. Try again.");
-    toast.show(problem ?? (text ? "Note saved." : "Note removed."));
-    return problem === null;
   }
 
   async function planAgain() {
@@ -531,7 +540,20 @@ export default function ReelPage() {
           </ul>
         )}
 
-        <PlanCard ticket={ticket} onChange={applyTicket} />
+        {/* A recipe is for cooking when you want to, not for booking a slot. One already
+            on the calendar keeps its plan card so it can be moved or marked done. */}
+        {recipe && !(ticket.plan && ["accepted", "done", "skipped"].includes(ticket.plan.status)) ? (
+          <CookCard
+            minutes={recipe.total_time_min}
+            ingredients={groceries.length}
+            steps={recipe.steps?.length ?? 0}
+            onCook={() => setCooking(true)}
+            onShop={() => setSheet("grocery")}
+            headline={ticket.action?.deliver === "cook" ? ticket.action.cta : undefined}
+          />
+        ) : (
+          <PlanCard ticket={ticket} onChange={applyTicket} onDo={doAction} />
+        )}
 
         {enriching && (
           <p className="plan-meta" style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
@@ -541,7 +563,7 @@ export default function ReelPage() {
         )}
 
         <div className="actions">
-          {groceries.length > 0 && (
+          {groceries.length > 0 && !recipe && (
             <button type="button" className="btn btn-primary" onClick={() => setSheet("grocery")}>
               <Icon name="basket" />
               Make a grocery list
@@ -557,11 +579,10 @@ export default function ReelPage() {
         {/* Something finished to send, for people who never open the chat. */}
         {!reading && <SendSomething saveId={ticket.save_id} servings={servings} />}
 
-        <TripPlan saveId={ticket.save_id} type={type} settled={!reading} />
+        <TripPlan saveId={ticket.save_id} type={type} settled={!reading} go={tripGo} reveal={linked.trip} />
+        {type === "product" && <ShopResearch saveId={ticket.save_id} settled={!reading} go={shopGo} />}
 
         <Discussions saveId={ticket.save_id} onOpen={openChat} />
-
-        <Note note={note} onSave={saveNote} />
 
         <ReelSections
           saveId={ticket.save_id}
@@ -570,6 +591,8 @@ export default function ReelPage() {
           servings={shownServings}
           onServings={setServings}
         />
+
+        {recipe && (recipe.ingredients?.length ?? 0) > 0 && !reading && <NutritionPanel saveId={ticket.save_id} />}
 
         {/* How it was read and planned: there when wanted, one closed row otherwise. */}
         <details className="said fold" ref={foldRef}>
@@ -808,6 +831,17 @@ export default function ReelPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {recipe && (
+        <CookMode
+          open={cooking}
+          onOpenChange={setCooking}
+          title={title}
+          ingredients={groceries}
+          steps={recipe.steps ?? []}
+          servings={shownServings}
+        />
+      )}
 
       <ReelChat
         open={chatOpen}
