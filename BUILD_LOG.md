@@ -363,3 +363,11 @@ The owner asked for the chat to go to the internet when you explicitly ask for a
 - **One helper.** Both use `websearch.grounded`: [n] markers where the model cited, Google redirect links resolved to the real pages, and text that comes back twice kept once (seen live: a reel answer printed its sentence twice).
 
 Checked live on fresh demo sessions: Ask "Search the web for whether the NYBG holiday train show needs timed tickets" answered with 2 nybg.org sources, kept them when reopened; a plain Ask question still searched the saves; a reel chat "look it up online: is the pool open in December?" answered with 3 sources (the hotel's pool page first). pytest: 170 passed.
+
+## 2026-11-15: three bugs from the review
+
+- **Swap questions went to the nutrition lookup.** Any recipe question naming sugar, protein, fat, keto or "healthy" ("Can I use less sugar?") got a macros answer or a paid web search. `web_nutrition.wants_nutrition` now takes words that only ask for numbers (macros, calories, nutrition), or a nutrient in a how-much question ("how much protein", "is it high in fiber", "is this keto?"); a question about changing the recipe (swap, instead, use less, make it...) never goes there. A failed lookup now falls through to the reel's own answer instead of an error. Checked live: "Can I use less sugar?" on the chicken au poivre got a cooking answer with two next questions.
+- **A save could stay "reading" for good.** Saves of reels that are also demo samples are planned on an API background thread, not the job queue, so a restart mid-plan left them with nothing to finish them, and reanalyze and a second share both treated them as busy. `realize/recover.py` (run by the worker about once a minute) restarts saves in a working state for over 10 minutes with no live job and no recent run, the way they were first planned. Checked live: a real account's reel stuck since 2026-11-14 10:10 UTC went to ready on the first sweep.
+- **The first Ask question after the demo's Start over failed** ("That chat isn't here any more"): the old session's chat id outlived the key. The shell now clears the Ask chat whenever the key changes. Checked live on a fresh demo session.
+
+`pytest`: 173 passed.
