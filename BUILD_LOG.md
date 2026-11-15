@@ -375,3 +375,11 @@ The owner asked to move the categories off Home, keep action items on Home, and 
 - **Why ringed days can be few on a demo account:** a free slot only shows when a save of that kind has no time yet; the demo's two recipes are already planned, so its weekday evenings show nothing to fill.
 
 Checked on the branch's own servers (API 8010, web 3010, worktree on branch home-folders): pytest 173 passed; the live suites 23/23, 22/22 and 8/8; Home at 390x844 and 375x667 with one Add to tomorrow and its Undo, the list ticking, and /plans landing on Home; 12 screens opened with no page errors or horizontal overflow; the web-design-guidelines pass found one issue (the Add button's spoken name didn't contain its visible words), fixed.
+
+## 2026-11-15: three bugs from the review
+
+- **Swap questions went to the nutrition lookup.** Any recipe question naming sugar, protein, fat, keto or "healthy" ("Can I use less sugar?") got a macros answer or a paid web search. `web_nutrition.wants_nutrition` now takes words that only ask for numbers (macros, calories, nutrition), or a nutrient in a how-much question ("how much protein", "is it high in fiber", "is this keto?"); a question about changing the recipe (swap, instead, use less, make it...) never goes there. A failed lookup now falls through to the reel's own answer instead of an error. Checked live: "Can I use less sugar?" on the chicken au poivre got a cooking answer with two next questions.
+- **A save could stay "reading" for good.** Saves of reels that are also demo samples are planned on an API background thread, not the job queue, so a restart mid-plan left them with nothing to finish them, and reanalyze and a second share both treated them as busy. `realize/recover.py` (run by the worker about once a minute) restarts saves in a working state for over 10 minutes with no live job and no recent run, the way they were first planned. Checked live: a real account's reel stuck since 2026-11-14 10:10 UTC went to ready on the first sweep.
+- **The first Ask question after the demo's Start over failed** ("That chat isn't here any more"): the old session's chat id outlived the key. The shell now clears the Ask chat whenever the key changes. Checked live on a fresh demo session.
+
+`pytest`: 173 passed.

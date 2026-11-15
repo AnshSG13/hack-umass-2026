@@ -205,10 +205,8 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
             reply = web_nutrition.answer(save, message, run.step)
             run.finish("done")
             return reply
-        except Exception as e:  # noqa: BLE001
-            log.warning("nutrition lookup failed: %s", str(e)[:200])
-            run.finish("failed", str(e))
-            raise
+        except Exception as e:  # noqa: BLE001 - the reel's own answer below is better than an error
+            log.warning("nutrition lookup failed, answering from the reel: %s", str(e)[:200])
     if websearch.wants_web(message):
         # They asked for a web search in so many words: go straight there, about this reel.
         title = " ".join(str(save.get("title") or "").split())

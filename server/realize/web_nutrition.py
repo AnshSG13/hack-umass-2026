@@ -26,9 +26,21 @@ NUTRIENTS = [("calories", "calories", ""), ("protein_g", "protein", " g"),
              ("fiber_g", "fiber", " g"), ("sugar_g", "sugar", " g"), ("sodium_mg", "sodium", " mg")]
 LIMITS = {"calories": 6000, "protein_g": 400, "carbs_g": 800, "fat_g": 400, "fiber_g": 150,
           "sugar_g": 500, "sodium_mg": 20000}
-ASK = re.compile(
-    r"\b(macros?|calories?|calorie count|kcals?|cals?|protein|carbs?|carbohydrates?|fats?|nutrition(al)?|"
-    r"nutrients?|fib(er|re)|sugars?|sodium|salt content|healthy|keto|low.carb|high.protein)\b", re.I)
+# Words that only ever ask for the numbers.
+STRONG = re.compile(r"\b(macros?|calories?|calorie\s+count|kcals?|cals|nutrition(al)?|nutrients?)\b", re.I)
+_NUTRIENT = r"(protein|carbs?|carbohydrates?|fats?|fib(er|re)|sugars?|sodium|salt)"
+# A nutrient named in a question about how much of it there is, or whether the dish is healthy.
+AMOUNT = re.compile(
+    r"\b(how\s+(much|many)|amount\s+of|grams?\s+of|what('?s|\s+is|\s+are)\s+the|is\s+(it|this|that)\s+(high|low|rich)"
+    r"|high\s+in|low\s+in)\b[^.?!]{0,30}\b" + _NUTRIENT + r"\b"
+    r"|\b" + _NUTRIENT + r"\s+(content|count|per\s+serving|in\s+(it|this|that|here))\b"
+    r"|\bis\s+(it|this|that)\s+(healthy|keto|low[\s-]carb|high[\s-]protein|low[\s-]fat)\b", re.I)
+# Changing the recipe is a cooking question even when it names a nutrient ("can I use less
+# sugar?", "swap the protein for tofu", "make it keto"): the reel's chat answers those.
+CHANGE = re.compile(
+    r"\b(swap\w*|substitut\w*|replac\w*|instead|use\s+(less|more|no|low)|without|cut\s+(down|back|out)|reduce"
+    r"|lower|leave\s+out|skip|make\s+(it|this)|lighter|healthier|vegan|vegetarian|dairy[\s-]free|gluten[\s-]free)\b",
+    re.I)
 NOT_FOUND = ("I couldn't find nutrition for this recipe from a source I can link, so I won't guess. "
              "The reel doesn't give it either.")
 
@@ -52,8 +64,12 @@ SCHEMA: dict = {
 
 
 def wants_nutrition(save: dict, message: str) -> bool:
-    """A recipe reel and a question about macros, calories or nutrients."""
-    return save.get("type") == "recipe" and bool(ASK.search(message or ""))
+    """A recipe reel and a question asking for its nutrition: macros or calories, or how much of
+    a nutrient it has. A question about changing the recipe is not one, whatever it names."""
+    m = message or ""
+    if save.get("type") != "recipe" or CHANGE.search(m):
+        return False
+    return bool(STRONG.search(m) or AMOUNT.search(m))
 
 
 def _recipe_block(save: dict) -> str:

@@ -118,6 +118,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const [turns, setTurns] = useState<AskTurn[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
+  // Ask's chat belongs to one account: a different key (Start over, signing in as someone
+  // else) starts with no chat, so the next question can't point at the old account's.
+  const [keyFor, setKeyFor] = useState(key);
+  if (key !== keyFor) {
+    setKeyFor(key);
+    setChatId(null);
+    setTurns([]);
+  }
   const [handoff, setHandoff] = useState<AskHandoff | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [fresh, setFresh] = useState<FreshSave[]>([]);
@@ -187,6 +195,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const r = await api<{ api_key: string }>("/api/demo/session", { body: { timezone: browserTimezone() } });
       setTurns([]);
+      setChatId(null); // the old session's chat isn't the new session's
       setFresh([]);
       try {
         window.sessionStorage.removeItem("rl_demo_added");
