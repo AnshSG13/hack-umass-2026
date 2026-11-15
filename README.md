@@ -74,10 +74,11 @@ You need Python 3.12 or newer, Node 22 or newer, a MongoDB Atlas cluster (the fr
    ```
 3. Three terminals:
    ```
-   cd server; .\.venv\Scripts\Activate.ps1; uvicorn realize.api.main:app --reload --port 8000
+   cd server; .\.venv\Scripts\Activate.ps1; uvicorn realize.api.main:app --reload --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
    cd server; .\.venv\Scripts\Activate.ps1; python -m realize.worker
    cd web; npm install; npm run dev
    ```
+   The web app passes `/api` calls on to the API, so without `--proxy-headers` every visitor looks like 127.0.0.1 and they all share one demo limit. Trusting only 127.0.0.1 keeps anyone else from setting their own address.
 4. Open http://localhost:3000. "Use it for real" creates an account and shows your key. To fill the demo, run `python -m scripts.build_samples` once (it needs Instagram access and Gemini quota).
 5. Test the Shortcut contract without a phone:
    ```

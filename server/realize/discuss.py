@@ -35,6 +35,7 @@ TITLE_MAX = 60
 KEEP_MESSAGES = 80          # a discussion keeps its newest messages; the array stays bounded
 HISTORY_TURNS = 12          # messages sent back to the model
 PER_SAVE = 30               # discussions listed for one reel
+ALL_LIMIT = 40              # chats listed on the Ask page
 SNAP_SEC = 3.0              # how far a named second may be from a real line's start
 NO_ANSWER = "Ask didn't answer. Try again."
 
@@ -59,6 +60,8 @@ lists pulled from it (ingredients, steps, exercises, places, products). So:
   hours, dates, tickets, availability; reviews; nutrition; anything current; how-tos that need
   specifics. Then put a short search query in search_for, and text can be one line saying you'll
   look it up. false when the reel answers it, or it is a matter of taste or small talk.
+- follow_ups: up to 2 short questions they would likely ask next about this reel, in their
+  voice, under 48 characters each ("Can I freeze it?"). None that the page already answers.
 
 THE REEL
 {reel}"""
@@ -71,6 +74,8 @@ ANSWER_SCHEMA: dict = {
         "from_reel": {"type": "boolean"},
         "needs_web": {"type": "boolean"},
         "search_for": {"type": "string", "description": "A short web search query, when needs_web"},
+        "follow_ups": {"type": "array", "items": {"type": "string"},
+                       "description": "Up to 2 short next questions, under 48 characters each"},
     },
     "required": ["text", "at_sec", "from_reel", "needs_web"],
 }
@@ -162,6 +167,18 @@ def clean_answer(text: str) -> str:
     return out[:ANSWER_MAX].strip()
 
 
+def clean_follow_ups(raw) -> list[str]:
+    """At most 2 short, distinct questions, sentence case, no em dashes; others are dropped."""
+    out: list[str] = []
+    for x in raw if isinstance(raw, list) else []:
+        q = " ".join(str(x).replace("—", ",").split()).strip(" \"'")
+        if q and q[0].islower():
+            q = q[0].upper() + q[1:]
+        if 3 <= len(q) <= 48 and q.lower() not in [o.lower() for o in out]:
+            out.append(q)
+    return out[:2]
+
+
 def title_from(message: str) -> str:
     """A discussion is named after its first question."""
     t = " ".join((message or "").split())
@@ -210,7 +227,8 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
             raise RuntimeError("empty answer")
         run.finish("done")
         return {"text": body, "at_sec": snap_second(save, out.get("at_sec")),
-                "from_reel": bool(out.get("from_reel"))}
+                "from_reel": bool(out.get("from_reel")),
+                "follow_ups": clean_follow_ups(out.get("follow_ups"))}
     except Exception as e:  # noqa: BLE001
         log.warning("discussion failed: %s", str(e)[:200])
         run.finish("failed", str(e))
@@ -280,7 +298,8 @@ def append(user: dict, save: dict, discussion: dict | None, message: str, reply:
     pair = [
         {"role": "user", "text": message, "at": now},
         {"role": "assistant", "text": reply["text"], "at": now,
-         "at_sec": reply.get("at_sec"), "from_reel": reply.get("from_reel", True)},
+         "at_sec": reply.get("at_sec"), "from_reel": reply.get("from_reel", True),
+         "follow_ups": reply.get("follow_ups") or []},
     ]
     if reply.get("web"):
         # Looked up on the web: the links its numbers came from travel with the answer.
@@ -298,6 +317,61 @@ def append(user: dict, save: dict, discussion: dict | None, message: str, reply:
         {"$push": {"messages": {"$each": pair, "$slice": -KEEP_MESSAGES}},
          "$inc": {"count": 2}, "$set": {"updated_at": now}})
     return db.discussions().find_one({"_id": discussion["_id"], "user_id": user["_id"]})
+
+
+def append_ask(user: dict, chat: dict | None, message: str, answer: dict, cards: list[dict]) -> dict:
+    """Keep one Ask turn (a question about all their saves): the answer, the reels it showed
+    and its next questions. Same collection as reel chats, with no save_id."""
+    now = now_utc()
+    pair = [
+        {"role": "user", "text": message[:MESSAGE_MAX], "at": now},
+        {"role": "assistant", "text": str(answer.get("text") or "")[:ANSWER_MAX], "at": now,
+         "confidence": answer.get("confidence"), "follow_ups": answer.get("follow_ups") or [],
+         "cards": cards[:6]},
+    ]
+    if chat is None:
+        doc: dict = {"_id": ObjectId(), "user_id": user["_id"], "save_id": None, "kind": "ask",
+                     "title": title_from(message), "messages": pair, "count": 2,
+                     "created_at": now, "updated_at": now}
+        if user.get("expires_at"):
+            doc["expires_at"] = user["expires_at"]
+        db.discussions().insert_one(doc)
+        return doc
+    db.discussions().update_one(
+        {"_id": chat["_id"], "user_id": user["_id"]},
+        {"$push": {"messages": {"$each": pair, "$slice": -KEEP_MESSAGES}},
+         "$inc": {"count": 2}, "$set": {"updated_at": now}})
+    return db.discussions().find_one({"_id": chat["_id"], "user_id": user["_id"]})
+
+
+def get_ask(chat_id: str | None, user: dict) -> dict | None:
+    """An Ask chat of this user's (not a reel chat), or None."""
+    d = get(chat_id, user) if chat_id else None
+    return d if d and d.get("save_id") is None else None
+
+
+def list_all(user: dict, limit: int = ALL_LIMIT) -> list[dict]:
+    """Every chat, Ask and reel ones together, newest first, each with its reel when it has one."""
+    docs = list(db.discussions().find(
+        {"user_id": user["_id"]},
+        {"title": 1, "updated_at": 1, "count": 1, "save_id": 1, "kind": 1, "messages": {"$slice": -1}},
+    ).sort("updated_at", -1).limit(limit))
+    ids = [d["save_id"] for d in docs if d.get("save_id")]
+    reels = {s["_id"]: s for s in db.saves().find({"_id": {"$in": ids}, "user_id": user["_id"]},
+                                                 {"title": 1, "thumb_id": 1, "type": 1})} if ids else {}
+    from . import tickets  # late: tickets imports a lot
+
+    out = []
+    for d in docs:
+        row = summary_view(d)
+        s = reels.get(d.get("save_id"))
+        if d.get("save_id") and not s:
+            continue  # the reel was deleted; its chats go with it
+        row["kind"] = "reel" if s else "ask"
+        row["reel"] = ({"save_id": str(s["_id"]), "title": s.get("title") or "Saved reel",
+                        "type": s.get("type"), "thumb_url": tickets.thumb_url(s)} if s else None)
+        out.append(row)
+    return out
 
 
 def delete(discussion_id: str, user: dict) -> bool:
@@ -318,6 +392,10 @@ def _message_view(m: dict) -> dict:
         out["at_sec"] = sec if isinstance(sec, int) else None
         out["at_label"] = _clock(sec) if isinstance(sec, int) else None
         out["from_reel"] = bool(m.get("from_reel", True))
+        out["follow_ups"] = [str(q) for q in m.get("follow_ups") or []][:2]
+        if "cards" in m:  # an Ask turn: the reels it showed, as they were then
+            out["cards"] = m.get("cards") or []
+            out["confidence"] = m.get("confidence")
         if m.get("web"):
             out["web"] = True
             out["sources"] = m.get("sources") or []
@@ -328,12 +406,13 @@ def _message_view(m: dict) -> dict:
 def summary_view(d: dict) -> dict:
     last = (d.get("messages") or [{}])[-1]
     count = int(d.get("count") or len(d.get("messages") or []))
-    return {"id": str(d["_id"]), "title": d.get("title") or "Discussion",
+    return {"id": str(d["_id"]), "title": d.get("title") or "Chat",
             "questions": max(1, count // 2),
             "updated_at": as_utc(d["updated_at"]).isoformat(),
             "preview": (last.get("text") or "")[:140]}
 
 
 def view(d: dict) -> dict:
-    return {**summary_view(d), "save_id": str(d["save_id"]),
+    return {**summary_view(d), "save_id": str(d["save_id"]) if d.get("save_id") else None,
+            "kind": "reel" if d.get("save_id") else "ask",
             "messages": [_message_view(m) for m in d.get("messages") or []]}

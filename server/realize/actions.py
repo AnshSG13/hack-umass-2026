@@ -23,6 +23,10 @@ CHECK_DATES = "Remind me to check dates"
 GUESS_TIME = time(19, 0)   # SPEC planner rule: a date with no time is planned for 7 pm, best guess
 LONG_RUN_DAYS = 3          # a run longer than this is a season, not a few performances
 IN_A_WEEK = "Remind me in a week"
+# The two reasons build_options gives an event whose dates are behind us. The plan keeps
+# only actionable False and this reason, so is_missed reads them back from here.
+PASSED = "It's passed."
+LAST_DAY = "Today was the last day."
 
 
 # ---------- small field helpers ----------
@@ -327,7 +331,7 @@ def build_options(
                 return {"actionable": None, "why": why}
 
             if last < today:
-                override = {"actionable": False, "why": f"This was on {span}. It's passed."}
+                override = {"actionable": False, "why": f"This was on {span}. {PASSED}"}
             elif (last - first).days > LONG_RUN_DAYS:
                 # A long run (a market, a holiday show) has no single evening to book.
                 if first > today:
@@ -349,7 +353,7 @@ def build_options(
                     day += timedelta(days=1)
                     guess = datetime.combine(day, GUESS_TIME, tzinfo=tz)
                 if day > last:
-                    override = {"actionable": False, "why": "Today was the last day."}
+                    override = {"actionable": False, "why": LAST_DAY}
                 else:
                     out.append(_opt(1, "event", guess, 120, f"Add {big_time(guess, now_l)}",
                                     "Add to calendar", big_time(guess, now_l), venue))
@@ -368,7 +372,7 @@ def build_options(
                             _clip(ev.get("venue") or "Reminder", 40)))
             override = {"actionable": None, "why": f"It runs until {month_day(end)}."}
         elif start <= now_l:
-            override = {"actionable": False, "why": f"This was on {month_day(start)}. It's passed."}
+            override = {"actionable": False, "why": f"This was on {month_day(start)}. {PASSED}"}
         else:
             dur = int((end - start).total_seconds() // 60)
             out.append(_opt(1, "event", start, dur, f"Add {big_time(start, now_l)}",
@@ -420,6 +424,15 @@ def menu_for(plan: dict) -> list[str]:
     if plan.get("actionable"):
         return labels + ["Not now", "Just vibes"]
     return labels + ["Just save"]
+
+
+def is_missed(plan: dict) -> bool:
+    """A still-proposed event whose dates have passed (build_options said so): there is
+    nothing left to plan, so Actions shows it under Missed instead of Waiting on you."""
+    why = plan.get("why") or ""
+    return (plan.get("status") == "proposed" and plan.get("kind") == "event"
+            and not plan.get("actionable") and not plan.get("options")
+            and (why.endswith(PASSED) or why == LAST_DAY))
 
 
 def extras_for(plan: dict) -> list[dict]:

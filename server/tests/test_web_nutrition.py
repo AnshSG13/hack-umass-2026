@@ -55,3 +55,62 @@ def test_the_sentence_is_written_from_the_kept_numbers():
     est = nu.clean({"basis": "estimated", "per": "recipe", "protein_g": 60, "protein_g_source": 2}, SOURCES, None)
     assert nu.sentence(est) == ("For the whole recipe: about 60 g protein. This is an estimate from the "
                                 "ingredients. The reel doesn't give nutrition.")
+
+
+# ---- one number per recipe ----
+
+PUB = {"basis": "published", "per": "serving", "servings": 4,
+       "values": {"calories": {"value": 484, "source": 1}, "protein_g": {"value": 15, "source": 1},
+                  "carbs_g": {"value": 62, "source": 1}, "fat_g": {"value": 21, "source": 1}},
+       "sources": [SOURCES[0]]}
+ESTIMATE = {"per_serving": {"kcal": 386, "protein_g": 10, "carbs_g": 29, "fat_g": 28, "fiber_g": 7,
+                            "sugar_g": 9, "sodium_mg": 576},
+            "servings": 4, "split_pct": {}, "lines_counted": 9, "lines_total": 9, "assumed": 0}
+
+
+def test_the_page_shows_published_numbers_per_serving():
+    v = nu.view(PUB)
+    assert v["values"]["calories"] == 484 and v["per"] == "serving" and v["sources"] == [SOURCES[0]]
+    assert sum(v["split_pct"].values()) == 100
+    whole = nu.view({**PUB, "per": "recipe", "values": {"calories": {"value": 1936, "source": 1}}})
+    assert whole["values"] == {"calories": 484} and whole["per"] == "serving"  # 1936 over 4 servings
+    unknown = nu.view({**PUB, "per": "recipe", "servings": None, "values": {"calories": {"value": 1936, "source": 1}}})
+    assert unknown["per"] == "recipe" and unknown["values"] == {"calories": 1936}
+
+
+def test_known_published_numbers_answer_without_a_search(monkeypatch):
+    monkeypatch.setattr(nu, "research", lambda *a, **k: (_ for _ in ()).throw(AssertionError("searched")))
+    out = nu.answer({**RECIPE, "published_nutrition": PUB}, "macros?", step=None)
+    assert out["macros"]["values"]["calories"]["value"] == 484 and out["sources"] == [SOURCES[0]]
+
+
+class _Step:
+    def __call__(self, *a, **k):
+        return self
+
+    def __enter__(self):
+        return {}
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_without_published_numbers_the_chat_gives_the_pages_estimate(monkeypatch):
+    monkeypatch.setattr(nu.nutrition, "get_or_build", lambda save: ESTIMATE)
+    monkeypatch.setattr(nu, "research", lambda prompt, sources, **k: sources.extend(SOURCES[1:2]) or "notes")
+    # the web only had ingredient sums: a second, different estimate is not what the chat shows
+    monkeypatch.setattr(nu.gemini, "generate_json", lambda **k: {
+        "basis": "estimated", "per": "serving", "calories": 450, "calories_source": 1})
+    out = nu.answer({**RECIPE, "_id": 1, "user_id": "u"}, "calories?", step=_Step())
+    assert out["macros"]["basis"] == "estimated" and out["macros"]["values"]["calories"]["value"] == 386
+    assert "same estimate as on the reel's page" in out["text"]
+
+
+def test_published_numbers_found_on_the_web_are_kept_on_the_reel(monkeypatch):
+    kept = {}
+    monkeypatch.setattr(nu, "research", lambda prompt, sources, **k: sources.extend(SOURCES[:1]) or "notes")
+    monkeypatch.setattr(nu.gemini, "generate_json", lambda **k: {
+        "basis": "published", "per": "serving", "servings": 4, "calories": 484, "calories_source": 1})
+    monkeypatch.setattr(nu, "remember", lambda save, m: kept.update(m))
+    out = nu.answer({**RECIPE, "_id": 1, "user_id": "u"}, "calories?", step=_Step())
+    assert out["macros"]["basis"] == "published" and kept["values"]["calories"]["value"] == 484

@@ -5,17 +5,19 @@ Open items are at the top. Resolved items move to the bottom with how they were 
 
 ## Open
 
-### 1. Sample plans and one sample's type predate the paid Gemini credit
-- **What is left.** 12 of the 16 cached sample plans were written by code while the key was out of quota, and the Somssi restaurant reel is typed `other` (a Lite model read it). The full fixture run with timings was also never repeated.
-- **Next.** `python -m scripts.build_samples --no-reuse` (about 32 Gemini requests: one video pass and one planner call per reel) and `python -m scripts.run_fixtures --wait-enrich` (about the same again), then `python -m scripts.eval_recall`. These cost money on the paid key, so they wait for a go-ahead.
-
-### 2. Docker Desktop on the dev laptop crashes on every start
+### 1. Docker Desktop on the dev laptop crashes on every start
 - **What happens.** The backend stops with "remove ...\Docker\run\dockerInference: The file cannot be accessed by the system". The unix socket files Docker Desktop 4.86 leaves in `%LOCALAPPDATA%\Docker\run` and `%LOCALAPPDATA%\docker-secrets-engine` can't be deleted once it has stopped, so the next start fails. A socket made and closed by a test program in a temp folder deleted fine, so it is specific to how Docker leaves them.
 - **Workaround.** Quit Docker Desktop, rename both folders (they can't be deleted), start it again. The engine came up in about 15 seconds. It has to be repeated before each start.
 - **Scope.** Only this Windows laptop. The Linux VPS doesn't use Docker Desktop.
 - **Next.** Update Docker Desktop or reset it to factory defaults (the human's call; a reset removes local images).
 
 ## Resolved
+
+### Sample plans rebuilt with the live models (2026-11-15)
+- `python -m scripts.build_samples --no-reuse`: built 16, failed 0, and 0 plans are code-written now. The Somssi reel is typed `place`.
+- `python -m scripts.run_fixtures --wait-enrich`: 16 of 16 typed as expected. Save to plan took 3.9 to 6.7 s, median 4.75 s, against PROPOSAL_WAIT_SECONDS=20. The first run did 10 reels before the per-key save limit (20 a minute; each fixture saves twice to test duplicates); the other 6 ran one at a time on one test account.
+- `python -m scripts.eval_recall`: hit@1 19/20, hit@3 20/20 (eval/results.md). The miss: "let the fridge do the rest dessert" ranks the tiramisu second, behind the curry, whose new title is "Fridge Cleanout Chickpea Curry".
+- Two side effects, both fixed: the rebuild replaced whole sample records, which dropped the demo story's prebuilt chat and trip (put back from a demo session's copy and a backup), and it deleted old thumbnails that 810 demo saves still used (pointed at the new ones). `build_samples` now keeps the story fields and moves saves to a new thumbnail before deleting the old one.
 
 ### Gemini quota, proposal time and Ask (2026-11-14, after credit was added)
 The key was on the free tier (20 requests a day per model), then out of prepaid credit (HTTP 402). Credit landed at about 17:25 UTC. Measured after that, with `gemini-3.5-flash` for every role:

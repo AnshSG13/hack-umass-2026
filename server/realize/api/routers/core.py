@@ -7,7 +7,8 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ... import accounts, ask, board, db, demo, intent, jobs, planops, ratelimit, search, subcats, thumbs, tickets, visits
+from ... import (accounts, ask, board, db, demo, discuss, intent, jobs, planops, ratelimit, search, subcats, thumbs,
+                 tickets, visits)
 from ...config import get_settings
 from ...models import (
     ChatRequest, CreateUserRequest, DemoSessionRequest, MePatch, TASTE_LABELS, TYPES,
@@ -227,8 +228,15 @@ def chat(body: ChatRequest, user: dict = Depends(current_user)):
             raise HTTPException(status_code=429, detail=demo.CHAT_LIMIT_MESSAGE)
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Type a question first.")
-    history = [t.model_dump() for t in body.history][-6:]
-    return StreamingResponse(ask.stream(user, body.message.strip(), history),
+    chat = None
+    if body.chat_id:
+        chat = discuss.get_ask(body.chat_id, user)
+        if not chat:
+            raise HTTPException(status_code=404, detail="That chat isn't here any more.")
+        history = [{"role": m.get("role"), "text": m.get("text") or ""} for m in chat.get("messages") or []][-6:]
+    else:
+        history = [t.model_dump() for t in body.history][-6:]
+    return StreamingResponse(ask.stream(user, body.message.strip(), history, chat),
                              media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 

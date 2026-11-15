@@ -1,12 +1,13 @@
 "use client";
 
 // The intro, one question per screen like a video app's onboarding:
-//   1. Tell us about yourself: how you identify, age, ethnicity (all skippable)
-//   2. Choose what you like: interest chips, plus more specific ones Gemini suggests
-//   3. Your hobbies
+//   1. Choose what you like: interest chips, plus more specific ones Gemini suggests
+//   2. Your hobbies
+//   3. A bit about you: age, ethnicity (optional, last, so the folders come first)
 // Then each interest and hobby becomes a folder under the kind Gemini says it fits (Food >
 // Baking) and the screen shows them. New reels reuse them, or get a new sub-category when none fits.
-// Identity and ethnicity are stored on the profile only; they are never sent to Gemini.
+// Ethnicity is stored on the profile only; it is never sent to Gemini. There is no gender
+// question: nothing used the answer.
 
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -17,7 +18,7 @@ import { useKey, useMe } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
 import type { OnboardingOptions, Profile, StarterGroup } from "@/lib/types";
 
-type StepId = "identity" | "age" | "ethnicity" | "interests" | "hobbies";
+type StepId = "interests" | "hobbies" | "age" | "ethnicity";
 type OwnList = "interests" | "hobbies"; // lists people can add their own entries to
 
 interface Step {
@@ -27,17 +28,16 @@ interface Step {
   sub?: string;
 }
 
-const SECTIONS = ["Tell us about yourself", "Choose what you like", "Your hobbies"];
+const SECTIONS = ["Choose what you like", "Your hobbies", "A bit about you"];
 
 const STEPS: Step[] = [
-  { id: "identity", section: 0, title: "How do you identify?" },
-  { id: "age", section: 0, title: "How old are you?" },
-  { id: "ethnicity", section: 0, title: "What's your ethnicity?", sub: "Pick any that fit. Only you see this." },
-  { id: "interests", section: 1, title: "What are you into?", sub: "Pick a few, or add your own. Your saves get sorted around them." },
-  { id: "hobbies", section: 2, title: "What do you do for fun?", sub: "Tap any, or add your own." },
+  { id: "interests", section: 0, title: "What are you into?", sub: "Pick a few, or add your own. Each one becomes a folder for your saves." },
+  { id: "hobbies", section: 1, title: "What do you do for fun?", sub: "Tap any, or add your own." },
+  { id: "age", section: 2, title: "How old are you?", sub: "Optional. Your age range helps fit your plans to you." },
+  { id: "ethnicity", section: 2, title: "What's your ethnicity?", sub: "Optional, and only you see it. It isn't used to sort or plan anything." },
 ];
 
-const EMPTY: Profile = { identity: null, age_range: null, ethnicity: [], interests: [], hobbies: [] };
+const EMPTY: Profile = { age_range: null, ethnicity: [], interests: [], hobbies: [] };
 const PREFER_NOT = "Prefer not to say";
 
 function toggle(list: string[], value: string): string[] {
@@ -130,7 +130,15 @@ function Welcome() {
   const [seeded, setSeeded] = useState(false);
   if (!seeded && me) {
     setSeeded(true);
-    if (me.profile) setProfile({ ...EMPTY, ...me.profile });
+    // Only the fields asked now; an old stored answer (like the removed gender one) isn't sent back.
+    const p = me.profile;
+    if (p)
+      setProfile({
+        age_range: p.age_range ?? null,
+        ethnicity: p.ethnicity ?? [],
+        interests: p.interests ?? [],
+        hobbies: p.hobbies ?? [],
+      });
   }
 
   // Move focus to each new question so screen readers hear it.
@@ -200,8 +208,8 @@ function Welcome() {
     setProfile((p) => (p[list].some(same) ? p : { ...p, [list]: [...p[list], value] }));
   }
 
-  function pickOne(field: "identity" | "age_range", value: string) {
-    setProfile((p) => ({ ...p, [field]: value }));
+  function pickAge(value: string) {
+    setProfile((p) => ({ ...p, age_range: value }));
     window.setTimeout(advance, 220); // single choice moves on by itself
   }
 
@@ -266,8 +274,6 @@ function Welcome() {
     );
   }
 
-  const field = step.id === "age" ? "age_range" : step.id;
-
   return (
     <div className="ob">
       <header className="ob-head">
@@ -302,10 +308,10 @@ function Welcome() {
         </h1>
         {step.sub && <p className="ob-sub">{step.sub}</p>}
 
-        {(step.id === "identity" || step.id === "age") && (
+        {step.id === "age" && (
           <div className="ob-list" role="radiogroup" aria-label={step.title}>
-            {(step.id === "identity" ? options.identities : options.age_ranges).map((v) => {
-              const on = profile[field as "identity" | "age_range"] === v;
+            {options.age_ranges.map((v) => {
+              const on = profile.age_range === v;
               return (
                 <button
                   key={v}
@@ -313,7 +319,7 @@ function Welcome() {
                   role="radio"
                   aria-checked={on}
                   className="ob-option"
-                  onClick={() => pickOne(field as "identity" | "age_range", v)}
+                  onClick={() => pickAge(v)}
                 >
                   {v}
                   {on && <Icon name="check" />}
@@ -389,7 +395,7 @@ function Welcome() {
         )}
       </main>
 
-      {step.id !== "identity" && step.id !== "age" && (
+      {step.id !== "age" && (
         <footer className="ob-foot">
           <button type="button" className="btn btn-primary btn-block" onClick={advance}>
             {index === STEPS.length - 1 ? "Finish" : "Continue"}

@@ -128,7 +128,7 @@ Conventions: `user_id` is a string `u_<12 hex>`. Other `_id`s are ObjectId, expo
   "created_at": ISODate, "expires_at": ISODate | absent }
 ```
 Keys: `rl_` + `secrets.token_urlsafe(24)`, shown once, stored as sha256. Indexes: `{api_key_hash:1}` unique; `{expires_at:1}` TTL.
-Intro (`/welcome`, after signup and once for any real account without `onboarded_at`): `"profile": { "identity", "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Every answer can be skipped. Identity and ethnicity are stored only; they are never sent to Gemini. `starters` are the person's interests and hobbies themselves, each used as a sub-category under the one type Gemini says it fits; one that fits no type is left out (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
+Intro (`/welcome`, after signup, and once for a real account without `onboarded_at` that has no saves yet; accounts with saves reach it only from Settings, "Redo the intro"): `"profile": { "age_range", "ethnicity": [], "interests": [], "hobbies": [], "starters": { "recipe": ["Weeknight dinners", "Baking"], "workout": ["Strength training"] } }`, `"onboarded_at": ISODate`. Order: interests, hobbies, then the optional age range and ethnicity. Every answer can be skipped. Ethnicity is stored only; it is never sent to Gemini. There is no gender question (nothing used it); an `identity` stored by an earlier version is never read and is dropped the next time the intro is finished. `starters` are the person's interests and hobbies themselves, each used as a sub-category under the one type Gemini says it fits; one that fits no type is left out (`server/realize/profile.py`). `subcats.existing` and `subcats.prompt_line` offer them next to the labels already in use, so new reels reuse them and get a new label only when none fits. `prompt_line` also carries one "ABOUT THE USER" line (interests, hobbies, age range) for the planner and the video pass.
 
 ### 5.2 saves
 ```jsonc
@@ -624,7 +624,7 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 | POST | /api/users | none, 5/h/IP | `{timezone?}` → `{user_id, api_key}` (shown once) |
 | GET | /api/me | key | `{user_id, is_demo, is_judge, timezone, prefs, key_preview, expires_at, counts}` |
 | PATCH | /api/me | key | `{timezone?, prefs?}` |
-| GET | /api/onboarding/options | none | the intro's fixed choices `{identities, age_ranges, ethnicities, interests, hobbies}` |
+| GET | /api/onboarding/options | none | the intro's fixed choices `{age_ranges, ethnicities, interests, hobbies}` |
 | POST | /api/onboarding/suggest | key, 20/10 min | `{picked, age_range?}` → `{suggestions}`: Gemini's "More for you" interest chips |
 | POST | /api/onboarding/finish | key | `{profile}` → stores it with each interest and hobby filed under a type as a starter sub-category → `{profile, starters: [{type, label, subcategories}]}` |
 | POST | /api/me/key | key | new key → `{api_key}`; the old one stops working |

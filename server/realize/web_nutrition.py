@@ -8,12 +8,17 @@ their site), and otherwise for standard values of the reel's ingredients and amo
 Code keeps a number only when the search returned a source for it, rounds it, checks it is
 plausible, and writes the answer's sentences itself, so no number reaches the person
 without a link to where it came from.
+
+One number per recipe: published facts, once found, are kept on the reel and shown on its
+page too. When there are none, the chat gives the page's own estimate (nutrition.py) rather
+than a second estimate of its own.
 """
 from __future__ import annotations
 
 import re
 
-from . import actions, gemini
+from . import actions, db, gemini, nutrition
+from .timeutil import now_utc
 from .trip import research
 
 NUTRIENTS = [("calories", "calories", ""), ("protein_g", "protein", " g"),
@@ -126,8 +131,58 @@ def sentence(m: dict) -> str:
     return " ".join(lines)
 
 
+ESTIMATE_KEYS = {"calories": "kcal", "protein_g": "protein_g", "carbs_g": "carbs_g", "fat_g": "fat_g",
+                 "fiber_g": "fiber_g", "sugar_g": "sugar_g", "sodium_mg": "sodium_mg"}
+
+
+def remember(save: dict, m: dict) -> None:
+    """Published numbers become the reel's own, so the reel page shows the same ones."""
+    db.saves().update_one(
+        {"_id": save["_id"], "user_id": save["user_id"]},
+        {"$set": {"published_nutrition": {"basis": "published", "per": m["per"], "servings": m["servings"],
+                                          "values": m["values"], "sources": m["sources"], "at": now_utc()}}})
+
+
+def view(pub: dict) -> dict:
+    """What the reel page shows from published numbers: per serving when the servings are
+    known, with the sources and the calorie split the macros give."""
+    per, servings = pub.get("per") or "serving", pub.get("servings")
+    div = servings if per == "recipe" and servings else 1
+    values = {k: int(round(v["value"] / div)) for k, v in (pub.get("values") or {}).items()
+              if isinstance(v, dict) and isinstance(v.get("value"), (int, float))}
+    split = {}
+    p, c, f = (values.get(k) for k in ("protein_g", "carbs_g", "fat_g"))
+    if None not in (p, c, f) and (p + c + f) > 0:
+        kc = 4 * p + 4 * c + 9 * f
+        split = {"protein": round(400 * p / kc), "carbs": round(400 * c / kc)}
+        split["fat"] = 100 - split["protein"] - split["carbs"]
+    return {"per": "serving" if div > 1 else per, "servings": servings, "values": values, "split_pct": split,
+            "sources": pub.get("sources") or []}
+
+
+def from_estimate(save: dict) -> dict | None:
+    """The reel page's own estimate as a chat answer, so the chat never shows a different
+    number from the page. None when there is no estimate."""
+    est = nutrition.get_or_build(save)
+    if not est:
+        return None
+    per = est["per_serving"]
+    m = {"basis": "estimated", "per": "serving", "servings": est.get("servings"), "note": "",
+         "values": {k: {"value": int(per[e]), "source": 0} for k, e in ESTIMATE_KEYS.items() if e in per}}
+    text = sentence(m) + " It's the same estimate as on the reel's page."
+    return {"text": text, "at_sec": None, "from_reel": False, "web": False, "sources": [],
+            "macros": {"basis": "estimated", "per": "serving", "servings": m["servings"], "values": m["values"]}}
+
+
 def answer(save: dict, message: str, step) -> dict:
-    """Search, read, keep what is sourced. `step` is Run.step, for the run's trace."""
+    """Search, read, keep what is sourced. `step` is Run.step, for the run's trace.
+    Published numbers are kept on the reel. Anything short of published falls back to the
+    page's estimate, so there is only ever one number for a recipe."""
+    if pub := save.get("published_nutrition"):
+        m = {**pub, "note": ""}
+        return {"text": sentence(m), "at_sec": None, "from_reel": False, "web": True,
+                "sources": pub.get("sources") or [],
+                "macros": {k: pub.get(k) for k in ("basis", "per", "servings", "values")}}
     r = (save.get("fields") or {}).get("recipe") or {}
     base = r.get("servings") if isinstance(r.get("servings"), int) and r["servings"] > 0 else None
     block = _recipe_block(save)
@@ -144,7 +199,8 @@ def answer(save: dict, message: str, step) -> dict:
             "results say. No introduction and no closing remarks.", sources, timeout_s=60)
         h["result"] = {"sources": len(sources)}
     if not sources:
-        return {"text": NOT_FOUND, "at_sec": None, "from_reel": False, "web": True, "sources": [], "macros": None}
+        return from_estimate(save) or {"text": NOT_FOUND, "at_sec": None, "from_reel": False, "web": True,
+                                       "sources": [], "macros": None}
     raw = gemini.generate_json(
         role="fast", schema=SCHEMA, timeout_s=40,
         system=("You read research notes about one recipe's nutrition and fill the fields. Rules:\n"
@@ -158,8 +214,15 @@ def answer(save: dict, message: str, step) -> dict:
         input=f"{block}\nTHEIR QUESTION: {message[:300]}\n\nRESEARCH NOTES:\n{notes}\n\nSOURCES:\n"
               + "\n".join(f"[{s['n']}] {s['title']}" for s in sources))
     m = clean(raw, sources, base)
+    if not m or m["basis"] != "published":
+        # The web only had ingredient sums, or nothing usable: the page's estimate is the one
+        # number, rather than a second estimate that disagrees with it.
+        if est := from_estimate(save):
+            return est
     if not m:
         return {"text": NOT_FOUND, "at_sec": None, "from_reel": False, "web": True, "sources": [], "macros": None}
+    if m["basis"] == "published":
+        remember(save, m)
     macros = {"basis": m["basis"], "per": m["per"], "servings": m["servings"], "values": m["values"]}
     return {"text": sentence(m), "at_sec": None, "from_reel": False, "web": True,
             "sources": m["sources"], "macros": macros}

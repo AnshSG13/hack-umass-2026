@@ -1,8 +1,9 @@
 """The intro profile and the starter sub-categories Gemini makes from it.
 
-The intro asks how someone identifies, their age, ethnicity, interests and hobbies.
-Identity and ethnicity are stored but never sent to Gemini: what gets filed where comes from
-what someone said they like, not from who they are.
+The intro asks for interests and hobbies first, then (optional) age range and ethnicity.
+Ethnicity is stored but never sent to Gemini: what gets filed where comes from what someone
+said they like, not from who they are. There is no gender question; an "identity" stored by
+an earlier version is never read.
 
 Each interest and hobby becomes a starter sub-category under the type it fits
 ("Food > Baking", "Fitness > Running"). They are stored on the profile and
@@ -39,7 +40,7 @@ def live() -> bool:
 
 
 def taste_lines(profile: dict | None) -> list[str]:
-    """Interests, hobbies and age range. Never identity or ethnicity."""
+    """Interests, hobbies and age range. Never ethnicity, or an old stored identity."""
     p = profile or {}
     lines = []
     for label, field in (("Interests", "interests"), ("Hobbies", "hobbies")):

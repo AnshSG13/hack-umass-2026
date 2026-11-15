@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     judge_shortcut_url: str = ""
     first_save_reel_url: str = ""
     demo_enabled: bool = True
+    # Demo sessions per visitor address per hour. A venue's Wi-Fi puts a whole room behind
+    # one address, so this sits well above what one person needs. A session costs no model
+    # call; only the story's "Save this reel" runs the planner once.
+    demo_sessions_per_hour: int = 60
 
     @field_validator("public_base_url")
     @classmethod

@@ -10,7 +10,7 @@ from pymongo.errors import DuplicateKeyError
 
 from ... import accounts, actions, db, demo, jobs, planner, planops, ratelimit, subcats, tickets, urls
 from ... import nutrition as nutrition_mod
-from ... import shop
+from ... import shop, web_nutrition
 from ...config import get_settings
 from ...models import ConfirmRequest, SavePatch, SaveRequest, TYPES, failure_message
 from ...runs import run_view
@@ -413,14 +413,17 @@ def patch_save(save_id: str, body: SavePatch, user: dict = Depends(current_user)
 
 @router.get("/api/saves/{save_id}/nutrition")
 def nutrition(save_id: str, user: dict = Depends(current_user)) -> dict:
-    """An estimate per serving for a recipe, made once and kept until the ingredients change."""
+    """The recipe's nutrition: its published facts when the chat has found them (one number
+    everywhere), else an estimate per serving, made once and kept until the ingredients change."""
     save = _own_save(save_id, user)
     if save.get("type") != "recipe":
         raise HTTPException(status_code=409, detail="Nutrition is for recipes.")
+    if pub := save.get("published_nutrition"):
+        return {"nutrition": None, "published": web_nutrition.view(pub)}
     value = nutrition_mod.get_or_build(save)
     if value is None:
         raise HTTPException(status_code=503, detail="Nutrition isn't available for this one right now.")
-    return {"nutrition": value}
+    return {"nutrition": value, "published": None}
 
 
 @router.get("/api/saves/{save_id}/shop")
