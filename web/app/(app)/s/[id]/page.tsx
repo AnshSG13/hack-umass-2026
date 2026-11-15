@@ -5,7 +5,7 @@
 // reel, how it was read and planned.
 
 import { useEffect, useId, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { AgentTrace } from "@/components/agent-activity";
 import { useNow } from "@/components/bits";
@@ -173,6 +173,23 @@ export default function ReelPage() {
   const [busy, setBusy] = useState(false);
   const [catError, setCatError] = useState<string | null>(null);
 
+  // A link can open the page on one saved discussion (?chat=<id>) or on its trip plan
+  // (?show=trip). Read once; both are then taken out of the address, keeping ?t=.
+  // From the router, not window.location: on a client-side move the address changes only
+  // after this first render.
+  const search = useSearchParams();
+  const [linked] = useState(() => {
+    const chat = search.get("chat");
+    return { chat: chat && /^[A-Za-z0-9_-]{1,64}$/.test(chat) ? chat : null, trip: search.get("show") === "trip" };
+  });
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("chat") && !url.searchParams.has("show")) return;
+    url.searchParams.delete("chat");
+    url.searchParams.delete("show");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
+
   // The reel's own chat: open or not, and which saved discussion (null is a new one).
   const [chatOpen, setChatOpen] = useState(false);
   // The action asked for on arrival (?do=cook from a Ready for you tile). Cook mode opens
@@ -189,7 +206,20 @@ export default function ReelPage() {
   const [shopGo, setShopGo] = useState(0);
   const [tripGo, setTripGo] = useState(0);
   const arrivalDone = useRef(arrivalDo === "cook" || arrivalDo === null);
-  const [discussionId, setDiscussionId] = useState<string | null>(null);
+  const [discussionId, setDiscussionId] = useState<string | null>(linked.chat);
+
+  // Open the linked discussion once the page is up. Not on the first render: the router
+  // moves focus to the new page as it arrives, and focus leaving the chat closes it.
+  const loaded = data !== undefined;
+  const chatShown = useRef(false);
+  useEffect(() => {
+    if (!linked.chat || !loaded || chatShown.current) return;
+    const timer = window.setTimeout(() => {
+      chatShown.current = true;
+      setChatOpen(true);
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [linked.chat, loaded]);
 
   // A moment in the video to show: from a link (?t=11) or from an answer's "Said at 0:11".
   const [atSec, setAtSec] = useState<number | null>(() => {
@@ -549,7 +579,7 @@ export default function ReelPage() {
         {/* Something finished to send, for people who never open the chat. */}
         {!reading && <SendSomething saveId={ticket.save_id} servings={servings} />}
 
-        <TripPlan saveId={ticket.save_id} type={type} settled={!reading} go={tripGo} />
+        <TripPlan saveId={ticket.save_id} type={type} settled={!reading} go={tripGo} reveal={linked.trip} />
         {type === "product" && <ShopResearch saveId={ticket.save_id} settled={!reading} go={shopGo} />}
 
         <Discussions saveId={ticket.save_id} onOpen={openChat} />

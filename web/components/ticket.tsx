@@ -179,7 +179,7 @@ function BigTime({ text, marked, size = 28 }: { text: string; marked: boolean; s
 }
 
 /** The hole Add punches: scales 0 to 1.15 to 1 over 220 ms when it has just been punched. */
-function PunchHole({ fresh }: { fresh: boolean }) {
+export function PunchHole({ fresh }: { fresh: boolean }) {
   const reduce = useReducedMotion();
   return (
     <motion.span

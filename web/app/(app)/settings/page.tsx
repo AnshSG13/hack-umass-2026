@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { api, ApiError, setKey, signOut } from "@/lib/api";
 import { KINDS } from "@/lib/kinds";
 import { browserTimezone, useMe } from "@/lib/hooks";
+import { STORY_REPLAY_HREF } from "@/lib/story";
 import { btnDanger, btnOutline, btnText, btnTextDanger, inputBase, pageTitle, sectionTitle } from "@/lib/styles";
 import type { Me, Prefs } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -166,9 +167,15 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
       <h1 className={pageTitle}>Settings</h1>
 
       {me.is_demo && (
-        <p className="mt-4 rounded-[12px] border border-line-strong bg-ticket px-4 py-3 text-[15px] text-ink">
-          Demo account. It deletes itself in 24 hours.
-        </p>
+        <div className="mt-4 rounded-[12px] border border-line-strong bg-ticket px-4 pt-3 pb-1 text-[15px] text-ink">
+          <p>Demo account. It deletes itself in 24 hours.</p>
+          <Link
+            href={STORY_REPLAY_HREF}
+            className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4"
+          >
+            Replay the story
+          </Link>
+        </div>
       )}
 
       {!me.is_demo && <AccountSection me={me} onSignOut={() => setConfirm("sign-out")} />}

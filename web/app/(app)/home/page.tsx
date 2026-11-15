@@ -16,6 +16,7 @@ import { fetcher } from "@/lib/api";
 import { greeting, inFlight, plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
+import { STORY_REPLAY_HREF, useStorySeen } from "@/lib/story";
 import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
 
 interface Action {
@@ -164,6 +165,7 @@ export default function HomePage() {
   const { ask } = useAskStore();
   const now = useNow();
   const { data: me } = useMe();
+  const storySeen = useStorySeen();
   const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
   const saves = useSWR<SavesPage>("/api/saves?limit=10", fetcher);
   const bundles = useBundles();
@@ -239,6 +241,12 @@ export default function HomePage() {
                 {/* A save that is still being read, or could not be, has no taste yet. */}
                 {tasteCount > 0 && ` across ${plural(tasteCount, "taste", "tastes")}`}
               </p>
+            )}
+            {me?.is_demo && storySeen && (
+              <Link href={STORY_REPLAY_HREF} className="text-btn story-replay">
+                <Icon name="redo" />
+                Replay the story
+              </Link>
             )}
           </div>
           <Link href="/settings" className="avatar" aria-label="Settings">

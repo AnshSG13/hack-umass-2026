@@ -336,6 +336,7 @@ export function TripPlan({
   type,
   settled,
   go = 0,
+  reveal = false,
 }: {
   saveId: string;
   type: SaveType | null;
@@ -343,6 +344,8 @@ export function TripPlan({
   settled: boolean;
   /** Bumped by the action's "Build the itinerary": builds it if it hasn't been built. */
   go?: number;
+  /** Scroll the section into view once, when it has loaded (a link asked for the trip). */
+  reveal?: boolean;
 }) {
   const travel = type === "place" || type === "event";
   const path = `/api/saves/${saveId}/trip`;
@@ -389,6 +392,18 @@ export function TripPlan({
     else section.current?.scrollIntoView({ block: "start" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [go, data]);
+
+  const shown = travel && data !== undefined && data.can_build;
+  const revealed = useRef(false);
+  useEffect(() => {
+    if (!reveal || !shown || revealed.current) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const id = window.requestAnimationFrame(() => {
+      revealed.current = true;
+      section.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [reveal, shown]);
 
   if (!travel || !data || !data.can_build) return null;
 
