@@ -41,6 +41,7 @@ def health() -> dict:
 def config() -> dict:
     s = get_settings()
     return {"app_name": s.app_name, "public_base_url": s.public_base_url, "shortcut_url": s.shortcut_url,
+            "quick_shortcut_url": s.quick_shortcut_url,
             "judge_shortcut_url": s.judge_shortcut_url, "first_save_reel_url": s.first_save_reel_url,
             "demo_enabled": s.demo_enabled}
 

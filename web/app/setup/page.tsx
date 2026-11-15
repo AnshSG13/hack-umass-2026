@@ -161,10 +161,12 @@ function Account({ accountKey }: { accountKey: string }) {
   // reel's link. The Shortcut, when its link is configured, is an extra.
   const reelUrl = config?.first_save_reel_url || "";
   const shortcutUrl = config?.shortcut_url || "";
+  const quickUrl = config?.quick_shortcut_url || "";
   const installed = standalone === true;
   const base = installed ? 0 : 1;
   return (
     <>
+      {quickUrl && <QuickShortcut appName={appName} url={quickUrl} />}
       <ol className="flex flex-col gap-6">
         {!installed && (
           <Step n={1}>
@@ -190,12 +192,43 @@ function Account({ accountKey }: { accountKey: string }) {
       </ol>
       {firstSaveBlock}
       {openApp}
-      <ShortcutHelp appName={appName} shortcutUrl={shortcutUrl} />
+      {/* With a ready-made Shortcut link there is nothing to build, so the how-to stays out of the way. */}
+      {!quickUrl && <ShortcutHelp appName={appName} shortcutUrl={shortcutUrl} />}
       {/* Email accounts have no key on screen, but a Shortcut that sends reels straight to the
           server needs one. Key accounts already see theirs below. */}
       {!keyAccount && me && !me.is_demo && <ShortcutKey me={me} className="mt-6" />}
       <div className="mt-6">{keyBox(true)}</div>
     </>
+  );
+}
+
+/**
+ * The ready-made Shortcut, one tap to add. It has a single action, Open URLs to /save?url=,
+ * so it carries no key: Safari opens this site and the reel goes to whoever is signed in
+ * there. Shown first on the iPhone page whenever QUICK_SHORTCUT_URL is set.
+ */
+function QuickShortcut({ appName, url }: { appName: string; url: string }) {
+  return (
+    <section className="mb-8 rounded-[16px] border border-line bg-ticket p-4" aria-labelledby="quick-shortcut">
+      <h2 id="quick-shortcut" className={sectionTitle}>
+        Save from Instagram in one tap
+      </h2>
+      <ol className="mt-4 flex flex-col gap-5">
+        <Step n={1}>
+          <a className={cn(btnPrimary, "w-full")} href={url}>
+            Add the Shortcut
+          </a>
+          <p className="mt-2 text-[14px] text-muted">Then tap Add Shortcut. There is nothing to type.</p>
+        </Step>
+        <Step n={2}>
+          <p className="text-[16px] text-ink">Share a reel to {appName}</p>
+          <p className="mt-1 text-[14px] text-muted">
+            In Instagram, tap Share on a reel, open the share sheet and tap {appName}. Safari opens and the reel is
+            saved to the account you&apos;re signed in to here.
+          </p>
+        </Step>
+      </ol>
+    </section>
   );
 }
 

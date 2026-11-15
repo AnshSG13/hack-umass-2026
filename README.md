@@ -153,6 +153,18 @@ If you already built the Shortcut against a laptop, change only two things: the 
 
 The other Shortcut versions (one that opens the app instead, and the full one with a menu, Calendar and Reminders) are in `shortcut/README.md`; use `https://reelize.boston` as their address.
 
+### At a stand: one QR code, no keys
+
+Open **https://reelize.boston/stand** on a laptop or tablet at the table. It shows a large QR code and three steps. A visitor:
+
+1. scans it with the iPhone camera, which opens sign up in Safari, and makes an account (the intro follows, then `/setup`);
+2. taps **Add the Shortcut** at the top of `/setup`, then **Add Shortcut**. There is nothing to type;
+3. in Instagram, taps Share on a reel, then **Realize**. Safari opens `/save?url=<reel>` and the reel is saved to the account signed in there.
+
+The Shortcut has one action, **Open URLs** with `https://reelize.boston/save?url=` followed by **Shortcut Input**, so it carries no key and one iCloud link works for everyone. To make that link: build the Shortcut once (Show in Share Sheet on, receives URLs and Text, named Realize), then long-press it, **Share**, **Copy iCloud Link**. Put the link in the server's `.env` as `QUICK_SHORTCUT_URL=` and run `python deploy/vultr.py deploy` once from a laptop. Until it is set, `/setup` shows the build-it-yourself steps instead of the button.
+
+Visitors should stay in Safari: a Home Screen web app keeps its own sign in on iOS, and the Shortcut always opens Safari.
+
 ## Deploy (Vultr VPS, Docker Compose, Caddy)
 
 One Vultr VPS runs everything: Caddy for HTTPS on one domain, the FastAPI API, the worker and the Next.js app, from `docker-compose.yml`. Atlas stays hosted by MongoDB. `deploy/vultr.py` does the whole setup from a laptop with Python and the `ssh` that ships with Windows; it needs no packages.

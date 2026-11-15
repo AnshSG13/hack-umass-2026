@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     maps_directions_url: str = "https://www.google.com/maps/dir/"
 
     shortcut_url: str = ""
+    # iCloud link of the one-action Shortcut (Open URLs to /save?url=). It needs no key, so
+    # /setup and /stand offer it as a single "Add the Shortcut" tap.
+    quick_shortcut_url: str = ""
     judge_shortcut_url: str = ""
     first_save_reel_url: str = ""
     demo_enabled: bool = True

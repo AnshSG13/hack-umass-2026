@@ -310,6 +310,7 @@ export interface AppConfig {
   app_name: string;
   public_base_url: string;
   shortcut_url: string;
+  quick_shortcut_url: string;
   judge_shortcut_url: string;
   first_save_reel_url: string;
   demo_enabled: boolean;
