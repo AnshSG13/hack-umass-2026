@@ -109,7 +109,7 @@ function ProblemBeat({ dir, thumbs, onNext }: { dir: number; thumbs: string[]; o
             );
           })}
         </div>
-        <Heading beat="problem">You&apos;ve saved hundreds of reels. You&apos;ve done almost none of them.</Heading>
+        <Heading beat="problem">You&apos;ve saved hundreds of reels. You&apos;ve acted on almost none of them.</Heading>
       </div>
       <div className="story-foot">
         <button type="button" className="btn btn-primary story-cta" onClick={onNext}>
