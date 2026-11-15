@@ -84,6 +84,8 @@ Today is {today_local} ({timezone}). They asked something the reel doesn't answe
 the web for it.
 - Answer the question, first sentence first, in 1 to 4 short sentences, specific to this
   reel's place, product, recipe or event. Use a short "- " list only for options or steps.
+- Say once, plainly, that this comes from the web because the reel doesn't cover it, for
+  example "The reel doesn't say, but" at the start. The app shows the links.
 - Use only what the search results say. If they don't settle it, say so plainly.
 - Never present something from the web as something the reel said.
 - Plain sentence case. No em dashes. No headings. No markdown except "- " list lines.
@@ -226,13 +228,21 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
         out = gemini.generate_json(role="fast", input=[gemini.user_step(text)], schema=ANSWER_SCHEMA,
                                    system=system, timeout_s=TIMEOUT_S)
         body = clean_answer(str(out.get("text") or ""))
-        if out.get("needs_web"):
+        follow = clean_follow_ups(out.get("follow_ups"))
+        # The reel doesn't answer it (the model said so, or answered from general knowledge):
+        # look it up instead of stopping at "the reel doesn't say". Small talk ("thanks!") is
+        # left alone so it doesn't cost a search.
+        off_reel = not out.get("from_reel") and len(message.split()) >= 3
+        if out.get("needs_web") or off_reel:
+            title = " ".join(str(save.get("title") or "").split())
+            query = str(out.get("search_for") or "").strip() or (f"{title}: {message}" if title else message)
             try:
-                web = web_answer(user, save, plan, text, str(out.get("search_for") or message), run)
+                web = web_answer(user, save, plan, text, query, run)
             except Exception as e:  # noqa: BLE001 - fall back to what the reel-only call said
                 log.warning("web answer failed: %s", str(e)[:200])
                 web = None
             if web:
+                web["follow_ups"] = follow
                 run.finish("done")
                 return web
         if not body:
@@ -240,7 +250,7 @@ def answer(user: dict, save: dict, history: list[dict], message: str) -> dict:
         run.finish("done")
         return {"text": body, "at_sec": snap_second(save, out.get("at_sec")),
                 "from_reel": bool(out.get("from_reel")),
-                "follow_ups": clean_follow_ups(out.get("follow_ups"))}
+                "follow_ups": follow}
     except Exception as e:  # noqa: BLE001
         log.warning("discussion failed: %s", str(e)[:200])
         run.finish("failed", str(e))
