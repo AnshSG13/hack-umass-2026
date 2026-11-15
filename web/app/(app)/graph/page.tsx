@@ -50,9 +50,9 @@ export default function GraphPage() {
   const head = (
     <header className="page-head with-back">
       <div className="block-head" style={{ minHeight: 44 }}>
-        <Link href="/home" className="back-pill">
+        <Link href="/library" className="back-pill">
           <Icon name="back" />
-          Home
+          Folders
         </Link>
       </div>
       <h1 className="page-title" style={{ marginTop: 10 }}>

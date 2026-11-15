@@ -1,7 +1,7 @@
 "use client";
 
 // App shell, after the mockup: one phone-wide column, the floating bottom bar (Home, the
-// orb, Plans), the "Add a reel" sheet and the toast. It also holds what has to survive
+// orb, Folders), the "Add a reel" sheet and the toast. It also holds what has to survive
 // moving between screens: the Ask conversation, a question on its way to Ask, and the
 // saves just added (so Home can show them first, still processing).
 
@@ -24,7 +24,13 @@ export interface AskTurn {
   steps: StepLine[];
   cards: AskCard[];
   tickets: Ticket[];
-  answer: { text: string; confidence: "high" | "low" | "none"; followUps: string[] } | null;
+  answer: {
+    text: string;
+    confidence: "high" | "low" | "none";
+    followUps: string[];
+    /** A web search they asked for: the pages the answer used. */
+    sources?: { n: number; title: string; url: string }[];
+  } | null;
   error: string | null;
   done: boolean;
   /** The question was dictated with the orb, not typed. */
@@ -112,6 +118,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const [turns, setTurns] = useState<AskTurn[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
+  // Ask's chat belongs to one account: a different key (Start over, signing in as someone
+  // else) starts with no chat, so the next question can't point at the old account's.
+  const [keyFor, setKeyFor] = useState(key);
+  if (key !== keyFor) {
+    setKeyFor(key);
+    setChatId(null);
+    setTurns([]);
+  }
   const [handoff, setHandoff] = useState<AskHandoff | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [fresh, setFresh] = useState<FreshSave[]>([]);
@@ -163,7 +177,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setAddOpen(false);
       setFresh((list) => [{ save_id: r.save_id, ticket: r.ticket }, ...list.filter((f) => f.save_id !== r.save_id)]);
       refresh();
-      if (!pathname.startsWith("/home")) router.push("/home");
+      // Folders shows it first in its rail of recent saves; anywhere else goes Home.
+      if (!pathname.startsWith("/home") && !pathname.startsWith("/library")) router.push("/home");
     },
     [pathname, refresh, router],
   );
@@ -180,6 +195,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const r = await api<{ api_key: string }>("/api/demo/session", { body: { timezone: browserTimezone() } });
       setTurns([]);
+      setChatId(null); // the old session's chat isn't the new session's
       setFresh([]);
       try {
         window.sessionStorage.removeItem("rl_demo_added");
@@ -199,7 +215,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const plain = isPlain(pathname);
   const bare = isBare(pathname);
   const onHome = pathname.startsWith("/home");
-  const onPlans = pathname.startsWith("/plans");
+  // Folders is the saves themselves: the list, each folder's board and the map of links.
+  const onFolders = pathname.startsWith("/library") || pathname.startsWith("/t/") || pathname.startsWith("/graph");
 
   return (
     <AppContext.Provider value={app}>
@@ -236,9 +253,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onHeard={(text) => ask(text, true, true)}
               onProblem={(message) => toast.show(message)}
             />
-            <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
-              <Icon name="plans" />
-              Actions
+            <Link href="/library" className="tab" aria-current={onFolders ? "page" : undefined}>
+              <Icon name="folder" />
+              Folders
             </Link>
           </nav>
         )}

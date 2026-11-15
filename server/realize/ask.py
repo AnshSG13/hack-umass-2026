@@ -273,6 +273,34 @@ def _run(user: dict, message: str, history: list[dict], emit) -> None:
         emit(ERROR_LINE)
 
 
+def _web(user: dict, message: str, history: list[dict], emit) -> None:
+    """They asked for a web search in so many words: answer from Google, with the pages the
+    answer used, instead of searching their saves."""
+    from . import discuss, websearch  # late: discuss imports the planner and trips
+
+    run = Run(user, None, "ask", get_settings().gemini_model_fast)
+    run.on_step = lambda label: emit({"type": "step", "label": label})
+    try:
+        query = websearch.query_from(message)
+        try:
+            # Their closest saves, so "the place I saved" means something to the search.
+            docs, _ = search.hybrid_search(user["_id"], query, limit=3)
+        except Exception as e:  # noqa: BLE001 - the web search still runs without them
+            log.warning("saves for web context failed: %s", str(e)[:120])
+            docs = []
+        with run.step("web_search", {"query": query}) as h:
+            out = websearch.ask_answer(user, message, history, discuss.clean_answer, docs)
+            h["result"] = {"sources": len(out["sources"])}
+        emit({"type": "answer", "text": out["text"], "confidence": "high" if out["sources"] else "low",
+              "save_ids": [], "follow_ups": [], "web": True, "sources": out["sources"]})
+        emit({"type": "done"})
+        run.finish("done")
+    except Exception as e:  # noqa: BLE001
+        log.warning("ask web search failed: %s", str(e)[:200])
+        run.finish("failed", str(e))
+        emit(ERROR_LINE)
+
+
 def stream(user: dict, message: str, history: list[dict], chat: dict | None = None) -> Iterator[str]:
     """Yield NDJSON lines as the agent works. An answered turn is kept as part of `chat` (a
     new chat when None), and the last line says which chat it went into."""
@@ -286,8 +314,10 @@ def stream(user: dict, message: str, history: list[dict], chat: dict | None = No
         q.put(obj)
 
     def work() -> None:
+        from . import websearch
+
         try:
-            _run(user, message, history, emit)
+            (_web if websearch.wants_web(message) else _run)(user, message, history, emit)
             if "answer" in seen:
                 from . import discuss  # late: discuss imports the planner and trips
 

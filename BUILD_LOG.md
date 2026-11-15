@@ -352,3 +352,34 @@ The owner asked for a better chat flow, perhaps with saved chats. Before: Ask (t
 - **Next questions in reel chats.** The reel chat's answer now asks the model for up to 2 follow-ups in the same call (no extra request); code keeps them short, distinct and in sentence case. Web and nutrition answers have none.
 
 Checked live on a fresh demo session at 390 px (`scratchpad/chats_look.py`): one Ask question was kept and listed, reopened with its turn and 2 reel tiles; one reel question came back with 2 follow-ups, showed under "Pick up where you left off", on the reel page and in the Ask list; no page errors. `pytest`: 165 passed.
+
+## 2026-11-15: web search when you ask for it
+
+The owner asked for the chat to go to the internet when you explicitly ask for a web search.
+
+- **What counts as asking.** `server/realize/websearch.py` matches plain requests: "search the web for", "look it up online", "google how", "web search", "check online", "what does the internet say". Questions like "I bought it online" or "is it open on Mondays" don't count. The words are taken off the front of the search.
+- **Reel chat.** Such a question skips the reel-only answer and goes straight to the sourced web answer about that reel (its title is added to the search when missing). With no linkable source it says so instead of guessing.
+- **Ask.** Such a question gets a Google Search grounded answer instead of a search of the saves; the closest 3 saves go along as context so "the place I saved" means something. The answer shows its sources and is kept in the chat with them.
+- **One helper.** Both use `websearch.grounded`: [n] markers where the model cited, Google redirect links resolved to the real pages, and text that comes back twice kept once (seen live: a reel answer printed its sentence twice).
+
+Checked live on fresh demo sessions: Ask "Search the web for whether the NYBG holiday train show needs timed tickets" answered with 2 nybg.org sources, kept them when reopened; a plain Ask question still searched the saves; a reel chat "look it up online: is the pool open in December?" answered with 3 sources (the hotel's pool page first). pytest: 170 passed.
+
+## 2026-11-15: Home for doing, Folders for browsing
+
+The owner asked to move the categories off Home, keep action items on Home, and make the third tab the folders; Home and Actions had shown the same reels. Each tab now has one job (DESIGN.md 4, 7.4, 7.5):
+
+- **Home** (`/home`; `/plans` redirects): Save a reel; Just saved; "Did you do it?"; the week strip with the chosen day's plans or its free time; Waiting on you, Ready for you, Missed; the shopping list; Started, Done this week, After this week.
+- **`GET /api/week`** (server/realize/week.py), all in code: plan counts per day for the rolling week; the first free slot per day from the person's settings (`slots.find_free_slot`) with up to two saves of that kind that have no time yet (waiting ones first, then ones saved without a plan); and the ingredients of this week's planned recipes merged into one list (same units add up, "count" reads as a plain number, sorted by name). "Add to Thu" confirms with that slot's `start_local`, the path "Change time" already uses, so no model call.
+- **Folders** (`/library`): the remember card, Recently saved, Your folders, See how they connect, Ask about your saves, All saves; search as before. Adding a reel from Folders stays on Folders.
+- **Tab bar:** Home, the Ask orb, Folders (new folder icon). Links that said Actions now say Home; the folder board and the graph go back to Folders.
+- **Why ringed days can be few on a demo account:** a free slot only shows when a save of that kind has no time yet; the demo's two recipes are already planned, so its weekday evenings show nothing to fill.
+
+Checked on the branch's own servers (API 8010, web 3010, worktree on branch home-folders): pytest 173 passed; the live suites 23/23, 22/22 and 8/8; Home at 390x844 and 375x667 with one Add to tomorrow and its Undo, the list ticking, and /plans landing on Home; 12 screens opened with no page errors or horizontal overflow; the web-design-guidelines pass found one issue (the Add button's spoken name didn't contain its visible words), fixed.
+
+## 2026-11-15: three bugs from the review
+
+- **Swap questions went to the nutrition lookup.** Any recipe question naming sugar, protein, fat, keto or "healthy" ("Can I use less sugar?") got a macros answer or a paid web search. `web_nutrition.wants_nutrition` now takes words that only ask for numbers (macros, calories, nutrition), or a nutrient in a how-much question ("how much protein", "is it high in fiber", "is this keto?"); a question about changing the recipe (swap, instead, use less, make it...) never goes there. A failed lookup now falls through to the reel's own answer instead of an error. Checked live: "Can I use less sugar?" on the chicken au poivre got a cooking answer with two next questions.
+- **A save could stay "reading" for good.** Saves of reels that are also demo samples are planned on an API background thread, not the job queue, so a restart mid-plan left them with nothing to finish them, and reanalyze and a second share both treated them as busy. `realize/recover.py` (run by the worker about once a minute) restarts saves in a working state for over 10 minutes with no live job and no recent run, the way they were first planned. Checked live: a real account's reel stuck since 2026-11-14 10:10 UTC went to ready on the first sweep.
+- **The first Ask question after the demo's Start over failed** ("That chat isn't here any more"): the old session's chat id outlived the key. The shell now clears the Ask chat whenever the key changes. Checked live on a fresh demo session.
+
+`pytest`: 173 passed.

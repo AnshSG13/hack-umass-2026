@@ -163,7 +163,7 @@ One Vultr VPS runs everything: Caddy for HTTPS on one domain, the FastAPI API, t
 2. `python deploy/vultr.py provision` creates an Ubuntu 24.04 VPS (`vc2-2c-4gb` in `ewr` by default; change them with `--plan` and `--region`). It uploads your SSH key, and `deploy/cloud-init.yaml` installs Docker, opens only ports 22, 80 and 443, turns on fail2ban, and adds 2 GB of swap for the Next.js build. The IP is saved to `deploy/.host`. Running it again reuses the existing `realize` instance.
 3. Add `<ip>/32` under Atlas Network Access, in the project that holds the cluster in `MONGODB_URI`. For a domain, either add a DNS A record to the IP, or use `<ip with dashes>.sslip.io` with no DNS at all.
 4. In `.env`, set `DOMAIN=<domain>` and `PUBLIC_BASE_URL=https://<domain>`. `EXTRA_DOMAINS` (optional, space separated) lists other names Caddy serves the same site on. If you use Instagram cookies from a throwaway account, save them as `secrets/instagram_cookies.txt` and set `INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt`.
-5. `python deploy/vultr.py deploy --init` checks `.env`, uploads the last commit (`git archive HEAD`), `.env` and `secrets/` to `/opt/realize`, runs `docker compose up -d --build`, creates the Atlas indexes, builds the demo samples (skip with `--skip-samples`), and waits for `https://<domain>/api/health`. Caddy gets the certificate on its own.
+5. `python deploy/vultr.py deploy --init` checks `.env`, uploads the last commit (`git archive HEAD`), `.env` and `secrets/` to `/opt/realize`, runs `docker compose up -d --build`, creates the Atlas indexes, builds the demo samples and the demo story's ready-made answers (skip both with `--skip-samples`), and waits for `https://<domain>/api/health`. Caddy gets the certificate on its own.
 
 ### Deploy on every push to main
 
@@ -178,7 +178,15 @@ It needs two repository secrets (GitHub, Settings, Secrets and variables, Action
 
 Make the deploy key once with `ssh-keygen -t ed25519 -N "" -f ~/.ssh/realize_github_deploy`, append `realize_github_deploy.pub` to `/root/.ssh/authorized_keys` on the server, and paste the private file into `VULTR_SSH_KEY`. To change a setting on the server (a new Gemini key, say), edit `.env` locally and run `python deploy/vultr.py deploy` once from the laptop, which uploads it.
 
+### Giving a teammate deploy access
+
+The server only lets in SSH keys listed in its `/root/.ssh/authorized_keys`. A teammate makes a key once with `ssh-keygen -t ed25519` (it lands in `~/.ssh/id_ed25519`), sends the **public** half (`~/.ssh/id_ed25519.pub`, one line) to whoever already has access, and that person appends it on the server. The teammate also needs `deploy/.host` (one line, the server's IP; it isn't committed) or passes `--host <ip>` to every command. Repository secrets can only be set by a repository admin.
+
 ### Day to day
+
+- Every deploy also creates any new Atlas indexes, so the server's database keeps up with the code.
+- `python deploy/vultr.py deploy --story` builds the demo story's ready-made nutrition answer and trip plan on the server (about 6 Gemini calls). Run it once after a new server, or after the samples are rebuilt.
+- To let the server fall back to another model when Gemini is rate-limited, add `GEMINI_MODEL_FAST_FALLBACKS` and `GEMINI_MODEL_VIDEO_FALLBACKS` (comma-separated model ids) to the server's `.env`, then run `python deploy/vultr.py deploy` once from a laptop so the `.env` is uploaded.
 
 - `python deploy/vultr.py status` shows `/api/health` (`--containers` adds `docker compose ps`), `logs [api|worker|web|caddy]` shows logs, `ssh` prints the login command.
 - The deploy script always logs in with one named key (`~/.ssh/id_ed25519`, or `REALIZE_SSH_KEY`) and stops on the first rejection, because fail2ban bans an IP after a few failed logins. If you get banned anyway, open the instance's **View Console** in Vultr and run `fail2ban-client set sshd unbanip <your ip>`.
