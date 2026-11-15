@@ -22,14 +22,14 @@ log = logging.getLogger("realize.api.saves")
 
 NOT_A_LINK = "That wasn't an Instagram post link. Share a reel from Instagram, or paste its link."
 RATE_LIMITED = "Slow down a little. Try again in a minute."
-EXPIRED = "That choice expired. Open Realize to pick again."
-TAKEN_SHORTCUT = "That time was just taken. Open Realize to pick another."
+EXPIRED = "That choice expired. Open Reelize to pick again."
+TAKEN_SHORTCUT = "That time was just taken. Open Reelize to pick another."
 TAKEN_WEB = "That time was just taken. Pick another."
 IN_FLIGHT = ("queued", "reading", "planning")
 
 
 def _app(text: str) -> str:
-    return text.replace("Realize", get_settings().app_name)
+    return text.replace("Reelize", get_settings().app_name)
 
 
 def _save_response(status: str, *, ask: str = "no", save_id: str = "", prompt: str = "",
@@ -69,7 +69,7 @@ def _respond(save: dict, user: dict, *, prefix: str = "") -> dict:
     if save["status"] in IN_FLIGHT or not plan:
         return _save_response(
             "pending", save_id=sid,
-            message=_app("Saved. Still reading it. Your plan will be waiting in Realize."),
+            message=_app("Saved. Still reading it. Your plan will be waiting in Reelize."),
             ticket=tickets.ticket(save, plan, user, with_steps=True))
     plan = planops.refresh_if_stale(plan, save, user)
     prompt = f"{prefix}{save.get('title') or 'Saved reel'}. {plan.get('question') or ''}".strip()
@@ -219,7 +219,7 @@ def confirm(save_id: str, body: ConfirmRequest = Depends(confirm_request),
             return _confirm_response("accepted", plan, save, user, msg)
         if kind == "later":
             plan = planops.later(plan)
-            return _confirm_response("later", plan, save, user, _app("Okay. It's waiting in Realize."))
+            return _confirm_response("later", plan, save, user, _app("Okay. It's waiting in Reelize."))
         if kind == "none":
             plan = planops.decline(plan)
             return _confirm_response("declined", plan, save, user, "Saved to your library.")

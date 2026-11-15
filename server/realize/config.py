@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         env_file=str(REPO_ROOT / ".env"), env_file_encoding="utf-8", extra="ignore"
     )
 
-    app_name: str = "Realize"
+    app_name: str = "Reelize"
     public_base_url: str = "http://localhost:3000"
     domain: str = ""
     debug_endpoints: bool = False

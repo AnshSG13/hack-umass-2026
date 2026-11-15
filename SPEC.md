@@ -1,4 +1,4 @@
-# Realize: build spec
+# Reelize: build spec
 
 Source of truth for behavior. DESIGN.md is the source of truth for UI. CLAUDE.md has the working rules.
 Replaces docs/archive/SPEC-reel-brain.md and docs/archive/system-design-v1.md.
@@ -13,7 +13,7 @@ The product name comes from APP_NAME, so a rename is one change.
 ## 1. Product
 Problem: people save reels on autopilot and rarely act on them. The saved folder has no search, sorting or follow-up, and the platform rewards saving, not doing.
 
-Promise: every save becomes a plan. Share a reel to Realize; an agent reads it, works out what it is, checks the user's week and proposes one small, concrete plan ("Cook Thu 6:30 pm + 3 groceries"). The user confirms with one tap. Nothing is added anywhere without that tap. Later it asks whether they did it.
+Promise: every save becomes a plan. Share a reel to Reelize; an agent reads it, works out what it is, checks the user's week and proposes one small, concrete plan ("Cook Thu 6:30 pm + 3 groceries"). The user confirms with one tap. Nothing is added anywhere without that tap. Later it asks whether they did it.
 
 Around the loop: a library of every save, searchable by what was said and shown in the video; Ask, a chat over saves that answers with cards and says when nothing matches; a demo with no login.
 
@@ -82,7 +82,7 @@ Phone testing locally: `cloudflared tunnel --url http://localhost:3000` and set 
 
 ## 4. Configuration (.env at repo root; .env.example mirrors it with blanks)
 ```
-APP_NAME=Realize
+APP_NAME=Reelize
 PUBLIC_BASE_URL=http://localhost:3000   # prod: https://<domain>. Used in links inside reminders.
 DOMAIN=                                 # prod only, read by Caddy
 DEBUG_ENDPOINTS=false
@@ -278,15 +278,15 @@ SaveResponse:
 ```
 - proposed, actionable: menu = option labels + "Not now" + "Just vibes".
 - proposed, not actionable: menu = option labels (may be empty) + "Just save".
-- pending: `message: "Saved. Still reading it. Your plan will be waiting in Realize."`
+- pending: `message: "Saved. Still reading it. Your plan will be waiting in Reelize."`
 - failed: message from section 16.
 
 ## 7. Confirm
 `POST /api/saves/{id}/confirm` with `{ "choice": "<option id or exact label>", "source": "shortcut" | "web", "start_local": "YYYY-MM-DDTHH:mm" (optional, web Change) }`.
-- Matching: option id, then label (trimmed, case-insensitive) in `options`, then in `options_prev`; "later" or "Not now"; "none", "Just vibes" or "Just save". No match → status error, message "That choice expired. Open Realize to pick again."
+- Matching: option id, then label (trimmed, case-insensitive) in `options`, then in `options_prev`; "later" or "Not now"; "none", "Just vibes" or "Just save". No match → status error, message "That choice expired. Open Reelize to pick again."
 - Option → plan accepted, `chosen`, `scheduled_for`, `ends_at`, `followup_at`, `device_actions` built (section 8.5), `confirmed_via`, save.intent "yes".
 - start_local → must be in the future; becomes a custom option of the plan's kind, then accepted.
-- later → plan stays proposed, intent "later", save.intent "later". Message: "Okay. It's waiting in Realize."
+- later → plan stays proposed, intent "later", save.intent "later". Message: "Okay. It's waiting in Reelize."
 - none → plan declined, save.intent "none". Message: "Saved to your library."
 - Accepted messages, source shortcut: recipe or workout "Added to {long_day}.", event "Added to your calendar for {long_day}.", reminder options "Reminder set for {long_day}.". Source web: "Added to {long_day}." for all.
 - Re-confirming the same option returns the same response (idempotent).
@@ -350,7 +350,7 @@ Model GEMINI_MODEL_FAST with the lowest thinking setting the gemini-api-dev skil
 
 System prompt:
 ```
-You are the planner inside Realize. Someone just shared a short video (an Instagram reel)
+You are the planner inside Reelize. Someone just shared a short video (an Instagram reel)
 because they might want to do something with it. Work out what it is and propose one small,
 concrete plan that fits their week. They confirm or decline; you never act yourself.
 
@@ -489,11 +489,11 @@ For sample saves: a BackgroundTask runs the same planner with the cached metadat
 Video longer than 600 s: skip the download, enrich_error "too_long", status ready. Permanent download failure: enrich_error = reason, status ready. Backoff 10 s, 30 s, 90 s.
 
 ## 10. iOS Shortcut (document in shortcut/README.md; built by hand)
-Details: name "Realize", Show in Share Sheet on, Share Sheet types URLs and Text only. It appears in the share sheet's action list (scroll down; Edit Actions to favorite it).
+Details: name "Reelize", Show in Share Sheet on, Share Sheet types URLs and Text only. It appears in the share sheet's action list (scroll down; Edit Actions to favorite it).
 
 Actions, in order:
 1. Text `https://<domain>` → Set Variable BASE.
-2. Text `<key>` → Set Variable KEY. (Setup tab: add an Import Question on this Text: "Paste your Realize key".)
+2. Text `<key>` → Set Variable KEY. (Setup tab: add an Import Question on this Text: "Paste your Reelize key".)
 3. If Shortcut Input has any value → Set Variable INPUT = Shortcut Input. Otherwise → Get Clipboard → Set Variable INPUT. End If.
 4. Get Contents of URL: `BASE/api/save`, Method POST, Header `Authorization` = `Bearer KEY`, Request Body JSON: `input` (Text) = INPUT, `source` (Text) = `shortcut`. → Set Variable RESP.
 5. Get Dictionary Value `ask` from RESP. If it is `yes`:
@@ -564,7 +564,7 @@ Agent: GEMINI_MODEL_FAST, same loop rules as 8.4, max 5 turns, force `respond` f
 Tools: `search_saves(query, type?, limit ≤ 8)`, `get_save(save_id)` (fields, summary, transcript max 3,000 chars), `list_plans(range: week|upcoming|done)`, `propose_plans(save_ids ≤ 5)` (code only: for each save, reuse or create a plan in proposed state with fresh options from slots.py, reserving earlier picks so plans don't collide; returns tickets), `respond(text ≤ 600 chars, confidence, save_ids)` (terminal).
 System prompt:
 ```
-You are Ask, inside Realize. You help the user find and use reels they saved.
+You are Ask, inside Reelize. You help the user find and use reels they saved.
 Today is {today_local} ({timezone}).
 - Call search_saves before answering anything about their saves. Use get_save for details.
 - Only state facts that appear in saves you retrieved. If nothing matches, say so plainly and use
@@ -655,10 +655,10 @@ Bearer key unless noted. Errors outside sections 6 and 7: normal HTTP codes with
 |---|---|
 | private | Saved, but this reel is private, so I can't read it. |
 | unavailable | Saved, but Instagram says this post isn't available. |
-| not_video | Saved, but this post has no video. Realize reads reels. |
+| not_video | Saved, but this post has no video. Reelize reads reels. |
 | blocked | Saved. Instagram is slowing me down. I'll keep trying. |
-| processing_error | Saved. Couldn't read this reel yet. Tap Try again in Realize. |
-| bad key | Your Realize key doesn't work. Get a new one at {PUBLIC_BASE_URL}/setup. |
+| processing_error | Saved. Couldn't read this reel yet. Tap Try again in Reelize. |
+| bad key | Your Reelize key doesn't work. Get a new one at {PUBLIC_BASE_URL}/setup. |
 | rate limit | Slow down a little. Try again in a minute. |
 | Gemini down (planner) | the deterministic fallback; the user still gets a ticket |
 | Gemini down (Ask) | Ask didn't answer. Try again. |

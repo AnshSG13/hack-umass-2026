@@ -124,7 +124,7 @@ def slot_taken(plan: dict, option: dict, user: dict, accepted: list[dict] | None
 def accept(plan: dict, save: dict, option: dict, user: dict, source: str) -> dict:
     """proposed → accepted, or accepted → accepted with a different option."""
     if plan["status"] not in ("proposed", "accepted"):
-        raise PlanError("That choice expired. Open Realize to pick again.")
+        raise PlanError("That choice expired. Open Reelize to pick again.")
     da = actions.build_device_actions(plan, save, option, user)
     plan = db.plans().find_one_and_update(
         {"_id": plan["_id"]},
@@ -142,7 +142,7 @@ def accept(plan: dict, save: dict, option: dict, user: dict, source: str) -> dic
 
 def later(plan: dict) -> dict:
     if plan["status"] != "proposed":
-        raise PlanError("That choice expired. Open Realize to pick again.")
+        raise PlanError("That choice expired. Open Reelize to pick again.")
     plan = db.plans().find_one_and_update(
         {"_id": plan["_id"]}, {"$set": {"intent": "later", "updated_at": now_utc()}},
         return_document=ReturnDocument.AFTER)
@@ -152,7 +152,7 @@ def later(plan: dict) -> dict:
 
 def decline(plan: dict) -> dict:
     if plan["status"] not in ("proposed", "declined"):
-        raise PlanError("That choice expired. Open Realize to pick again.")
+        raise PlanError("That choice expired. Open Reelize to pick again.")
     if plan["status"] == "declined":
         return plan
     plan = db.plans().find_one_and_update(

@@ -40,16 +40,16 @@ STEP_LABELS = {
 FAILURE_MESSAGES = {
     "private": "Saved, but this reel is private, so I can't read it.",
     "unavailable": "Saved, but Instagram says this post isn't available.",
-    "not_video": "Saved, but this post has no video. Realize reads reels.",
+    "not_video": "Saved, but this post has no video. Reelize reads reels.",
     "blocked": "Saved. Instagram is slowing me down. I'll keep trying.",
-    "processing_error": "Saved. Couldn't read this reel yet. Tap Try again in Realize.",
+    "processing_error": "Saved. Couldn't read this reel yet. Tap Try again in Reelize.",
 }
 PERMANENT_REASONS = {"private", "unavailable", "not_video"}
 
 
-def failure_message(reason: str | None, app_name: str = "Realize") -> str:
+def failure_message(reason: str | None, app_name: str = "Reelize") -> str:
     msg = FAILURE_MESSAGES.get(reason or "", FAILURE_MESSAGES["processing_error"])
-    return msg.replace("Realize", app_name)
+    return msg.replace("Reelize", app_name)
 
 
 def default_prefs() -> dict:

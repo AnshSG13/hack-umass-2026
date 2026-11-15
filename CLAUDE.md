@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Read SPEC.md and DESIGN.md before any change. SPEC.md wins on behavior, DESIGN.md wins on UI. The product is **Realize**; all user-facing text uses APP_NAME. Never build from docs/archive/ or prototype/ (history only, but read them in phase 0).
+Read SPEC.md and DESIGN.md before any change. SPEC.md wins on behavior, DESIGN.md wins on UI. The product is **Reelize**; all user-facing text uses APP_NAME. Never build from docs/archive/ or prototype/ (history only, but read them in phase 0).
 
 ## Stack (no substitutes; ask in BUILD_LOG.md before adding any dependency not listed)
 - server/: Python 3.12, FastAPI, uvicorn[standard], pymongo (sync), dnspython, google-genai, pydantic v2, pydantic-settings, yt-dlp[default], httpx, Pillow, numpy, tzdata, pytest. scikit-learn only for the stretch map.

@@ -1,4 +1,4 @@
-"""Host Realize on a Vultr VPS. Standard library only; run from the repo root.
+"""Host Reelize on a Vultr VPS. Standard library only; run from the repo root.
 
     python deploy/vultr.py provision            create the VPS (Docker, firewall, swap via cloud-init)
     python deploy/vultr.py deploy [--init]      ship the committed code + .env, build and start everything
@@ -43,9 +43,14 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
-def read_env() -> dict[str, str]:
+def example_env() -> dict[str, str]:
+    """.env.example, the committed defaults."""
+    return read_env(ROOT / ".env.example")
+
+
+def read_env(path: Path | None = None) -> dict[str, str]:
     env: dict[str, str] = {}
-    path = ROOT / ".env"
+    path = path or ROOT / ".env"
     if not path.exists():
         return env
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -233,6 +238,13 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     cookies = ROOT / "secrets" / "instagram_cookies.txt"
     if args.keep_remote_env:
         print("Keeping the .env and secrets/ already on the server.")
+        # The product's name isn't a secret: it follows .env.example, so a rename reaches
+        # the live site with the code instead of needing someone to edit the server.
+        name = example_env().get("APP_NAME", "")
+        if name.isalnum() and env.get("APP_NAME") != name:
+            print(f"Setting APP_NAME={name} on the server.")
+            ssh(target, f"cd {REMOTE_DIR} && (grep -q '^APP_NAME=' .env && "
+                        f"sed -i 's/^APP_NAME=.*/APP_NAME={name}/' .env || echo 'APP_NAME={name}' >> .env)")
     else:
         print("Uploading .env and secrets/...")
         scp(target, ROOT / ".env", f"{REMOTE_DIR}/.env")

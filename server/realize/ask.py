@@ -19,7 +19,7 @@ log = logging.getLogger("realize.ask")
 TIMEOUT_S = 30
 ERROR_LINE = {"type": "error", "message": "Ask didn't answer. Try again."}
 
-SYSTEM_PROMPT = """You are Ask, inside Realize. You help the user find and use reels they saved.
+SYSTEM_PROMPT = """You are Ask, inside Reelize. You help the user find and use reels they saved.
 Today is {today_local} ({timezone}).
 - Call search_saves before answering anything about their saves. Use get_save for details.
 - Only state facts that appear in saves you retrieved. If nothing matches, say so plainly and use
@@ -225,7 +225,7 @@ def _run(user: dict, message: str, history: list[dict], emit) -> None:
 
     try:
         now_l = now_utc().astimezone(tz)
-        system = SYSTEM_PROMPT.replace("Realize", s.app_name).format(
+        system = SYSTEM_PROMPT.replace("Reelize", s.app_name).format(
             today_local=prompt_date(now_l), timezone=str(tz))
         lines = []
         for turn in history[-6:]:
