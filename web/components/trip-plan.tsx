@@ -281,14 +281,6 @@ function Day({
         {ready && day.detail && <DayDetail detail={day.detail} />}
 
         <div className="trip-foot">
-          {day.detail_status === "none" && (
-            <button type="button" className="btn" disabled={busy} onClick={onOpen}>
-              <Icon name="spark" />
-              <span>
-                Plan this day in detail<span className="vh">: {day.label}</span>
-              </span>
-            </button>
-          )}
           {day.detail_status === "building" && (
             <p className="trip-progress">
               <span className="trip-pulse step-dot-current" aria-hidden="true" />

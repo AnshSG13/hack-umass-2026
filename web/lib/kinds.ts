@@ -28,7 +28,7 @@ export const KINDS: Record<SaveType, Kind> = {
 
 /** What each way of delivering an action is called on a tile, and its main button. */
 export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: string; color: KindColor }> = {
-  cook: { label: "Cook mode", icon: "food", button: "Start cooking", color: "peach" },
+  cook: { label: "Cook mode", icon: "food", button: "Cook now", color: "peach" },
   shop: { label: "Prices", icon: "tag", button: "Check prices", color: "rose" },
   itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary", color: "sky" },
   calendar: { label: "Calendar", icon: "cal", button: "Add to calendar", color: "butter" },

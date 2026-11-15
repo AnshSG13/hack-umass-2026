@@ -19,14 +19,12 @@ export function CookCard({
   ingredients,
   steps,
   onCook,
-  onShop,
   headline,
 }: {
   minutes?: number;
   ingredients: number;
   steps: number;
   onCook: () => void;
-  onShop: () => void;
   /** The action's call to action ("Cook this tiramisu tonight"). */
   headline?: string;
 }) {
@@ -37,22 +35,13 @@ export function CookCard({
   ].filter(Boolean);
   return (
     <section className="cook-card" aria-label="Cook this">
-      <p className="cook-kicker">
-        <Icon name="food" />
-        Cook mode
-      </p>
-      <p className="action-cta">{headline || "Let's cook this"}</p>
+      <p className="action-cta" style={{ marginTop: 0 }}>{headline || "Let's cook this"}</p>
       {bits.length > 0 && <p className="cook-facts">{bits.join(" · ")}</p>}
       <div className="cook-btns">
         <button type="button" className="btn btn-primary" onClick={onCook} disabled={steps === 0 && ingredients === 0}>
-          Start cooking
+          <Icon name="food" />
+          Cook now
         </button>
-        {ingredients > 0 && (
-          <button type="button" className="btn" onClick={onShop}>
-            <Icon name="basket" />
-            Shopping list
-          </button>
-        )}
       </div>
     </section>
   );

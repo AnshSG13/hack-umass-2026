@@ -15,8 +15,8 @@ import { useApp } from "@/components/shell";
 import { fetcher } from "@/lib/api";
 import { greeting, inFlight, plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
-import { KINDS, tint } from "@/lib/kinds";
-import type { RememberItem, SavesPage, Taste, TastesResponse } from "@/lib/types";
+import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
+import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
 
 /** "4 workouts", "3 recipes" -> "You have 4 new workouts and 3 recipes". */
 function newThings(parts: string[]): string {
@@ -104,6 +104,40 @@ function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
 
 const REMEMBER_KEY = "rl_remember_hidden";
 
+/** Ready for you, filtered by taste: one chip per taste with actions ready, plus All. */
+function ReadyFilter({
+  counts,
+  value,
+  onChange,
+}: {
+  counts: Map<SaveType, number>;
+  value: SaveType | null;
+  onChange: (t: SaveType | null) => void;
+}) {
+  const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
+  const kinds = KIND_ORDER.filter((k) => counts.has(k));
+  return (
+    <div className="rfilter" role="group" aria-label="Show actions for">
+      <button type="button" className="rchip is-all" aria-pressed={value === null} onClick={() => onChange(null)}>
+        All <b>{total}</b>
+      </button>
+      {kinds.map((k) => (
+        <button
+          key={k}
+          type="button"
+          className="rchip"
+          style={tint(KINDS[k].color)}
+          aria-pressed={value === k}
+          onClick={() => onChange(value === k ? null : k)}
+        >
+          <Icon name={KINDS[k].icon} />
+          {KINDS[k].label} <b>{counts.get(k)}</b>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** A just-vibes reel from before today, back for a moment: "Remember this puppy growing up".
  *  Closing it hides today's one on this device. */
 function RememberCard() {
@@ -187,6 +221,20 @@ export default function HomePage() {
   const readyList = bundles.data?.ready ?? [];
   const readyActions = bundles.data?.actions ?? [];
   const readyCount = readyList.length + readyActions.length;
+  // Filter by taste: counts per type across comparisons and single actions.
+  const [readyKind, setReadyKind] = useState<SaveType | null>(null);
+  const readyCounts = new Map<SaveType, number>();
+  for (const t of [...readyList.map((b) => b.type), ...readyActions.map((a) => a.type)]) {
+    readyCounts.set(t, (readyCounts.get(t) ?? 0) + 1);
+  }
+  const kindShown = readyKind && readyCounts.has(readyKind) ? readyKind : null;
+  const shownBundles = readyList.filter((b) => !kindShown || b.type === kindShown);
+  const shownActions = readyActions.filter((a) => !kindShown || a.type === kindShown);
+  const readyRail = useRef<HTMLDivElement>(null);
+  function pickKind(t: SaveType | null) {
+    setReadyKind(t);
+    readyRail.current?.scrollTo({ left: 0 });
+  }
   const recap = tastes.data?.recap ?? null;
   // Still being read right now: just added in this visit, or in the list and not done.
   // The list is asked again when a new save finishes, so its status is the current one.
@@ -256,11 +304,15 @@ export default function HomePage() {
               <Icon name="right" />
             </Link>
           </div>
-          <div className="rail rail-gallery">
-            {readyList.map((b) => (
+          {readyCounts.size > 1 && <ReadyFilter counts={readyCounts} value={kindShown} onChange={pickKind} />}
+          <p className="vh" aria-live="polite">
+            {kindShown ? `Showing ${shownBundles.length + shownActions.length} ${KINDS[kindShown].label} actions` : ""}
+          </p>
+          <div className="rail rail-gallery" ref={readyRail} key={kindShown ?? "all"}>
+            {shownBundles.map((b) => (
               <ReadyTile key={b.id} bundle={b} />
             ))}
-            {readyActions.map((a) => (
+            {shownActions.map((a) => (
               <ActionTile key={a.save_id} item={a} />
             ))}
           </div>

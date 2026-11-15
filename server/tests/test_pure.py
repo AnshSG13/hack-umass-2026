@@ -865,6 +865,19 @@ def test_offers_keep_only_backed_readable_prices():
     assert small[0]["store"] == "pickleballcentral.com" and small[0]["via"] == "pickleballcentral.com"
 
 
+def test_out_of_stock_prices_are_dropped():
+    from realize import shop
+
+    sources = [{"n": 1, "url": "https://www.target.com/p/1", "title": "t"}]
+    raw = [{"product": "Paddle", "store": "Target", "price_text": "$99", "source": 1, "alternative": False,
+            "note": "Out of stock online"},
+           {"product": "Paddle", "store": "Target", "price_text": "$120", "source": 1, "alternative": False,
+            "note": "Pre-order, ships in May"},
+           {"product": "Paddle", "store": "Target", "price_text": "$139", "source": 1, "alternative": False,
+            "note": "In stock"}]
+    assert [o["price"] for o in shop.keep_offers(raw, sources, [])] == [139.0]
+
+
 def test_price_list_is_the_top_four_stores_and_two_alternatives():
     from realize import shop
 

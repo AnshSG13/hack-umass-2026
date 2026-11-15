@@ -76,6 +76,11 @@ def _matches(h: str, dom: str) -> bool:
     return h == dom or h.endswith("." + dom)
 
 
+# A price whose note says the item can't be bought now is dropped, whatever the price.
+UNAVAILABLE = re.compile(
+    r"out of stock|sold out|unavailable|not available|discontinued|pre-?order|back-?order|"
+    r"no longer (sold|available)|currently unavailable|waitlist", re.I)
+
 PRICE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)")
 
 RESEARCH_PROMPT = """Someone saved an Instagram reel about these products and wants to buy one at a good price.
@@ -87,8 +92,15 @@ A store does not need to be famous; it needs to be a real business selling the r
 coupon and deal sites, marketplaces of unknown third-party sellers, social posts, knockoffs and anything
 that looks unsafe. Prefer pages that show the price directly.
 
+Accuracy matters more than coverage:
+- Only report a price for the exact product (same model, size and version), not a similar one.
+- Only report it when the page shows the item in stock and available to buy now. Skip anything
+  marked out of stock, sold out, unavailable, discontinued, pre-order or back-order.
+- Skip prices that are only for a used, refurbished or open-box item unless you say so in the note.
+- If you are not sure a price is current, leave it out.
+
 Report short factual lines, one per price found, in this form:
-PRODUCT | STORE | PRICE | what is notable (sale, size, bundle, refurbished)
+PRODUCT | STORE | PRICE | what is notable (sale, size, bundle, refurbished, in stock)
 For each product, also report up to two cheaper alternatives that review sites recommend for the same
 use, in the same form, starting the note with "Alternative:".
 Only report prices the search results show. Write "not found" when you find none. No introduction."""
@@ -102,7 +114,7 @@ OFFER_SCHEMA: dict = {
                 "product": {"type": "string", "description": "As the reel names it, or the alternative's name"},
                 "store": {"type": "string"},
                 "price_text": {"type": "string", "description": "The price exactly as the notes give it, e.g. $49.99"},
-                "note": {"type": "string", "description": "At most 60 characters, or empty"},
+                "note": {"type": "string", "description": "At most 60 characters, or empty. Say \"out of stock\" when the notes say the item isn't available"},
                 "alternative": {"type": "boolean", "description": "true for a cheaper alternative, not the reel's product"},
                 "source": {"type": "integer", "description": "The [n] that backs this price, or 0"},
             },
@@ -178,6 +190,8 @@ def keep_offers(raw: list[dict], sources: list[dict], brands: list[str]) -> list
         src = by_n.get(n)
         price = parse_price(str(o.get("price_text") or ""))
         if not src or price is None:
+            continue
+        if UNAVAILABLE.search(f'{o.get("note") or ""} {o.get("price_text") or ""}'):
             continue
         got = source_of(src["url"], brands)
         if not got:
@@ -264,7 +278,8 @@ def build(save_id, user_id: str) -> None:
             role="fast", schema=OFFER_SCHEMA, timeout_s=40,
             system=("You turn price research notes into a list. Copy prices exactly as the notes give them. "
                     "Put the [n] number that backs each price in source; 0 when no number backs it. "
-                    "Never estimate a price. Plain words, no em dashes."),
+                    "Never estimate a price. If the notes say an item is out of stock, sold out, discontinued "
+                    "or pre-order, write that in its note. Plain words, no em dashes."),
             input=f"PRODUCTS:\n{lines}\n\nNOTES:\n{notes}\n\nSOURCES:\n" +
                   "\n".join(f"[{s['n']}] {s['title']} {s['url']}" for s in sources))
         offers = keep_offers(raw.get("offers") or [], sources, brands)

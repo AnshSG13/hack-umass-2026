@@ -13,6 +13,7 @@ import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { ReelSections } from "@/components/reel-sections";
 import { useApp } from "@/components/shell";
+import { ShareAction } from "@/components/share-action";
 import { ShopResearch } from "@/components/shop-research";
 import { TripPlan } from "@/components/trip-plan";
 import { inFlight, ticketTitle } from "@/lib/format";
@@ -116,7 +117,10 @@ export default function ActionPage() {
   return (
     <div className="act-page" style={kindTint(ticket.type)}>
       <header className="act-head gutter">
-        {back}
+        <div className="act-top">
+          {back}
+          <ShareAction deliver={action.deliver} ticket={ticket} fields={fields} />
+        </div>
         <span className="act-kind">
           <Icon name={d.icon} />
           {d.label}
@@ -145,7 +149,7 @@ export default function ActionPage() {
           <>
             <button type="button" className="btn btn-primary btn-block act-go" onClick={openStep}>
               <Icon name="food" />
-              Start cooking
+              Cook now
             </button>
             <ReelSections saveId={id} fields={{ recipe }} unverified={details.unverified ?? []} servings={servings} onServings={setServings} />
             {(ingredients.length > 0 || steps.length > 0) && (

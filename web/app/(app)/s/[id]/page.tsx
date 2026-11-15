@@ -13,7 +13,7 @@ import { Icon, type IconName } from "@/components/icons";
 import { CookCard, CookMode, NutritionPanel } from "@/components/cook";
 import { PlanCard } from "@/components/plan-card";
 import { ShopResearch } from "@/components/shop-research";
-import { AskAboutButton, Discussions, ReelChat } from "@/components/reel-chat";
+import { AiInsightsButton, Discussions, ReelChat } from "@/components/reel-chat";
 import { ReelSections } from "@/components/reel-sections";
 import { useApp } from "@/components/shell";
 import { useToast } from "@/components/toast";
@@ -458,6 +458,10 @@ export default function ReelPage() {
           </span>
         )}
         {backButton}
+        <a className="hero-open" href={ticket.url} target="_blank" rel="noopener noreferrer">
+          <Icon name="out" />
+          Open original
+        </a>
         <button type="button" className="round more" aria-label="More options" aria-haspopup="dialog" onClick={() => setSheet("more")}>
           <Icon name="more" />
         </button>
@@ -517,7 +521,6 @@ export default function ReelPage() {
             ingredients={groceries.length}
             steps={recipe.steps?.length ?? 0}
             onCook={() => setCooking(true)}
-            onShop={() => setSheet("grocery")}
             headline={ticket.action?.deliver === "cook" ? ticket.action.cta : undefined}
           />
         ) : (
@@ -531,19 +534,16 @@ export default function ReelPage() {
           </p>
         )}
 
-        <div className="actions">
-          {groceries.length > 0 && !recipe && (
+        {groceries.length > 0 && !recipe && (
+          <div className="actions">
             <button type="button" className="btn btn-primary" onClick={() => setSheet("grocery")}>
               <Icon name="basket" />
               Make a grocery list
             </button>
-          )}
-          <AskAboutButton onClick={() => openChat(null)} disabled={reading} />
-          <a className="btn" href={ticket.url} target="_blank" rel="noopener noreferrer">
-            <Icon name="out" />
-            Open original
-          </a>
-        </div>
+          </div>
+        )}
+
+        <AiInsightsButton onClick={() => openChat(null)} disabled={reading} />
 
         <TripPlan saveId={ticket.save_id} type={type} settled={!reading} go={tripGo} />
         {type === "product" && <ShopResearch saveId={ticket.save_id} settled={!reading} go={shopGo} />}
