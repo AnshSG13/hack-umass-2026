@@ -3,9 +3,10 @@
 // "How your saves connect": the knowledge graph. Kinds, their sub-categories, reels and the
 // interests from the intro, with "related" links between sub-categories whose reels are
 // alike. Under the canvas, the same connections as text, and details for whatever is tapped.
-// Tapping a reel opens its page, as a reel tile does in My collection.
+// Tapping a reel shows its picture and title in a card over the canvas; tapping it again
+// hides the card, and a double tap opens the reel's page.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,12 +25,14 @@ const GraphCanvas = dynamic(() => import("@/components/graph-canvas-3d"), {
 });
 
 const SAVES_ON_BY_DEFAULT = 60; // past this many reels the dots crowd the picture
+const DOUBLE_TAP_MS = 400;
 
 export default function GraphPage() {
   const { openAdd } = useApp();
   const router = useRouter();
   const { data, error, mutate } = useSWR<KnowledgeGraph>("/api/graph", fetcher, { revalidateOnFocus: false });
   const [selected, setSelected] = useState<string | null>(null);
+  const lastTap = useRef<{ id: string; at: number } | null>(null);
   const [savesChoice, setSavesChoice] = useState<boolean | null>(null);
   const [showInterests, setShowInterests] = useState(true);
   const wide = useMediaQuery("(min-width: 700px)");
@@ -102,14 +105,44 @@ export default function GraphPage() {
 
   const sel = selected ? byId.get(selected) : undefined;
 
-  // A reel goes straight to its page; anything else is selected to show its details.
+  // One tap selects a node and a second tap on it lets go. For a reel, selecting shows its
+  // card over the canvas, and two taps close together open the reel's page.
   function onNodeTap(id: string | null) {
     const node = id ? byId.get(id) : undefined;
-    if (node?.kind === "save" && node.save_id) {
+    const now = Date.now();
+    const prev = lastTap.current;
+    lastTap.current = id ? { id, at: now } : null;
+    if (node?.kind === "save" && node.save_id && prev?.id === id && now - prev.at < DOUBLE_TAP_MS) {
       router.push(`/s/${node.save_id}`);
       return;
     }
-    setSelected(id);
+    setSelected((cur) => (id !== null && cur === id ? null : id));
+  }
+
+  function reelCard(node: GraphNode) {
+    const kind = node.type ? KINDS[node.type] : undefined;
+    const folder = neighbourIds(node.id, "holds")[0];
+    return (
+      <div className="kg-peek" style={kind ? tint(kind.color) : undefined}>
+        <Link href={`/s/${node.save_id}`} className="kg-peek-link">
+          {node.thumb_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- thumbnails come from /api/t (SPEC 13.1)
+            <img src={node.thumb_url} alt="" width={48} height={64} />
+          ) : (
+            <span className="kg-peek-noimg" aria-hidden="true" />
+          )}
+          <span className="kg-peek-text">
+            <span className="kg-peek-kind">
+              {kind?.label}
+              {folder ? ` · ${byId.get(folder)?.label ?? ""}` : ""}
+            </span>
+            <span className="kg-peek-title">{node.label}</span>
+            <span className="kg-peek-hint">Double tap the dot to open</span>
+          </span>
+          <Icon name="right" />
+        </Link>
+      </div>
+    );
   }
   const neighbourIds = (id: string, kind?: string) =>
     (data?.links ?? [])
@@ -234,27 +267,34 @@ export default function GraphPage() {
       </div>
 
       <div className="gutter">
-        {data ? (
-          <GraphCanvas
-            graph={data}
-            showSaves={showSaves}
-            showInterests={showInterests}
-            selected={selected}
-            onSelect={onNodeTap}
-            height={wide ? 560 : 500}
-          />
-        ) : (
-          <div className="kg-canvas kg-loading" aria-hidden="true" />
-        )}
+        <div className="kg-stage">
+          {data ? (
+            <GraphCanvas
+              graph={data}
+              showSaves={showSaves}
+              showInterests={showInterests}
+              selected={selected}
+              onSelect={onNodeTap}
+              height={wide ? 560 : 500}
+            />
+          ) : (
+            <div className="kg-canvas kg-loading" aria-hidden="true" />
+          )}
+          <div aria-live="polite">{sel?.kind === "save" && sel.save_id ? reelCard(sel) : null}</div>
+        </div>
         <p className="kg-legend" aria-hidden="true">
           <span className="kg-key kg-key-related" /> alike reels
           <span className="kg-key kg-key-likes" /> your interests
         </p>
 
-        {sel ? (
+        {sel && sel.kind !== "save" ? (
           details(sel)
         ) : (
-          data && <p className="kg-hint">Drag to turn it, pinch to zoom, tap a sphere to see what it connects to.</p>
+          data && (
+            <p className="kg-hint">
+              Drag to turn it, pinch to zoom. Tap a sphere to see what it connects to, or a dot to see the reel.
+            </p>
+          )
         )}
 
         {data && (related.length > 0 || likes.size > 0) && (

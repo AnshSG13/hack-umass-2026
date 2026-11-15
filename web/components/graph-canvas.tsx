@@ -36,6 +36,7 @@ export interface GraphCanvasProps {
   showSaves: boolean;
   showInterests: boolean;
   selected: string | null;
+  /** The tapped node's id, or null for a tap on the background. The page decides what a tap means. */
   onSelect: (id: string | null) => void;
   height: number;
 }
@@ -215,7 +216,7 @@ export default function GraphCanvas({ graph, showSaves, showInterests, selected,
             fg.current?.zoomToFit(400, 24);
           }
         }}
-        onNodeClick={(n) => onSelect(String(n.id) === selected ? null : String(n.id))}
+        onNodeClick={(n) => onSelect(String(n.id))}
         onBackgroundClick={() => onSelect(null)}
         enableNodeDrag={false}
       />

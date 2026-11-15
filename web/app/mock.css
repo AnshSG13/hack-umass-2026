@@ -3200,6 +3200,87 @@ button.note {
 .kg-key-likes {
   border-top: 2px dotted var(--butter-ink);
 }
+/* the canvas plus the reel card that sits over its bottom edge */
+.kg-stage {
+  position: relative;
+}
+.kg-peek {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--ticket);
+  animation: kg-peek-in 160ms ease-out;
+}
+.kg-peek-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px 10px 10px;
+  border-radius: inherit;
+  color: var(--ink);
+  text-decoration: none;
+}
+.kg-peek-link img,
+.kg-peek-noimg {
+  flex: none;
+  width: 48px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--p, var(--line));
+}
+.kg-peek-noimg {
+  display: block;
+}
+.kg-peek-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.kg-peek-kind {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--d, var(--muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kg-peek-title {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kg-peek-hint {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.kg-peek-link > .i,
+.kg-peek-link > svg {
+  flex: none;
+  color: var(--muted);
+}
+@keyframes kg-peek-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kg-peek {
+    animation: none;
+  }
+}
 .kg-hint {
   margin-top: 16px;
   font-size: 14.5px;

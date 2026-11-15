@@ -204,8 +204,8 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
         );
         group.add(ring);
       }
-      const showLabel = n.kind !== "save" || String(n.id) === selected;
-      if (showLabel && on) {
+      // A tapped reel shows its card over the canvas (the page), so reels get no floating label.
+      if (n.kind !== "save" && on) {
         const text = n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label;
         const ink = n.kind === "interest" ? colors.butterInk : n.kind === "type" ? (c?.ink ?? colors.ink) : colors.ink;
         const h = n.kind === "type" ? 9 : 6.5;
@@ -215,7 +215,7 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
       }
       return group;
     },
-    [colors, lit, selected],
+    [colors, lit],
   );
 
   const linkColor = useCallback(
@@ -266,7 +266,7 @@ function Graph3D({ graph, showSaves, showInterests, selected, onSelect, height }
             }
           }
         }}
-        onNodeClick={(n) => onSelect(String(n.id) === selected ? null : String(n.id))}
+        onNodeClick={(n) => onSelect(String(n.id))}
         onBackgroundClick={() => onSelect(null)}
         enableNodeDrag={false}
       />
