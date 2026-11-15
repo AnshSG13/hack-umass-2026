@@ -12,7 +12,7 @@ import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile"
 import { useApp, useAskStore } from "@/components/shell";
 import { fetcher } from "@/lib/api";
 import { inFlight, plural } from "@/lib/format";
-import { KINDS, tint } from "@/lib/kinds";
+import { boardHref, KINDS, tint } from "@/lib/kinds";
 import type { RememberItem, SaveType, SavesPage, Taste, TastesResponse } from "@/lib/types";
 
 export const RECENT_KEY = "/api/saves?limit=10";
@@ -45,7 +45,7 @@ export function TasteTile({ taste, wide }: { taste: Taste; wide: boolean }) {
   const kind = KINDS[taste.type];
   const label = taste.label || kind.label;
   const count = plural(taste.count, "save", "saves");
-  const href = `/t/${taste.type}`;
+  const href = boardHref(taste.type, taste.category);
   const fresh = taste.new > 0 ? (
     <span className="taste-new" aria-label={`${taste.new} new`}>
       {taste.new > 9 ? "9+" : taste.new}
@@ -246,7 +246,7 @@ export function YourFolders() {
       </div>
       <div className="tastes">
         {list.map((t, i) => (
-          <TasteTile key={t.type} taste={t} wide={i === 0} />
+          <TasteTile key={t.key ?? t.type} taste={t} wide={i === 0} />
         ))}
       </div>
       <Link href="/graph" className="text-btn folders-connect">

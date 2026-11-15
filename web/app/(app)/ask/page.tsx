@@ -104,7 +104,7 @@ function ReelCard({ card }: { card: AskCard }) {
         )}
       </span>
       <span className="tile-meta">
-        <KindChip type={card.type} />
+        <KindChip type={card.type} label={card.category ?? undefined} />
         Saved {card.saved_on}
       </span>
       <span className="tile-title">{card.title}</span>

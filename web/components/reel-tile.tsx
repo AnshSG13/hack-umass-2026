@@ -11,7 +11,7 @@ import { Icon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import { inFlight, relativeTime, ticketTitle } from "@/lib/format";
 import { useRefresh, useSaveDetail } from "@/lib/hooks";
-import { kindOf, kindTint } from "@/lib/kinds";
+import { groupLabel, kindOf, kindTint } from "@/lib/kinds";
 import type { Ticket } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -88,7 +88,7 @@ export function ReelTile({
       ) : (
         <>
           <span className="tile-meta">
-            <KindChip type={ticket.type} />
+            <KindChip type={ticket.type} label={ticket.category ?? undefined} />
             <span className="tile-when">{when}</span>
           </span>
           <span className="tile-title">{title}</span>
@@ -115,9 +115,9 @@ export function LiveReelTile({ saveId, initial, now }: { saveId: string; initial
     }
     if (!wasBusy.current || !ticket) return;
     wasBusy.current = false;
-    const kind = kindOf(ticket.type);
-    if (ticket.processing !== "failed" && ticket.title && kind) {
-      toast.show(`${ticket.title} filed under ${kind.label}`);
+    const where = groupLabel(ticket.type, ticket.category);
+    if (ticket.processing !== "failed" && ticket.title && where) {
+      toast.show(`${ticket.title} filed under ${where}`);
     }
     refresh();
   }, [busy, ticket, refresh, toast]);

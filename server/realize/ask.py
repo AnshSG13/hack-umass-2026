@@ -66,6 +66,7 @@ def tool_defs() -> list[dict]:
 def card(save: dict, user: dict, query: str = "") -> dict:
     return {"save_id": str(save["_id"]), "title": save.get("title") or "Saved reel",
             "type": save.get("type"), "thumb_url": tickets.thumb_url(save),
+            "category": save.get("category") if save.get("type") == "other" else None,
             "saved_on": tickets.saved_on(save, user), "snippet": search.snippet(save, query),
             "url": save.get("url")}
 

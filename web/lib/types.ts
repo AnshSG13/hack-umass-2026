@@ -360,6 +360,7 @@ export interface AskCard {
   save_id: string;
   title: string;
   type: SaveType | null;
+  category?: string | null; // custom category ("Comedy") of a reel of type other
   thumb_url: string | null;
   saved_on: string;
   snippet: string;

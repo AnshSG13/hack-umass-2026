@@ -82,8 +82,9 @@ export function Thumb({
   );
 }
 
-export function TypeLabel({ type }: { type: SaveType | null }) {
-  return <KindChip type={type} />;
+/** The kind's name, or the custom category's ("Comedy") for a reel that has one. */
+export function TypeLabel({ type, category }: { type: SaveType | null; category?: string | null }) {
+  return <KindChip type={type} label={category ?? undefined} />;
 }
 
 export function SampleTag() {
@@ -220,7 +221,7 @@ function ReelHalf({
         <div className="min-w-0 flex-1">
           {(ticket.type || ticket.is_sample) && (
             <div className="mb-1 flex min-h-[22px] items-center justify-between gap-2">
-              <TypeLabel type={ticket.type} />
+              <TypeLabel type={ticket.type} category={ticket.category} />
               {ticket.is_sample && <SampleTag />}
             </div>
           )}
