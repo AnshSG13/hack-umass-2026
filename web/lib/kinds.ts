@@ -4,7 +4,7 @@
 
 import type { CSSProperties } from "react";
 import type { IconName } from "@/components/icons";
-import type { SaveType } from "./types";
+import type { Deliver, SaveType } from "./types";
 
 export type KindColor = "peach" | "butter" | "sky" | "mint" | "rose" | "lavender";
 
@@ -25,6 +25,22 @@ export const KINDS: Record<SaveType, Kind> = {
   tip: { label: "Learning", color: "lavender", icon: "learn" },
   other: { label: "Just vibes", color: "butter", icon: "spark" },
 };
+
+/** What each way of delivering an action is called on a tile, and its main button. */
+export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: string }> = {
+  cook: { label: "Cook mode", icon: "food", button: "Start cooking" },
+  shop: { label: "Prices", icon: "tag", button: "Check prices" },
+  itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary" },
+  calendar: { label: "Calendar", icon: "cal", button: "Add to calendar" },
+  workout: { label: "Workout", icon: "fit", button: "Start the workout" },
+  learn: { label: "Key points", icon: "learn", button: "See the key points" },
+  keep: { label: "Saved", icon: "bookmark", button: "" },
+};
+
+/** Where an action opens: the reel's page, told what to do on arrival. */
+export function actionHref(saveId: string, deliver: Deliver): string {
+  return `/s/${saveId}?do=${deliver}`;
+}
 
 export const KIND_ORDER: SaveType[] = ["recipe", "event", "place", "workout", "product", "tip", "other"];
 

@@ -1,165 +1,125 @@
-"""Macros for a recipe reel, looked up on the web when someone asks in the reel's chat.
+"""Nutrition for a recipe: an estimate per serving, shown as one.
 
-Reels almost never give nutrition, so a question like "what are the macros?" is answered
-from a web search (Gemini's Google Search tool), the same way trip plans find prices. The
-search looks for the recipe's own published nutrition first (many creators post it on
-their site), and otherwise for standard values of the reel's ingredients and amounts.
-
-Code keeps a number only when the search returned a source for it, rounds it, checks it is
-plausible, and writes the answer's sentences itself, so no number reaches the person
-without a link to where it came from.
+Gemini estimates each ingredient line for the amount the reel gives (a model is good at
+"2 tablespoons butter is about 200 kcal"). Code does the arithmetic: it rejects values
+that can't be right, adds the lines up and divides by servings. Saved on the save, and
+rebuilt only when the ingredient list changes.
 """
 from __future__ import annotations
 
-import re
+import hashlib
+import json
+import logging
 
-from . import actions, gemini
-from .trip import research
+from . import actions, db, gemini
+from .timeutil import now_utc
 
-NUTRIENTS = [("calories", "calories", ""), ("protein_g", "protein", " g"),
-             ("carbs_g", "carbs", " g"), ("fat_g", "fat", " g"),
-             ("fiber_g", "fiber", " g"), ("sugar_g", "sugar", " g"), ("sodium_mg", "sodium", " mg")]
-LIMITS = {"calories": 6000, "protein_g": 400, "carbs_g": 800, "fat_g": 400, "fiber_g": 150,
-          "sugar_g": 500, "sodium_mg": 20000}
-ASK = re.compile(
-    r"\b(macros?|calories?|calorie count|kcals?|cals?|protein|carbs?|carbohydrates?|fats?|nutrition(al)?|"
-    r"nutrients?|fib(er|re)|sugars?|sodium|salt content|healthy|keto|low.carb|high.protein)\b", re.I)
-NOT_FOUND = ("I couldn't find nutrition for this recipe from a source I can link, so I won't guess. "
-             "The reel doesn't give it either.")
+log = logging.getLogger("realize.nutrition")
 
-_S = {"type": "string"}
-_N = {"type": "number"}
-_I = {"type": "integer"}
+TIMEOUT_S = 30
+NUTRIENTS = ["kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g", "sodium_mg"]
+# A single ingredient line above these is a misread, not a recipe.
+CEILING = {"kcal": 6000, "protein_g": 400, "carbs_g": 800, "fat_g": 600, "fiber_g": 150,
+           "sugar_g": 600, "sodium_mg": 40000}
+
+PROMPT = """Estimate the nutrition of each ingredient line below, for exactly the amount written.
+Use typical values (USDA-style) for the plain ingredient. When no amount is given, assume what a
+recipe for {servings} servings would normally use and set assumed to true.
+Return one entry per line, in the same order, with the line's index.
+Give servings: the number of servings the recipe makes ({servings_hint}).
+
+INGREDIENTS
+{lines}"""
+
 SCHEMA: dict = {
     "type": "object",
     "properties": {
-        "basis": {"type": "string", "enum": ["published", "estimated", "none"],
-                  "description": "published: the recipe's own page states nutrition. estimated: built from "
-                                 "ingredient values. none: nothing usable in the notes."},
-        "per": {"type": "string", "enum": ["serving", "recipe"]},
-        "servings": {"type": "integer", "description": "How many servings the numbers assume, or 0"},
-        **{k: _N for k, _, _ in NUTRIENTS},
-        **{f"{k}_source": _I for k, _, _ in NUTRIENTS},
-        "note": {"type": "string", "description": "One plain sentence with no numbers, or empty"},
+        "servings": {"type": "integer"},
+        "lines": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"index": {"type": "integer"}, "assumed": {"type": "boolean"},
+                           **{n: {"type": "number"} for n in NUTRIENTS}},
+            "required": ["index", *NUTRIENTS]}},
     },
-    "required": ["basis", "per"],
+    "required": ["servings", "lines"],
 }
 
 
-def wants_nutrition(save: dict, message: str) -> bool:
-    """A recipe reel and a question about macros, calories or nutrients."""
-    return save.get("type") == "recipe" and bool(ASK.search(message or ""))
+def fingerprint(ingredients: list[dict]) -> str:
+    raw = json.dumps([[i.get("qty"), i.get("unit"), i.get("item")] for i in ingredients], default=str)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def _recipe_block(save: dict) -> str:
-    r = (save.get("fields") or {}).get("recipe") or {}
-    creator = (save.get("creator") or {}).get("handle")
-    lines = [f"RECIPE: {save.get('title') or 'Untitled'}" + (f" (by @{creator} on Instagram)" if creator else "")]
-    if r.get("servings"):
-        lines.append(f"SERVES: {r['servings']}")
-    ings = actions.ingredients(save.get("fields"))
-    if ings:
-        lines.append("INGREDIENTS FROM THE REEL:")
-        lines += [f"- {actions.ingredient_line(i)}" for i in ings]
-    if save.get("url"):
-        lines.append(f"REEL: {save['url']}")
-    return "\n".join(lines)
-
-
-def _src(n, count: int) -> int:
-    try:
-        v = int(n)
-    except (TypeError, ValueError):
-        return 0
-    return v if 1 <= v <= count else 0
-
-
-def clean(raw: dict, sources: list[dict], recipe_servings: int | None) -> dict | None:
-    """What the model read from the notes, after the rules: a number stays only with a real
-    source and a plausible size. Returns None when nothing is left. Sources are renumbered so
-    the answer lists only the ones its numbers use."""
-    if raw.get("basis") not in ("published", "estimated"):
-        return None
-    kept: dict[str, dict] = {}
-    used: list[int] = []
-    for key, _, _ in NUTRIENTS:
-        n = _src(raw.get(f"{key}_source"), len(sources))
+def total(raw_lines: list[dict], n_lines: int, servings: int) -> dict | None:
+    """Sum the model's per-line estimates and divide by servings. Lines with an index that
+    isn't real, or a value that can't be right, are left out. None when too little is left
+    to be worth showing."""
+    seen: set[int] = set()
+    sums = {n: 0.0 for n in NUTRIENTS}
+    used = assumed = 0
+    for line in raw_lines:
         try:
-            v = float(raw.get(key))
+            i = int(line.get("index"))
         except (TypeError, ValueError):
             continue
-        if not n or not 0 <= v <= LIMITS[key] or (key == "calories" and v < 1):
+        if not 0 <= i < n_lines or i in seen:
             continue
-        if n not in used:
-            used.append(n)
-        kept[key] = {"value": int(round(v)), "source": used.index(n) + 1}
-    if "calories" not in kept and not {"protein_g", "carbs_g", "fat_g"} & kept.keys():
+        vals = {}
+        for n in NUTRIENTS:
+            try:
+                v = float(line.get(n) or 0)
+            except (TypeError, ValueError):
+                v = -1
+            vals[n] = v
+        if any(v < 0 or v > CEILING[n] for n, v in vals.items()):
+            continue
+        seen.add(i)
+        used += 1
+        assumed += bool(line.get("assumed"))
+        for n, v in vals.items():
+            sums[n] += v
+    if n_lines == 0 or used < max(1, round(n_lines * 0.6)):
         return None
-    per = raw.get("per") if raw.get("per") in ("serving", "recipe") else "serving"
+    s = max(1, min(int(servings or 1), 24))
+    per = {n: round(sums[n] / s) for n in NUTRIENTS}
+    # Calories from the macros: a check that the parts agree with the whole.
+    from_macros = 4 * sums["protein_g"] + 4 * sums["carbs_g"] + 9 * sums["fat_g"]
+    if sums["kcal"] > 0 and not 0.6 <= from_macros / sums["kcal"] <= 1.4:
+        per["kcal"] = round(from_macros / s)
+    split = {}
+    if from_macros > 0:
+        split = {"protein": round(400 * sums["protein_g"] / from_macros),
+                 "carbs": round(400 * sums["carbs_g"] / from_macros)}
+        split["fat"] = 100 - split["protein"] - split["carbs"]
+    return {"per_serving": per, "servings": s, "split_pct": split,
+            "lines_counted": used, "lines_total": n_lines, "assumed": assumed}
+
+
+def get_or_build(save: dict) -> dict | None:
+    """The saved estimate when the ingredients haven't changed, else a new one. None when the
+    recipe has no ingredients or the model doesn't answer."""
+    ings = actions.ingredients(save.get("fields"))
+    if not ings:
+        return None
+    fp = fingerprint(ings)
+    have = save.get("nutrition") or {}
+    if have.get("fingerprint") == fp:
+        return have.get("value")
+    recipe = (save.get("fields") or {}).get("recipe") or {}
+    servings = int(recipe.get("servings") or 0)
+    lines = "\n".join(f"{i}. {actions.ingredient_line(x)}" for i, x in enumerate(ings))
     try:
-        servings = int(raw.get("servings") or 0) or None
-    except (TypeError, ValueError):
-        servings = None
-    servings = servings or recipe_servings
-    note = " ".join(str(raw.get("note") or "").split())
-    if re.search(r"\d", note) or len(note) > 180:
-        note = ""  # a number in the note would have no source
-    return {"basis": raw["basis"], "per": per, "servings": servings if servings and servings < 100 else None,
-            "values": kept, "note": note.replace("—", ", "),
-            "sources": [{"n": i + 1, "title": sources[n - 1].get("title") or "", "url": sources[n - 1]["url"]}
-                        for i, n in enumerate(used)]}
-
-
-def sentence(m: dict) -> str:
-    """The answer, written in code from the kept numbers."""
-    parts = [f"{v['value']}{unit} {name}" if name != "calories" else f"{v['value']} calories"
-             for key, name, unit in NUTRIENTS if (v := m["values"].get(key))]
-    if m["per"] == "serving":
-        head = f"Per serving (the recipe makes {m['servings']})" if m["servings"] else "Per serving"
-    else:
-        head = "For the whole recipe"
-    lines = [f"{head}: about {', '.join(parts)}."]
-    lines.append("These are the numbers published for this recipe." if m["basis"] == "published"
-                 else "This is an estimate from the ingredients. The reel doesn't give nutrition.")
-    if m["note"]:
-        lines.append(m["note"])
-    return " ".join(lines)
-
-
-def answer(save: dict, message: str, step) -> dict:
-    """Search, read, keep what is sourced. `step` is Run.step, for the run's trace."""
-    r = (save.get("fields") or {}).get("recipe") or {}
-    base = r.get("servings") if isinstance(r.get("servings"), int) and r["servings"] > 0 else None
-    block = _recipe_block(save)
-    sources: list[dict] = []
-    with step("nutrition_search", {"question": message[:200]}) as h:
-        notes = research(
-            "Someone saved this recipe from an Instagram reel and asked about its nutrition.\n"
-            f"{block}\nTHEIR QUESTION: {message[:300]}\n\n"
-            "Use Google Search. First look for this exact recipe's own published nutrition facts, for "
-            "example on the creator's website, and say which page and whether it is per serving. If there "
-            "is none, look up standard nutrition values for each ingredient amount above and add them up "
-            "for the whole recipe, then divide by the servings. Report calories, protein, carbohydrates, "
-            "fat, and fiber, sugar and sodium if found. One fact per line. Only report what the search "
-            "results say. No introduction and no closing remarks.", sources, timeout_s=60)
-        h["result"] = {"sources": len(sources)}
-    if not sources:
-        return {"text": NOT_FOUND, "at_sec": None, "from_reel": False, "web": True, "sources": [], "macros": None}
-    raw = gemini.generate_json(
-        role="fast", schema=SCHEMA, timeout_s=40,
-        system=("You read research notes about one recipe's nutrition and fill the fields. Rules:\n"
-                "- basis: published when the notes quote the recipe's own nutrition facts; estimated when "
-                "they add up ingredient values; none when the notes have no usable numbers.\n"
-                "- Every number must appear in the notes. Put the [n] marker that backs it in its _source "
-                "field. When the notes don't give a nutrient, leave it out. Never estimate a number yourself.\n"
-                "- per and servings: what the numbers in the notes describe. Prefer per serving.\n"
-                "- note: at most one plain sentence with no numbers, only if it helps (a lighter swap), "
-                "else empty. Sentence case, no em dashes."),
-        input=f"{block}\nTHEIR QUESTION: {message[:300]}\n\nRESEARCH NOTES:\n{notes}\n\nSOURCES:\n"
-              + "\n".join(f"[{s['n']}] {s['title']}" for s in sources))
-    m = clean(raw, sources, base)
-    if not m:
-        return {"text": NOT_FOUND, "at_sec": None, "from_reel": False, "web": True, "sources": [], "macros": None}
-    macros = {"basis": m["basis"], "per": m["per"], "servings": m["servings"], "values": m["values"]}
-    return {"text": sentence(m), "at_sec": None, "from_reel": False, "web": True,
-            "sources": m["sources"], "macros": macros}
+        out = gemini.generate_json(
+            role="fast", schema=SCHEMA, timeout_s=TIMEOUT_S,
+            input=[gemini.user_step(PROMPT.format(
+                servings=servings or "an unknown number of", lines=lines,
+                servings_hint=f"the reel says {servings}" if servings else "the reel doesn't say; estimate it"))])
+    except Exception as e:  # noqa: BLE001
+        log.warning("nutrition failed: %s", str(e)[:200])
+        return None
+    value = total(out.get("lines") or [], len(ings), servings or int(out.get("servings") or 1))
+    if value:
+        value["servings_from"] = "reel" if servings else "estimate"
+        db.saves().update_one({"_id": save["_id"], "user_id": save["user_id"]},
+                              {"$set": {"nutrition": {"fingerprint": fp, "value": value, "at": now_utc()}}})
+    return value

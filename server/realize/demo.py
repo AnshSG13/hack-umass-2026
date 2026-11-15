@@ -26,6 +26,8 @@ STORY_RECIPE = "Dfs7pYmMFOy"
 STORY_TRIP = "DfkgVpfAb1S"
 TRIP_LIMIT = 3  # trip plans per demo session; each one is paid searches
 TRIP_LIMIT_MESSAGE = "That's the trip limit for this demo."
+SHOP_LIMIT = 3  # price research per demo session; each one is paid searches
+SHOP_LIMIT_MESSAGE = "That's the price research limit for this demo."
 
 
 def chats_used(user: dict) -> int:

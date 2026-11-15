@@ -278,3 +278,26 @@ The user asked for the chat to suggest something to export at the end, "such as 
 - **No new dependencies.**
 
 Checked live on a demo account, 14 of 14: a grocery list by aisle, an event invite, the itinerary refused before the trip existed and made after it (five timed stops with prices, hours, forecast and the sources named), the public data opening with the token and no key, a wrong token and another account refused. 117 unit tests pass (15 new).
+
+## 2026-11-14: Home leads with what's ready, New chat, the orb's tap
+
+- **Home order:** Ready for you, then Your tastes, then Recently saved. People open the app for what's ready, not for the list of what they saved.
+- **New since last time.** `server/realize/visits.py` keeps `visits.last` and `visits.prev` on the user (a visit ends after 30 minutes of no activity, counted when Home loads `/api/tastes`). Each taste tile shows a badge with the saves added since the previous visit; opening that taste's board clears its badge (`visits.taste_seen`). Kept on the server so a phone and a laptop agree.
+- **The greeting says what was done for them:** "New since last time: 3 recipes, 4 workouts and 3 product picks", or "This week: ..." when nothing is new. Largest first, at most three kinds, "Just vibes" left out.
+- **Ask has New chat**, which clears the conversation (it lived only in memory, so nothing on the server changes).
+- **Tapping the orb lights it** the way holding it does (a short scale and halo), then settles; a hold still opens the voice layer.
+
+110 unit tests pass (2 new; the commit message for this entry said 112, which was wrong). Checked in headless Chrome at 390x844 with the account's last visit moved back 90 minutes: badges on four tastes, the recap line, the Food badge gone after opening Food, the orb's tap state, New chat emptying Ask.
+
+## 2026-11-14: recipes are for cooking now, nutrition, price research
+
+The owner's calls: a saved recipe is opened when someone wants to cook it, so it should not be asked for a calendar slot; the demo leads with travel, recipes (with nutrition) and shopping; price research runs only when asked and must avoid sketchy sites.
+
+- **Recipes.** The Reel page shows a "Ready when you are" card (time, ingredients, steps) with Start cooking and Shopping list, in place of the plan card. A recipe already on the calendar keeps its plan card so it can still be moved or marked done. Recipes are left out of "Waiting on you" (`/api/plans`). The planner and the Shortcut are unchanged for now.
+- **Cook mode:** one step at a time in large type, an ingredient checklist first, Back and Next (arrow keys too), the screen kept awake where the browser allows. `/s/{id}?cook=1` opens it directly.
+- **Dinner bundles** are no longer scheduled: "Start now" opens the first recipe in cook mode, "Shop the list" goes to the merged list, each dinner has Cook. Workout and place bundles still start on free slots (`bundles.SCHEDULED`).
+- **Nutrition** (`server/realize/nutrition.py`, `GET /api/saves/{id}/nutrition`): Gemini estimates each ingredient line for its stated amount; code drops impossible values and made-up line numbers, refuses to show anything when fewer than 60% of lines are usable, sums, divides by servings, and recomputes calories from the macros when the two disagree by more than 40%. Kept on the save until the ingredients change. Shown per serving with a calorie split bar and labelled as an estimate. Measured: 6.0 s the first time, 0.08 s after.
+- **Price research** (`server/realize/shop.py`, `GET`/`POST /api/saves/{id}/shop`): only on a tap. A search-grounded call (the trip code's `research`) for prices at major US stores, brand sites and review sites, then a structured pass. Code keeps a price only when its source page is on the store or review allowlist or is the brand's own site, and a dollar amount can be read. The store name comes from the source page when that page is a store's. Demo accounts get 3. Measured on the curling irons reel: 12 s, 5 prices kept (Target, Walmart, Kohl's), 3 dropped as unknown sites.
+- **Badges** count the last 24 hours when there is no earlier visit, so a new account sees them.
+
+114 unit tests pass (4 new). Checked in headless Chrome at 390x844: recipe page with cook card and nutrition, cook mode pages, price research results, the dinners plan with Start now. No console or network errors.

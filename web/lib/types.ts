@@ -49,6 +49,34 @@ export interface StepLine {
   ms: number | null;
 }
 
+/** How the app gives the person what they want from a reel (server: realize/intent.py). */
+export type Deliver = "cook" | "shop" | "itinerary" | "calendar" | "workout" | "learn" | "keep";
+export interface SaveAction {
+  deliver: Deliver;
+  need: string; // "make this tiramisu"
+  cta: string; // "Cook this tiramisu tonight"
+  pitch: string; // "7 ingredients, 15 minutes, step by step"
+  schedule: boolean; // a set time belongs to this action (an event)
+}
+/** One reel's action in Home's "Ready for you". */
+export interface ReadyAction extends SaveAction {
+  save_id: string;
+  type: SaveType;
+  title: string;
+  thumb_url: string | null;
+  meta: string;
+}
+
+/** GET /api/remember: a just-vibes reel brought back on Home. Not a reminder. */
+export interface RememberItem {
+  save_id: string;
+  title: string;
+  thumb_url: string | null;
+  saved_on: string;
+  line: string; // "Remember this puppy growing up"
+  day: string; // YYYY-MM-DD: a different reel each day
+}
+
 export interface Ticket {
   save_id: string;
   plan_id: string | null;
@@ -65,6 +93,7 @@ export interface Ticket {
   failure_message: string | null;
   is_sample: boolean;
   plan: TicketPlan | null;
+  action?: SaveAction | null; // null while the reel is being read or when it failed
   steps?: StepLine[]; // detail and poll responses only
   snippet?: string; // search results only
 }
@@ -202,10 +231,13 @@ export interface Taste {
   thumbs: string[]; // up to 3 "/api/t/<id>"
   tags: { tag: string; count: number }[]; // up to 3
   subcategories: { name: string; count: number }[]; // every one for this type, largest first
+  new: number; // saved since the last visit, or since its board was last opened
 }
 export interface TastesResponse {
   total: number;
   tastes: Taste[]; // only types with at least one save, largest first
+  /** The greeting's line: "3 recipes, 4 workouts and 3 product picks". null with nothing to say. */
+  recap: { window: "new" | "week"; parts: string[]; text: string } | null;
 }
 
 // ---- GET /api/saves, /api/search, /api/plans ----
@@ -397,6 +429,7 @@ export interface Bundle {
 }
 export interface BundlesResponse {
   ready: Bundle[];
+  actions?: ReadyAction[]; // one per reel not yet acted on, newest first
   started: Bundle[];
 }
 
@@ -427,4 +460,36 @@ export interface PublicDeliverable extends Deliverable {
 export interface DeliverablesResponse {
   options: DeliverableOption[];
   made: Deliverable[];
+}
+
+// ---- GET /api/saves/{id}/nutrition: an estimate per serving ----
+export interface Nutrition {
+  per_serving: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g: number; sugar_g: number; sodium_mg: number };
+  servings: number;
+  split_pct: { protein?: number; carbs?: number; fat?: number }; // share of calories, adds to 100
+  lines_counted: number;
+  lines_total: number;
+  assumed: number; // lines with no amount in the reel, so a typical amount was assumed
+  servings_from: "reel" | "estimate";
+}
+
+// ---- GET/POST /api/saves/{id}/shop: price research ----
+export interface ShopOffer {
+  product: string;
+  store: string;
+  price: number;
+  price_text: string; // "$79.99"
+  note: string;
+  alternative: boolean; // a cheaper option for the same use, not the reel's product
+  url: string; // the page the price came from
+  via: string; // who that page belongs to: "Target", "Wirecutter"
+}
+export interface Shop {
+  status: "building" | "ready" | "failed";
+  offers: ShopOffer[];
+  best: ShopOffer[]; // the lowest trusted price per product the reel names
+  alternatives: ShopOffer[];
+  checked_on: string | null; // "Nov 14"
+  dropped: number; // prices left out because their source wasn't a store or review site we know
+  error: string | null;
 }

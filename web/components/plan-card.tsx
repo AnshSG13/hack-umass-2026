@@ -13,9 +13,9 @@ import { ChangeSheet } from "@/components/change-sheet";
 import { Icon } from "@/components/icons";
 import { followupQuestion, ticketState, ticketTitle } from "@/lib/format";
 import { useElapsed, useHealth } from "@/lib/hooks";
-import { tint } from "@/lib/kinds";
+import { actionHref, DELIVERY, kindTint, tint } from "@/lib/kinds";
 import { useTicketActions } from "@/lib/ticket-actions";
-import type { StepLine, Ticket } from "@/lib/types";
+import type { Deliver, StepLine, Ticket } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function printingNotice(queued: boolean, elapsed: number, offline: boolean): string | null {
@@ -42,12 +42,16 @@ export function PlanCard({
   ticket,
   withReel = false,
   onChange,
+  onDo,
 }: {
   ticket: Ticket;
   /** Show the reel's thumbnail and title on top, linking to its page. */
   withReel?: boolean;
   /** Called with the updated ticket after any change made here. */
   onChange?: (t: Ticket) => void;
+  /** On the reel's own page: do the action here (open cook mode, run price research).
+   *  Elsewhere the action's button opens the reel's page, which does it on arrival. */
+  onDo?: (deliver: Deliver) => void;
 }) {
   // After a change we show the server's reply until the parent's data catches up.
   const [override, setOverride] = useState<{ base: Ticket; t: Ticket } | null>(null);
@@ -117,6 +121,69 @@ export function PlanCard({
     );
   }
 
+  // The action: what the person wants from the reel, delivered. A time shows only when the
+  // action is tied to one (an event's date, or a cook the model says needs a set time).
+  const action = t.action;
+  if (state === "proposed" && plan && action && action.deliver !== "keep") {
+    const d = DELIVERY[action.deliver];
+    const first = plan.options[0];
+    const dated = action.deliver === "calendar" && first?.action === "event";
+    const canPickTime = action.schedule && !dated && plan.options.length > 0;
+    return (
+      <section className="plan action-card" style={kindTint(t.type) ?? tint("lavender")} aria-label="Action">
+        {reel}
+        <p className="plan-label">
+          <Icon name={d.icon} />
+          {d.label}
+        </p>
+        <p className="action-cta">{action.cta}</p>
+        {action.pitch && <p className="plan-why">{action.pitch}</p>}
+        {dated && (
+          <p className="action-when">
+            <Icon name="cal" />
+            {first.big_time}
+            {first.secondary && <small>{first.secondary}</small>}
+          </p>
+        )}
+        <div className="plan-btns">
+          {dated ? (
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void pick(first.id)}>
+              {first.web_label}
+            </button>
+          ) : onDo ? (
+            <button type="button" className="btn btn-primary" onClick={() => onDo(action.deliver)}>
+              {d.button}
+            </button>
+          ) : (
+            <Link href={actionHref(t.save_id, action.deliver)} className="btn btn-primary">
+              {d.button}
+            </Link>
+          )}
+        </div>
+        <div className="plan-row">
+          {canPickTime && (
+            <button type="button" className="text-btn" disabled={busy} onClick={() => setChangeOpen(true)}>
+              Pick a time
+            </button>
+          )}
+          {plan.extras.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              className="text-btn"
+              disabled={busy}
+              onClick={() => void actions.confirm(x.label)}
+            >
+              {x.label}
+            </button>
+          ))}
+        </div>
+        {errorLine}
+        {changeSheet}
+      </section>
+    );
+  }
+
   if (state === "proposed" && plan) {
     const [first, second] = plan.options;
     return (
@@ -159,6 +226,21 @@ export function PlanCard({
         </div>
         {errorLine}
         {changeSheet}
+      </section>
+    );
+  }
+
+  if (state === "proposed_quiet" && plan && action?.deliver === "keep") {
+    return (
+      <section className="plan action-card" style={tint("butter")} aria-label="Just vibes">
+        {reel}
+        <p className="plan-label">
+          <Icon name="spark" />
+          Just vibes
+        </p>
+        <p className="action-cta">{action.cta}</p>
+        {action.pitch && <p className="plan-why">{action.pitch}</p>}
+        {errorLine}
       </section>
     );
   }

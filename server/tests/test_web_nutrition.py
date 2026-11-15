@@ -1,5 +1,5 @@
 """Nutrition answers: when the web search runs, and which numbers are kept. No network."""
-from realize import nutrition as nu
+from realize import web_nutrition as nu
 
 RECIPE = {"type": "recipe"}
 SOURCES = [{"n": 1, "title": "budgetbytes.com", "url": "https://www.budgetbytes.com/curry/"},
