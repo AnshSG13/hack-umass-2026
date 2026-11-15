@@ -245,13 +245,21 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     print("Building and starting containers (the first build takes a few minutes)...")
     ssh(target, f"cd {REMOTE_DIR} && docker compose up -d --build --remove-orphans && docker image prune -f")
 
-    if args.init:
-        print("Creating Atlas indexes...")
-        ssh(target, f"cd {REMOTE_DIR} && docker compose exec -T api python -m scripts.create_indexes")
-        if not args.skip_samples:
-            print("Building demo samples (needs Instagram access and Gemini quota)...")
-            ssh(target, f"cd {REMOTE_DIR} && docker compose exec -T worker python -m scripts.build_samples",
-                check=False)
+    # Every deploy: new features can add collections or indexes, and creating them again is a
+    # no-op, so the server's Atlas never lags behind the code. No model calls.
+    print("Creating Atlas indexes...")
+    ssh(target, f"cd {REMOTE_DIR} && docker compose exec -T api python -m scripts.create_indexes",
+        check=args.init)
+    if args.init and not args.skip_samples:
+        print("Building demo samples (needs Instagram access and Gemini quota)...")
+        ssh(target, f"cd {REMOTE_DIR} && docker compose exec -T worker python -m scripts.build_samples",
+            check=False)
+    if (args.init and not args.skip_samples) or args.story:
+        # The guided first open shows a finished nutrition answer and trip plan without waiting
+        # on a model; they are made once here (about 6 Gemini calls and a few web searches).
+        print("Building the demo story's results...")
+        ssh(target, f"cd {REMOTE_DIR} && docker compose exec -T worker python -m scripts.build_demo_story",
+            check=False)
 
     domain = env["DOMAIN"]
     print(f"Waiting for https://{domain}/api/health ...")
@@ -305,8 +313,11 @@ def main() -> None:
         sp.add_argument("--user", default="root")
         sp.set_defaults(fn=fn)
         if name == "deploy":
-            sp.add_argument("--init", action="store_true", help="also create indexes and demo samples")
-            sp.add_argument("--skip-samples", action="store_true", help="with --init, skip build_samples")
+            sp.add_argument("--init", action="store_true",
+                            help="also build the demo samples and the demo story's results")
+            sp.add_argument("--skip-samples", action="store_true", help="with --init, skip samples and story")
+            sp.add_argument("--story", action="store_true",
+                            help="build the demo story's results (about 6 Gemini calls)")
             sp.add_argument("--keep-remote-env", action="store_true",
                             help="don't upload .env or secrets/; use the server's (for GitHub Actions)")
         if name == "status":
