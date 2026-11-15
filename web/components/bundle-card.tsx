@@ -182,7 +182,7 @@ export function ActionTile({ item }: { item: ReadyAction }) {
   const kind = KINDS[item.type];
   return (
     <ActionPass
-      href={actionHref(item.save_id, item.deliver)}
+      href={actionHref(item.save_id, item.deliver, true)}
       color={kind.color}
       icon={kind.icon}
       label={kind.label}

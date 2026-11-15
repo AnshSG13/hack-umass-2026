@@ -37,9 +37,12 @@ export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: 
   keep: { label: "Saved", icon: "bookmark", button: "", color: "butter" },
 };
 
-/** Where an action opens: action mode, apart from the reel's details. */
-export function actionHref(saveId: string, deliver: Deliver): string {
-  return deliver === "keep" ? `/s/${saveId}` : `/a/${saveId}`;
+/** Where an action opens: action mode, apart from the reel's details. `go`: the tap asked for
+ *  the action itself (a "Build the itinerary" button), so paid work like prices or the trip
+ *  plan may start on arrival. Without it the page only shows what is already built. */
+export function actionHref(saveId: string, deliver: Deliver, go = false): string {
+  if (deliver === "keep") return `/s/${saveId}`;
+  return go && (deliver === "shop" || deliver === "itinerary") ? `/a/${saveId}?go=1` : `/a/${saveId}`;
 }
 
 export const KIND_ORDER: SaveType[] = ["recipe", "event", "place", "workout", "product", "tip", "other"];

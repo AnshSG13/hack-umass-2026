@@ -103,6 +103,16 @@ function ActionView({ id, data }: { id: string; data: SaveDetail }) {
   // Set by the last step's Done, so closing then stays on the page and the done state shows.
   const finishing = useRef(false);
   const [servings, setServings] = useState<number | null>(null);
+  // Prices and the itinerary are paid to build, so they start only when the tap that led here
+  // asked for them ("Build the itinerary", "Shop and compare": ?go=1), not on every visit
+  // (browser back, a done row, a typed link). Read once, then taken out of the address.
+  const [goNow] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("go") === "1");
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("go")) return;
+    url.searchParams.delete("go");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
 
   const fields = details.fields ?? {};
   const action = ticket.action!;
@@ -203,9 +213,11 @@ function ActionView({ id, data }: { id: string; data: SaveDetail }) {
           </>
         )}
 
-        {action.deliver === "shop" && <ShopResearch saveId={id} settled={!reading} go={1} />}
+        {action.deliver === "shop" && <ShopResearch saveId={id} settled={!reading} go={goNow ? 1 : 0} />}
 
-        {action.deliver === "itinerary" && <TripPlan saveId={id} type={ticket.type} settled={!reading} go={1} />}
+        {action.deliver === "itinerary" && (
+          <TripPlan saveId={id} type={ticket.type} settled={!reading} go={goNow ? 1 : 0} />
+        )}
 
         {action.deliver === "learn" && (
           <ReelSections saveId={id} fields={{ tip: fields.tip }} unverified={details.unverified ?? []} servings={null} onServings={() => {}} />

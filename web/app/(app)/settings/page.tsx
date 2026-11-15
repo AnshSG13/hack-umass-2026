@@ -30,6 +30,13 @@ function timezones(current: string): string[] {
   return Array.from(set).sort();
 }
 
+/** "America/New_York" reads "New York (America)": the city first, so it fits the row. */
+function zoneLabel(zone: string): string {
+  const parts = zone.split("/");
+  const city = parts[parts.length - 1].replace(/_/g, " ");
+  return parts.length > 1 ? `${city} (${parts[0].replace(/_/g, " ")})` : city;
+}
+
 function TimeField({
   label,
   value,
@@ -170,6 +177,12 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                // Leaving the field keeps the change, the same as Save or Enter.
+                onBlur={(e) => {
+                  const into = e.relatedTarget as HTMLElement | null;
+                  if (into?.classList.contains("set-save")) return; // Save is about to do it
+                  if (name.trim() !== (me.name ?? "") && !savingName) void saveName();
+                }}
               />
               <span className="set-sub">{me.email ?? (me.is_demo ? "Demo account" : "Signed in with a key")}</span>
             </span>
@@ -230,7 +243,7 @@ function SettingsForm({ me, onSaved }: { me: Me; onSaved: (next: Me) => void }) 
             >
               {zones.map((z) => (
                 <option key={z} value={z}>
-                  {z.replace(/_/g, " ")}
+                  {zoneLabel(z)}
                 </option>
               ))}
             </select>

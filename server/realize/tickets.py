@@ -68,8 +68,9 @@ def plan_view(plan: dict, user: dict, *, now: datetime | None = None) -> dict:
         "ics_url": actions.ics_url(plan) if has_cal else None,
         "reminders_preview": actions.reminders_preview(plan, user, now=now_u) if accepted else [],
         "share_url": f"/p/{plan['_id']}?t={plan['share_token']}",
-        "done_day": DAY_SHORT[as_utc(plan["updated_at"]).astimezone(tz).weekday()]
-        if status in ("done", "skipped") and plan.get("updated_at") else None,
+        # The same moment done_on uses (when it was marked done), so every screen names one day.
+        "done_day": DAY_SHORT[as_utc(plan.get("done_at") or plan["updated_at"]).astimezone(tz).weekday()]
+        if status in ("done", "skipped") and (plan.get("done_at") or plan.get("updated_at")) else None,
         "done_on": done_on(plan, tz, now_l) if status == "done" else None,
         "long_day": long_day(as_utc(plan["scheduled_for"]).astimezone(tz), now_l)
         if plan.get("scheduled_for") else None,

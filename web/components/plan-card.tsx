@@ -170,7 +170,7 @@ export function PlanCard({
               {d.button}
             </button>
           ) : (
-            <Link href={actionHref(t.save_id, action.deliver)} className={mainBtn}>
+            <Link href={actionHref(t.save_id, action.deliver, true)} className={mainBtn}>
               {d.button}
             </Link>
           )}
