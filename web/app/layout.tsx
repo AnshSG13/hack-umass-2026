@@ -7,6 +7,7 @@ import "./globals.css";
 import "./mock.css";
 import "./v2.css";
 import "./story.css";
+import "./folders.css";
 
 // The mockup's two faces: Hedvig Letters Serif for headings, Figtree for everything else.
 const hedvig = Hedvig_Letters_Serif({

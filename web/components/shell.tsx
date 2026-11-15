@@ -1,7 +1,7 @@
 "use client";
 
 // App shell, after the mockup: one phone-wide column, the floating bottom bar (Home, the
-// orb, Plans), the "Add a reel" sheet and the toast. It also holds what has to survive
+// orb, Folders), the "Add a reel" sheet and the toast. It also holds what has to survive
 // moving between screens: the Ask conversation, a question on its way to Ask, and the
 // saves just added (so Home can show them first, still processing).
 
@@ -177,7 +177,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setAddOpen(false);
       setFresh((list) => [{ save_id: r.save_id, ticket: r.ticket }, ...list.filter((f) => f.save_id !== r.save_id)]);
       refresh();
-      if (!pathname.startsWith("/home")) router.push("/home");
+      // Folders shows it first in its rail of recent saves; anywhere else goes Home.
+      if (!pathname.startsWith("/home") && !pathname.startsWith("/library")) router.push("/home");
     },
     [pathname, refresh, router],
   );
@@ -214,7 +215,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const plain = isPlain(pathname);
   const bare = isBare(pathname);
   const onHome = pathname.startsWith("/home");
-  const onPlans = pathname.startsWith("/plans");
+  // Folders is the saves themselves: the list, each folder's board and the map of links.
+  const onFolders = pathname.startsWith("/library") || pathname.startsWith("/t/") || pathname.startsWith("/graph");
 
   return (
     <AppContext.Provider value={app}>
@@ -251,9 +253,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onHeard={(text) => ask(text, true, true)}
               onProblem={(message) => toast.show(message)}
             />
-            <Link href="/plans" className="tab" aria-current={onPlans ? "page" : undefined}>
-              <Icon name="plans" />
-              Actions
+            <Link href="/library" className="tab" aria-current={onFolders ? "page" : undefined}>
+              <Icon name="folder" />
+              Folders
             </Link>
           </nav>
         )}

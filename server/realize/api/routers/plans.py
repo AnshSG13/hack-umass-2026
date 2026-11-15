@@ -7,7 +7,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
-from ... import actions, db, planops, tickets
+from ... import actions, db, planops, tickets, week
 from ...models import PlanStatusRequest
 from ...timeutil import as_utc, heading_day, month_day, now_utc, tz_of, week_bounds
 from ..deps import current_user
@@ -38,6 +38,13 @@ def _group_days(plans: list[dict], user: dict) -> list[dict]:
         days.setdefault(d, []).append(p)
     return [{"label": heading_day(d), "date": d.isoformat(),
              "items": _tickets_for_plans(items, user)} for d, items in days.items()]
+
+
+@router.get("/api/week")
+def this_week(user: dict = Depends(current_user)) -> dict:
+    """Home's week: seven days with their plan counts, free time with saves that fit it, and
+    one shopping list for the recipes planned this week. Computed in code."""
+    return week.build(user)
 
 
 @router.get("/api/plans")

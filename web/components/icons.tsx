@@ -5,7 +5,7 @@ export type IconName =
   | "search" | "plus" | "minus" | "home" | "plans" | "back" | "down" | "right" | "more" | "check" | "x"
   | "clock" | "users" | "level" | "out" | "ask" | "basket" | "spark" | "food" | "scent" | "travel"
   | "ball" | "fit" | "learn" | "tip" | "cal" | "user" | "pin" | "tag" | "trash" | "redo" | "send"
-  | "copy" | "share" | "paste" | "pen" | "alert" | "bookmark" | "skip" | "umbrella";
+  | "copy" | "share" | "paste" | "pen" | "alert" | "bookmark" | "skip" | "umbrella" | "folder";
 
 export function Sprite() {
   return (
@@ -51,6 +51,7 @@ export function Sprite() {
       <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></symbol>
       <symbol id="i-skip" viewBox="0 0 24 24"><path d="m5 4 10 8-10 8z" /><path d="M19 5v14" /></symbol>
       <symbol id="i-umbrella" viewBox="0 0 24 24"><path d="M22 12a10 10 0 0 0-20 0Z" /><path d="M12 12v8a2 2 0 0 0 4 0" /><path d="M12 2v1" /></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
     </svg>
   );
 }

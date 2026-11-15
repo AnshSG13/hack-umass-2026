@@ -1,0 +1,32 @@
+/* ---------- Folders (/library): the browsing tab ---------- */
+
+/* The section buttons here are taps on a phone: 44 px, not the 36 px pill of the mockup. */
+.folders .add {
+  height: 44px;
+  padding: 0 16px 0 12px;
+}
+
+/* "See how they connect": a quiet link under the folders grid. */
+.folders-connect {
+  margin-top: 8px;
+  margin-left: -12px;
+  color: var(--ink-2);
+}
+
+/* ?type=...: the search is narrowed to one folder. */
+.folders-scope {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.folders-scope .text-btn {
+  margin-right: -12px;
+}
+
+.folders-results {
+  margin-top: 8px;
+}

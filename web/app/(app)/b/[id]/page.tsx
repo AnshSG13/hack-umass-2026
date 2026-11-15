@@ -183,8 +183,8 @@ export default function BundlePage() {
         <div className="msg" role="alert">
           <p>{missing ? "That plan isn't here any more." : "This plan didn't load. Check your connection."}</p>
           {missing ? (
-            <Link href="/plans" className="btn">
-              See what&apos;s ready
+            <Link href="/home" className="btn">
+              Back to Home
             </Link>
           ) : (
             <button type="button" className="btn" onClick={() => void mutate()}>
