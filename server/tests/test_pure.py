@@ -410,6 +410,19 @@ def test_rate_limit_window():
     assert ratelimit.allow("users", "1.2.3.4", now=100.0 + 3601)
 
 
+def test_demo_limit_follows_the_setting(monkeypatch):
+    from realize import config
+
+    class S:
+        demo_sessions_per_hour = 3
+
+    monkeypatch.setattr(config, "get_settings", lambda: S())
+    ratelimit.reset()
+    assert all(ratelimit.allow("demo", "9.9.9.9", now=100.0 + i) for i in range(3))
+    assert not ratelimit.allow("demo", "9.9.9.9", now=104.0)
+    assert ratelimit.allow("demo", "8.8.8.8", now=104.0)  # someone else on another address
+
+
 def test_snippet_picks_the_matching_sentence():
     save = {"summary": "A creamy dessert. It uses Greek yogurt instead of mascarpone.",
             "transcript_text": "Dip the ladyfingers in espresso.", "on_screen_text": ["1 cup Greek yogurt"]}

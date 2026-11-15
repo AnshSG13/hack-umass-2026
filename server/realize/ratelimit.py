@@ -15,15 +15,23 @@ LIMITS = {
     "trip": (6, 600),          # per key: each build is two model calls and a few searches
     "judge_save": (30, 3600),  # per judge key
     "users": (5, 3600),        # per IP
-    "demo": (10, 3600),        # per IP
+    "demo": (10, 3600),        # per IP; the count comes from DEMO_SESSIONS_PER_HOUR (see _limit)
     "login": (20, 600),        # per IP
     "login_email": (10, 600),  # per email
     "suggest": (20, 600),      # per key, onboarding interest suggestions
 }
 
 
-def allow(bucket: str, ident: str, *, now: float | None = None) -> bool:
+def _limit(bucket: str) -> tuple[int, int]:
     limit, window = LIMITS[bucket]
+    if bucket == "demo":
+        from .config import get_settings  # late: tests swap settings
+        limit = max(1, get_settings().demo_sessions_per_hour)
+    return limit, window
+
+
+def allow(bucket: str, ident: str, *, now: float | None = None) -> bool:
+    limit, window = _limit(bucket)
     t = time.monotonic() if now is None else now
     key = f"{bucket}:{ident}"
     with _lock:
