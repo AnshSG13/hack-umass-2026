@@ -178,11 +178,22 @@ def check_env() -> dict[str, str]:
 
 
 def health(domain: str) -> dict | None:
+    contexts = [None]
     try:
-        with urllib.request.urlopen(f"https://{domain}/api/health", timeout=10) as resp:
-            return json.loads(resp.read())
-    except Exception:  # noqa: BLE001
-        return None
+        # Python on Windows can carry a stale root store that rejects newer
+        # Let's Encrypt chains that browsers accept; certifi's bundle doesn't.
+        import ssl
+        import certifi
+        contexts.append(ssl.create_default_context(cafile=certifi.where()))
+    except ImportError:
+        pass
+    for ctx in contexts:
+        try:
+            with urllib.request.urlopen(f"https://{domain}/api/health", timeout=10, context=ctx) as resp:
+                return json.loads(resp.read())
+        except Exception:  # noqa: BLE001
+            continue
+    return None
 
 
 def cmd_deploy(args: argparse.Namespace) -> None:
