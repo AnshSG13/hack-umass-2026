@@ -16,7 +16,7 @@ import { useMediaQuery } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
 import type { GraphNode, KnowledgeGraph } from "@/lib/types";
 
-const GraphCanvas = dynamic(() => import("@/components/graph-canvas"), {
+const GraphCanvas = dynamic(() => import("@/components/graph-canvas-3d"), {
   ssr: false,
   loading: () => <div className="kg-canvas kg-loading" aria-hidden="true" />,
 });
@@ -50,9 +50,9 @@ export default function GraphPage() {
   const head = (
     <header className="page-head with-back">
       <div className="block-head" style={{ minHeight: 44 }}>
-        <Link href="/library" className="back-pill">
+        <Link href="/collection" className="back-pill">
           <Icon name="back" />
-          Folders
+          My collection
         </Link>
       </div>
       <h1 className="page-title" style={{ marginTop: 10 }}>
@@ -241,7 +241,7 @@ export default function GraphPage() {
         {sel ? (
           details(sel)
         ) : (
-          data && <p className="kg-hint">Tap a circle to see what&apos;s in it and what it connects to.</p>
+          data && <p className="kg-hint">Drag to turn it, pinch to zoom, tap a sphere to see what it connects to.</p>
         )}
 
         {data && (related.length > 0 || likes.size > 0) && (
