@@ -243,7 +243,10 @@ def cmd_deploy(args: argparse.Namespace) -> None:
             print("note: set INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt in .env to use the cookies")
 
     print("Building and starting containers (the first build takes a few minutes)...")
-    ssh(target, f"cd {REMOTE_DIR} && docker compose up -d --build --remove-orphans && docker image prune -f")
+    # The upload replaces Caddyfile with a new file, but a running container keeps the
+    # old one bind-mounted; recreating caddy makes it read the new one.
+    ssh(target, f"cd {REMOTE_DIR} && docker compose up -d --build --remove-orphans && "
+                "docker compose up -d --force-recreate --no-deps caddy && docker image prune -f")
 
     if args.init:
         print("Creating Atlas indexes...")
