@@ -11,6 +11,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      story:
+        description: "Also build the demo story's ready answers (about 6 Gemini calls)"
+        type: boolean
+        default: false
 
 concurrency:
   group: vultr-deploy
@@ -40,4 +45,5 @@ jobs:
         env:
           REALIZE_SSH_KEY: /home/runner/.ssh/realize_deploy
           VULTR_HOST: ${{ secrets.VULTR_HOST }}
-        run: python3 -u deploy/vultr.py deploy --host "$VULTR_HOST" --keep-remote-env
+          STORY: ${{ inputs.story && '--story' || '' }}
+        run: python3 -u deploy/vultr.py deploy --host "$VULTR_HOST" --keep-remote-env $STORY
