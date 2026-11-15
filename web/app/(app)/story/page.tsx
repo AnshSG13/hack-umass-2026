@@ -89,7 +89,7 @@ function ProblemBeat({ dir, thumbs, onNext }: { dir: number; thumbs: string[]; o
   return (
     <Page beat="problem" dir={dir}>
       <div className="story-body">
-        {/* A loose pile of this library's own reels, soft behind the line. */}
+        {/* A fanned pile of this library's own reels, like prints on a table, behind the line. */}
         <div className="story-pile" aria-hidden="true">
           {Array.from({ length: PILE }, (_, i) => {
             const off = i - (PILE - 1) / 2;
@@ -97,7 +97,6 @@ function ProblemBeat({ dir, thumbs, onNext }: { dir: number; thumbs: string[]; o
               "--x": off.toFixed(2),
               "--y": Math.abs(off).toFixed(2),
               "--r": `${(off * 4.5).toFixed(1)}deg`,
-              filter: `blur(${(1.2 + Math.abs(off) * 0.7).toFixed(1)}px)`,
               zIndex: 10 - Math.round(Math.abs(off) * 2),
             } as CSSProperties;
             const src = thumbs[i];
@@ -155,6 +154,21 @@ function ReelFace({
             <span className="story-frame-ph" style={tint("peach")} aria-hidden="true">
               <Icon name="food" />
             </span>
+          )}
+          {/* The creator's credit, the way a reel shows it: a quiet chip that opens the original. */}
+          {recipe.url && (
+            <a
+              className="story-src"
+              href={recipe.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Watch the original reel${recipe.creator ? ` by ${recipe.creator}` : ""} on Instagram`}
+            >
+              <span className="story-src-pill">
+                {recipe.creator ?? "Watch the reel"}
+                <Icon name="out" />
+              </span>
+            </a>
           )}
         </div>
         {steps && (
@@ -215,7 +229,20 @@ function PlanFace({ ticket, fresh }: { ticket: Ticket; fresh: boolean }) {
           </span>
           <span className="story-plan-reel-text">
             <span className="story-plan-reel-title">{ticketTitle(ticket)}</span>
-            {ticket.creator && <span className="story-plan-reel-by">{ticket.creator}</span>}
+            {ticket.url ? (
+              <a
+                className="story-plan-reel-by is-link"
+                href={ticket.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Watch the original reel${ticket.creator ? ` by ${ticket.creator}` : ""} on Instagram`}
+              >
+                {ticket.creator ?? "Watch the reel"}
+                <Icon name="out" />
+              </a>
+            ) : (
+              ticket.creator && <span className="story-plan-reel-by">{ticket.creator}</span>
+            )}
           </span>
         </div>
         <p className="plan-label">
