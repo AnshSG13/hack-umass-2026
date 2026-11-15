@@ -1,21 +1,20 @@
 "use client";
 
-// Every action (reached from "See all" on Ready for you; no longer a tab): what is ready for
-// you (plans built from several saves, one tap to start), what is waiting on you (plan cards
-// with the same controls as the Reel page), what is coming up by day, what is done, and
-// what is later.
+// Every action (reached from "See all" on Ready for you; no longer a tab): the same set as
+// Home's Ready for you (one per actionable reel, plus comparisons; never just-vibes reels),
+// then what is coming up by day, what was started, what is done, and what is later.
 
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { BundleCard, BundleRow, useBundles } from "@/components/bundle-card";
+import { ActionTile, BundleRow, ReadyTile, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { SaveRow } from "@/components/save-row";
 import { useApp } from "@/components/shell";
-import { api, fetcher } from "@/lib/api";
+import { fetcher } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
-import type { Bundle, PlansResponse } from "@/lib/types";
+import type { PlansResponse } from "@/lib/types";
 
 function DayList({ days, headingLevel }: { days: PlansResponse["days"]; headingLevel: "h2" | "h3" }) {
   const Heading = headingLevel;
@@ -103,23 +102,11 @@ export default function PlansPage() {
   }
 
   const ready = bundles.data?.ready ?? [];
+  const actions = bundles.data?.actions ?? [];
   const started = bundles.data?.started ?? [];
 
-  // "Not now": it leaves at once and stays away until the saves in it change.
-  async function dismiss(b: Bundle) {
-    void bundles.mutate(
-      (cur) => (cur ? { ...cur, ready: cur.ready.filter((x) => x.id !== b.id) } : cur),
-      { revalidate: false },
-    );
-    try {
-      await api<{ ok: boolean }>(`/api/bundles/${b.id}/dismiss`, { method: "POST" });
-    } catch {
-      void bundles.mutate();
-    }
-  }
-
   const empty =
-    data.waiting.length === 0 &&
+    actions.length === 0 &&
     data.days.length === 0 &&
     data.done.length === 0 &&
     data.later_count === 0 &&
@@ -149,40 +136,24 @@ export default function PlansPage() {
     );
   }
 
-  const hasWaiting = data.waiting.length > 0;
 
   return (
     <div className="gutter">
       {header}
 
-      {ready.length > 0 && (
+      {ready.length + actions.length > 0 && (
         <section className="blk" aria-labelledby="ready-h">
           <div className="block-head">
             <h2 id="ready-h" className="block-title">
               Ready for you
-              <span className="pill">{ready.length}</span>
             </h2>
           </div>
-          <p className="blk-sub">Built from what you saved, ready to go.</p>
-          <div className="stack-col">
+          <div className="agrid">
             {ready.map((b) => (
-              <BundleCard key={b.id} bundle={b} onDismiss={dismiss} />
+              <ReadyTile key={b.id} bundle={b} />
             ))}
-          </div>
-        </section>
-      )}
-
-      {hasWaiting && (
-        <section className="blk" aria-labelledby="waiting-h">
-          <div className="block-head">
-            <h2 id="waiting-h" className="block-title">
-              Waiting on you
-              <span className="pill">{data.waiting.length}</span>
-            </h2>
-          </div>
-          <div className="stack-col">
-            {data.waiting.map((t) => (
-              <PlanCard key={t.save_id} ticket={t} withReel />
+            {actions.map((a) => (
+              <ActionTile key={a.save_id} item={a} />
             ))}
           </div>
         </section>

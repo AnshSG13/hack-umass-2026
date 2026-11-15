@@ -33,7 +33,7 @@ export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: 
   itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary", color: "sky" },
   calendar: { label: "Calendar", icon: "cal", button: "Add to calendar", color: "butter" },
   workout: { label: "Gym routine", icon: "fit", button: "Start the workout", color: "mint" },
-  learn: { label: "Key points", icon: "learn", button: "See the key points", color: "lavender" },
+  learn: { label: "Key points", icon: "learn", button: "Explore", color: "lavender" },
   keep: { label: "Saved", icon: "bookmark", button: "", color: "butter" },
 };
 

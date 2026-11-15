@@ -2575,40 +2575,49 @@ article.panel {
   height: 14px;
 }
 
-/* ---------- Home rails: four at a time, two on top and two underneath, sliding a page of
-   four (with a sliver of the next page showing) ---------- */
-.rail-2x2 {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(2, auto);
-  grid-auto-columns: calc((100% - 12px - 26px) / 2);
-  gap: 14px 12px;
-  scroll-snap-type: x mandatory;
+/* ---------- Home rails ----------
+   Recently saved: one row, three at a time, sliding. Ready for you: one row, two passes at a
+   time (bigger, with bigger prints), sliding. All actions: the same passes, two per row. */
+.rail-3 {
+  gap: 10px;
 }
-.rail-2x2 > * {
-  scroll-snap-align: none;
+.rail-3 .tile {
+  width: calc((100% - 20px - 28px) / 3);
+  gap: 8px;
 }
-.rail-2x2 > :nth-child(4n + 1) {
-  scroll-snap-align: start;
+.rail-3 .tile-media {
+  border-radius: 16px;
 }
-.rail-2x2 .tile {
-  width: auto;
-  min-width: 0;
+.rail-3 .tile-title {
+  font-size: 13px;
 }
-.rail-2x2 .tile-media {
-  aspect-ratio: 4 / 5;
+.rail-3 .tile-meta {
+  overflow: hidden;
 }
-.rail-2x2 .acard {
-  width: auto;
+.rail-3 .tile-when {
+  display: none;
+}
+.rail-2up .acard,
+.agrid .acard {
+  width: calc((100% - 12px) / 2);
   min-width: 0;
   padding: 12px 12px 10px;
   border-radius: 22px;
 }
-.rail-2x2 .acard-top {
-  min-height: 46px;
+.agrid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.agrid .acard {
+  width: auto;
+}
+:is(.rail-2up, .agrid) .acard-top {
+  min-height: 70px;
   gap: 6px;
 }
-.rail-2x2 .acard-chip {
+:is(.rail-2up, .agrid) .acard-chip {
   min-width: 0;
   height: 26px;
   padding: 0 9px 0 7px;
@@ -2617,42 +2626,44 @@ article.panel {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rail-2x2 .acard-chip .i {
+:is(.rail-2up, .agrid) .acard-chip .i {
   flex: none;
   width: 13px;
   height: 13px;
 }
-.rail-2x2 .acard-prints {
-  padding-left: 12px;
+:is(.rail-2up, .agrid) .acard-prints {
+  padding-left: 0;
+  margin: -2px -2px 0 0;
 }
-.rail-2x2 .acard-prints img {
-  width: 30px;
-  height: 40px;
-  margin-left: -12px;
-  border-radius: 8px;
+:is(.rail-2up, .agrid) .acard-prints img {
+  width: 52px;
+  height: 70px;
+  margin-left: 0;
+  border-radius: 12px;
+  transform: rotate(4deg);
 }
-/* Two prints at most in the narrow pass */
-.rail-2x2 .acard-prints img:nth-child(3) {
+/* One print in a two-up pass, so the bigger print and the taste tag both fit */
+:is(.rail-2up, .agrid) .acard-prints img:not(:first-child) {
   display: none;
 }
-.rail-2x2 .acard-cta {
+:is(.rail-2up, .agrid) .acard-cta {
   margin-top: 8px;
-  font-size: 17px;
+  font-size: 18px;
 }
-.rail-2x2 .acard-meta {
+:is(.rail-2up, .agrid) .acard-meta {
   margin-bottom: 10px;
   font-size: 12px;
 }
-.rail-2x2 .acard-go {
-  height: 36px;
+:is(.rail-2up, .agrid) .acard-go {
+  height: 38px;
   gap: 3px;
-  padding: 0 6px 0 10px;
-  font-size: 12px;
+  padding: 0 8px 0 12px;
+  font-size: 12.5px;
 }
-.rail-2x2 .acard-go .i {
+:is(.rail-2up, .agrid) .acard-go .i {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 .acard-go-text {
   min-width: 0;
