@@ -79,6 +79,8 @@ ANSWER_SCHEMA: dict = {
     "required": ["text", "at_sec", "from_reel", "needs_web"],
 }
 
+CITE_MARK = re.compile(r"\s*\[\d+(?:\s*[,–-]\s*\d+)*\]")
+
 WEB_PROMPT = """You are Ask, inside Realize, talking with someone about one reel they saved.
 Today is {today_local} ({timezone}). They asked something the reel doesn't answer, so search
 the web for it.
@@ -268,7 +270,9 @@ def web_answer(user: dict, save: dict, plan: dict | None, text: str, query: str,
     with run.step("web_search", {"query": query[:200]}) as h:
         raw, sources = websearch.grounded(system, f"{text}\n\n(Search for: {query[:200]})")
         h["result"] = {"sources": len(sources)}
-    body = clean_answer(raw)
+    # The reel chat shows its sources as "Found online" chips, not a numbered list, so the
+    # [1, 2] markers the search adds would point at nothing.
+    body = clean_answer(CITE_MARK.sub("", raw))
     if not body or not sources:
         return None
     return {"text": body, "at_sec": None, "from_reel": False, "web": True, "sources": sources,

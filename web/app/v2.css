@@ -4086,3 +4086,27 @@ article.panel {
   border: 2px solid var(--focus);
   animation: new-pulse 1.8s ease-out infinite;
 }
+
+/* Reel chat: where a web answer was found, shaped like "Said at 0:12" but blue */
+.web-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.web-chip {
+  max-width: 100%;
+  background: var(--sky);
+  color: var(--sky-ink);
+  text-decoration: none;
+}
+.web-chip .i {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+.web-chip:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.web-chip:nth-child(3) {
+  animation-delay: 0.12s;
+}

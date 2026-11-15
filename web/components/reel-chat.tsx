@@ -134,6 +134,15 @@ interface Pending {
   error: string | null;
 }
 
+/** "budgetbytes.com" from a page address, for the source chip. */
+function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "the web";
+  }
+}
+
 function Answer({
   message,
   live,
@@ -167,21 +176,22 @@ function Answer({
       )}
       {settled && message.web && message.macros && <Macros macros={message.macros} />}
       {settled && message.web && (message.sources?.length ?? 0) > 0 && (
-        <div className="web-sources">
-          <p className="web-label">
-            <Icon name="search" />
-            From the web. The reel doesn&apos;t say.
-          </p>
-          <ol>
-            {message.sources!.map((s) => (
-              <li key={s.n}>
-                <a href={s.url} target="_blank" rel="noopener noreferrer">
-                  <span className="web-n">{s.n}</span>
-                  {s.title || new URL(s.url).hostname}
-                </a>
-              </li>
-            ))}
-          </ol>
+        // Where it was found, in the same shape as "Said at 0:12" but blue: one tap opens the page.
+        <div className="web-chips">
+          {message.sources!.slice(0, 3).map((s) => (
+            <a
+              key={s.n}
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="at-chip web-chip"
+              aria-label={`Found online at ${siteOf(s.url)}. Opens the page.`}
+            >
+              <Icon name="search" />
+              Found online · {siteOf(s.url)}
+              <Icon name="out" />
+            </a>
+          ))}
         </div>
       )}
       {settled && message.from_reel === false && !message.web && <p className="answer-note">Not from the reel.</p>}

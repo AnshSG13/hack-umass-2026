@@ -383,3 +383,10 @@ Checked on the branch's own servers (API 8010, web 3010, worktree on branch home
 - **The first Ask question after the demo's Start over failed** ("That chat isn't here any more"): the old session's chat id outlived the key. The shell now clears the Ask chat whenever the key changes. Checked live on a fresh demo session.
 
 `pytest`: 173 passed.
+
+## 2026-11-15: pull to refresh, the map in 3D, new reels, web answers in the reel chat
+
+- **Pull to refresh** is a small copy of the orb in a pill: a ring fills as you pull, the arrow turns when letting go will refresh, the colours swirl while it loads, then a check and "Up to date". The page follows the finger with a rubber band, and the pill is rendered on body because the moving page would otherwise carry a position: fixed element with it.
+- **How your saves connect in 3D**, at the owner's request (drag to turn, pinch to zoom). New dependency: `react-force-graph-3d` 1.29.2, the 3D sibling of the listed `react-force-graph-2d` at the same version, which brings three.js (0.187.0); `@types/three` 0.187.0 for the types. Loaded only on /graph. Orbit controls; it turns slowly by itself once settled until the first touch; no WebGL falls back to the flat map. Measured on the demo library: draws with WebGL in headless Chromium at 390 px with no page errors.
+- **New reels stand out in My collection**: a line under the title says how many are new since the last look and in which tastes, and each taste with new reels gets an "N new" pill with a breathing dot and a glow in its colour. The "Every save" link reads "Your saves".
+- **The reel chat looks things up when the reel doesn't say.** Before, an answer from general knowledge stopped at "the reel doesn't say". Now an answer the model marks as not from the reel (and not small talk, three words or more) is searched on the web about this reel, and the sources show as blue "Found online · site" chips in the same shape as "Said at 0:12". Checked live: "What wine goes well with this dish?" on the chicken au poivre came back with three sourced chips and two next questions.
