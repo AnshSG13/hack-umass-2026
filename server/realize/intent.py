@@ -34,7 +34,7 @@ WORDS: dict[str, dict[str, str]] = {
     "learn": {"cta": "Try this today", "pitch": "The key points and one thing to try"},
     # Vibes are never a reminder or a calendar entry: the reel just comes back on Home now and
     # then, with a line like "Remember this puppy growing up".
-    "keep": {"cta": "Remember this one", "pitch": "It'll pop up on Home again now and then"},
+    "keep": {"cta": "Remember this one", "pitch": ""},
 }
 
 # Which types each delivery can serve. A pick outside this falls back to the type's default.
@@ -93,7 +93,7 @@ def clean(raw: dict | None, kind: str, *, is_dated: bool) -> dict:
         "deliver": deliver,
         "need": need or DEFAULT_NEED.get(kind, ""),
         "cta": _text(raw.get("cta"), CTA_MAX) or WORDS[deliver]["cta"],
-        "pitch": _text(raw.get("pitch"), PITCH_MAX) or WORDS[deliver]["pitch"],
+        "pitch": "" if deliver == "keep" else (_text(raw.get("pitch"), PITCH_MAX) or WORDS[deliver]["pitch"]),
         # A time is offered only when the reel is tied to one, or the model says the thing
         # itself is best done at a set time (a long weekend cook, a class).
         "schedule": deliver == "calendar" or (bool(raw.get("schedule")) and kind in ("recipe", "workout", "place")),
@@ -112,4 +112,7 @@ def view(plan: dict | None, save: dict) -> dict | None:
     # another type since).
     ok = isinstance(stored, dict) and fits(str(stored.get("deliver")), kind, is_dated=is_dated)
     a = stored if ok else default_for(kind, is_dated=is_dated)
-    return {k: a.get(k) for k in ("deliver", "need", "cta", "pitch", "schedule")}
+    out = {k: a.get(k) for k in ("deliver", "need", "cta", "pitch", "schedule")}
+    if out["deliver"] == "keep":
+        out["pitch"] = ""   # vibes get one line, nothing under it
+    return out

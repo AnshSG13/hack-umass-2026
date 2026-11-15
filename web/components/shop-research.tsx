@@ -163,7 +163,7 @@ export function ShopResearch({ saveId, settled, go = 0 }: { saveId: string; sett
             </>
           )}
           <p className="nut-note">
-            Checked {shop.checked_on}. Prices change; the store&apos;s page has the current one.
+            Checked {shop.checked_on}. Prices marked out of stock are left out, but stock and prices change. Check the store&apos;s page before you buy.
             {shop.dropped > 0 ? ` ${plural(shop.dropped, "price", "prices")} ${shop.dropped === 1 ? "was" : "were"} left out: no readable price, or a coupon site or one that looked unsafe.` : ""}
           </p>
         </>

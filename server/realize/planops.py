@@ -188,19 +188,34 @@ def unconfirm(plan: dict) -> tuple[dict, str]:
 
 
 def set_status(plan: dict, status: str) -> dict:
-    """accepted → done | skipped; done | skipped → accepted (undo)."""
+    """accepted → done | skipped; proposed → done (an action finished without a set time:
+    cooked, bought, planned); done | skipped → back where it was (undo, asked for as
+    "accepted": a plan with a time goes back to accepted, one without goes back to proposed)."""
     cur = plan["status"]
+    if status == "accepted" and cur in ("done", "skipped") and not plan.get("scheduled_for"):
+        status = "proposed"
     allowed = (cur == "accepted" and status in ("done", "skipped")) or (
-        cur in ("done", "skipped") and status == "accepted")
+        cur == "proposed" and status == "done") or (
+        cur in ("done", "skipped") and status in ("accepted", "proposed"))
     if cur == status:
         return plan
     if not allowed:
         raise PlanError("This plan can't change to that right now.")
-    return db.plans().find_one_and_update(
+    now = now_utc()
+    fields: dict = {"status": status, "updated_at": now}
+    if status == "done":
+        fields.update(done_at=now, intent=None)
+    elif cur == "done":
+        fields["done_at"] = None
+    plan = db.plans().find_one_and_update(
         {"_id": plan["_id"]},
-        {"$set": {"status": status, "updated_at": now_utc()},
-         "$push": {"history": _hist(cur, status)}},
+        {"$set": fields, "$push": {"history": _hist(cur, status)}},
         return_document=ReturnDocument.AFTER)
+    if status == "done":
+        db.saves().update_one({"_id": plan["save_id"]}, {"$set": {"intent": "yes"}})
+    elif status == "proposed":
+        db.saves().update_one({"_id": plan["save_id"]}, {"$set": {"intent": None}})
+    return plan
 
 
 def replan_code(save: dict, plan: dict, user: dict, *, reserved: list[dict] | None = None) -> dict:

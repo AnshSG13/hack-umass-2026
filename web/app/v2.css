@@ -1911,7 +1911,7 @@
 .cook-btns {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 .cook-btns .btn-primary {
@@ -2223,229 +2223,6 @@
 }
 .offer-label + .offers.best {
   margin-top: 8px;
-}
-
-/* ---------- Home: Ready for you, a gallery of photo tiles ---------- */
-/* The reels are the tile: no tinted bubble, so it reads apart from the taste tiles below. */
-.rail-gallery {
-  gap: 10px;
-  scroll-snap-type: x mandatory;
-}
-.rtile {
-  width: 148px;
-  flex: none;
-  scroll-snap-align: start;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  color: var(--ink);
-  transition: transform 0.2s var(--ease);
-}
-.rtile:active {
-  transform: scale(0.97);
-}
-.rtile:focus-visible {
-  outline: none;
-}
-.rtile:focus-visible .rtile-media {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-.rtile-media {
-  position: relative;
-  height: 184px;
-  border-radius: 18px;
-  overflow: hidden;
-  display: grid;
-  gap: 2px;
-  background: var(--surface);
-}
-.rtile-media.n2 {
-  grid-template-rows: 1fr 1fr;
-}
-.rtile-media.n3 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 3fr 2fr;
-}
-.rtile-media.n3 img:first-child {
-  grid-column: 1 / -1;
-}
-.rtile-media img {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  object-fit: cover;
-  transition: transform 0.6s var(--ease);
-}
-@media (hover: hover) {
-  .rtile:hover .rtile-media img {
-    transform: scale(1.03);
-  }
-}
-.rtile-empty {
-  display: grid;
-  place-items: center;
-  background: var(--p, var(--surface));
-  color: var(--d, var(--ink-3));
-}
-.rtile-empty .i {
-  width: 32px;
-  height: 32px;
-}
-/* a soft fade at the foot so the label sits on any photo */
-.rtile-media::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 44%;
-  background: linear-gradient(to top, rgba(20, 21, 26, 0.38), rgba(20, 21, 26, 0));
-  pointer-events: none;
-}
-.rtile-kind {
-  position: absolute;
-  z-index: 1;
-  left: 8px;
-  bottom: 8px;
-  max-width: calc(100% - 16px);
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 9px 0 7px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
-  color: var(--d, var(--ink-2));
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  box-shadow: 0 4px 10px -4px rgba(30, 31, 36, 0.35);
-}
-.rtile-kind .i {
-  width: 14px;
-  height: 14px;
-}
-.rtile-title {
-  margin-top: 9px;
-  font-family: var(--display);
-  font-size: 16.5px;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.rtile-meta {
-  margin-top: 3px;
-  font-size: 13px;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ---------- Home: Recommended actions ---------- */
-/* One grouped list, not a row of chips: each row says what Ask will do and for which taste. */
-.recs {
-  margin-top: 12px;
-  border-radius: 22px;
-  background: var(--surface);
-  padding: 4px;
-}
-.rec {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 72px;
-  padding: 12px 12px 12px 12px;
-  border-radius: 18px;
-  text-align: left;
-  color: var(--ink);
-  transition: background 0.2s, transform 0.2s var(--ease);
-}
-.recs li + li .rec {
-  position: relative;
-}
-.recs li + li .rec::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 70px;
-  right: 12px;
-  height: 1px;
-  background: var(--line);
-}
-@media (hover: hover) {
-  .rec:hover {
-    background: #ffffff;
-  }
-}
-.rec:active {
-  transform: scale(0.985);
-}
-.rec-ico {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: var(--p);
-  color: var(--d);
-}
-.rec-ico .i {
-  width: 21px;
-  height: 21px;
-}
-.rec-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rec-title {
-  font-size: 15.5px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.rec-detail {
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--ink-3);
-}
-.rec-go {
-  flex: none;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--ink);
-  color: #ffffff;
-  transition: transform 0.25s var(--ease);
-}
-.rec-go .i {
-  width: 17px;
-  height: 17px;
-  stroke-width: 2.2;
-}
-@media (hover: hover) {
-  .rec:hover .rec-go {
-    transform: translateX(2px);
-  }
-}
-.recs-note {
-  margin-top: 10px;
-  padding: 0 4px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--ink-3);
 }
 
 /* ---------- The action: what the person wants from the reel, delivered ---------- */
@@ -3011,4 +2788,1101 @@
   min-height: 44px;
   font-size: 14.5px;
   font-weight: 600;
+}
+
+/* ---------- Home: Ready for you, as action passes ---------- */
+/* Not photo tiles (that is Recently saved): a pastel pass per action, the reel as a small
+   print in the corner, the call to action, and a button-like bar that says what tapping does. */
+.rail-gallery {
+  gap: 12px;
+  scroll-snap-type: x mandatory;
+  padding-top: 6px;
+}
+.acard {
+  position: relative;
+  width: 200px;
+  flex: none;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 14px 12px;
+  border-radius: 24px;
+  background: var(--p);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(30, 31, 36, 0.04);
+  transition: transform 0.2s var(--ease), box-shadow 0.25s var(--ease);
+}
+.acard:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) {
+  .acard:hover {
+    box-shadow: inset 0 0 0 1px rgba(30, 31, 36, 0.04), 0 14px 28px -18px rgba(30, 31, 36, 0.45);
+  }
+  .acard:hover .acard-go .i {
+    transform: translateX(3px);
+  }
+}
+.acard-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 52px;
+}
+.acard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--d);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.acard-chip .i {
+  width: 15px;
+  height: 15px;
+}
+/* the reel(s) as small prints pinned to the corner */
+.acard-prints {
+  display: inline-flex;
+  flex: none;
+  margin: -4px -2px 0 0;
+  padding-left: 16px;
+}
+.acard-prints img {
+  width: 42px;
+  height: 56px;
+  margin-left: -16px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #ffffff;
+  box-shadow: 0 0 0 2.5px #ffffff, 0 8px 14px -8px rgba(30, 31, 36, 0.5);
+  transform: rotate(5deg);
+}
+.acard-prints.n2 img:first-child,
+.acard-prints.n3 img:first-child {
+  transform: rotate(-6deg) translateY(3px);
+}
+.acard-prints.n3 img:nth-child(2) {
+  transform: rotate(0deg) translateY(-2px);
+}
+.acard-cta {
+  margin-top: 10px;
+  font-family: var(--display);
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.acard-meta {
+  margin-top: 4px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.acard-go {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px 0 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.acard-go .i {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.2;
+  transition: transform 0.25s var(--ease);
+}
+.acard:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* ---------- Action mode: the action on its own screen ---------- */
+.act-page {
+  padding-bottom: 40px;
+}
+.act-head {
+  position: relative;
+  padding-top: max(16px, env(safe-area-inset-top, 0px));
+  padding-bottom: 22px;
+  background: var(--p, var(--surface));
+  border-radius: 0 0 30px 30px;
+}
+.act-head .round.back {
+  position: static;
+}
+.act-kind {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--d, var(--ink-2));
+  font-size: 13px;
+  font-weight: 700;
+}
+.act-kind .i {
+  width: 16px;
+  height: 16px;
+}
+.act-title {
+  margin-top: 12px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.act-pitch {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 40ch;
+}
+.act-reel {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+}
+.act-reel img {
+  width: 40px;
+  height: 52px;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.act-reel-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.act-reel-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.act-reel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--d, var(--ink-2));
+}
+.act-reel-link .i {
+  width: 14px;
+  height: 14px;
+}
+.act-body {
+  padding-top: 18px;
+}
+.act-body > .plan:first-child,
+.act-body > .sec:first-child,
+.act-body > .trip:first-child {
+  margin-top: 0;
+}
+.act-go {
+  height: 54px;
+  font-size: 15.5px;
+}
+
+/* ---------- Pastel, after the orb: Ask about this and the nutrition panel ---------- */
+.btn.btn-glow {
+  color: var(--ink);
+  background: linear-gradient(105deg, #ffd8c6 0%, #e6dcff 34%, #d4e9ff 66%, #d6f3e3 100%);
+  background-size: 180% 100%;
+  box-shadow: 0 10px 22px -14px rgba(110, 92, 230, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+.btn.btn-glow:hover {
+  background: linear-gradient(105deg, #ffd8c6 0%, #e6dcff 34%, #d4e9ff 66%, #d6f3e3 100%);
+  background-size: 180% 100%;
+  filter: saturate(1.15);
+}
+.btn.btn-glow .i {
+  color: var(--lavender-ink);
+}
+.nut {
+  background: linear-gradient(140deg, #fff0e7 0%, #f1ecff 45%, #e7f3ff 75%, #e8f8ef 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+/* the macro bar in the orb's pastels, with a hairline so each part reads on the pale panel */
+.nut .m-p {
+  background: #8ec5ff;
+}
+.nut .m-c {
+  background: #ffd36e;
+}
+.nut .m-f {
+  background: #ff9fbd;
+}
+.nut .macro-bar span,
+.nut .macro-key i {
+  box-shadow: inset 0 0 0 1px rgba(30, 31, 36, 0.08);
+}
+
+/* ---------- Reel page: Open original up top, AI insights floating ---------- */
+.hero-open {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top, 0px));
+  right: calc(var(--gutter-r) + 52px);
+  height: 44px;
+  padding: 0 14px 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px -6px rgba(30, 31, 36, 0.45);
+  transition: transform 0.2s var(--ease);
+}
+.hero-open .i {
+  width: 16px;
+  height: 16px;
+}
+.hero-open:active {
+  transform: scale(0.96);
+}
+/* Fixed at the lower right of the app column, above the tab bar. */
+.ai-fab {
+  position: fixed;
+  z-index: 41;
+  bottom: calc(14px + 66px + 14px + var(--safe-b));
+  right: max(var(--gutter-r), calc((100vw - 440px) / 2 + var(--gutter-r)));
+  height: 54px;
+  padding: 0 18px 0 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 650;
+  background: linear-gradient(120deg, #ffd8c6 0%, #e6dcff 38%, #d4e9ff 70%, #d6f3e3 100%);
+  background-size: 200% 100%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7) inset, 0 14px 28px -12px rgba(110, 92, 230, 0.6);
+  animation: glow-drift 9s ease-in-out infinite alternate;
+  transition: transform 0.2s var(--ease);
+}
+.ai-fab .i {
+  width: 21px;
+  height: 21px;
+  color: var(--lavender-ink);
+}
+.ai-fab:active {
+  transform: scale(0.95);
+}
+.ai-fab:disabled {
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-fab {
+    animation: none;
+  }
+}
+
+/* ---------- Action mode: share and export ---------- */
+.act-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.act-head .round.act-share {
+  position: static;
+}
+.opt-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 0;
+}
+.opt-text .opt-name {
+  flex: none;
+}
+.opt-note {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Save as PDF: the action and its content, without the app's chrome. */
+@media print {
+  .bar,
+  .ai-fab,
+  .round,
+  .act-reel-link,
+  .act-go,
+  .plan-btns,
+  .plan-row,
+  .trip-foot,
+  .sec-head .add,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  .act-head {
+    border-radius: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .app {
+    max-width: none;
+  }
+  body {
+    background: #ffffff;
+  }
+}
+
+/* ---------- Home: filter Ready for you by taste ---------- */
+.rfilter {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px var(--gutter-r) 4px var(--gutter-l);
+}
+.rfilter::-webkit-scrollbar {
+  display: none;
+}
+.rchip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.2s var(--ease);
+}
+.rchip.is-all {
+  padding-left: 14px;
+}
+.rchip .i {
+  width: 16px;
+  height: 16px;
+  color: var(--d, var(--ink-3));
+}
+.rchip b {
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.rchip:active {
+  transform: scale(0.96);
+}
+.rchip[aria-pressed="true"] {
+  background: var(--p, var(--ink));
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 0.5px var(--ink);
+}
+.rchip.is-all[aria-pressed="true"] {
+  background: var(--ink);
+  color: #ffffff;
+}
+.rchip.is-all[aria-pressed="true"] b {
+  color: rgba(255, 255, 255, 0.7);
+}
+.rchip[aria-pressed="true"]:not(.is-all) b {
+  color: var(--d);
+}
+.rfilter + .vh + .rail-gallery .acard {
+  animation: pass-in 0.4s var(--ease) both;
+}
+.rfilter + .vh + .rail-gallery .acard:nth-child(2) {
+  animation-delay: 40ms;
+}
+.rfilter + .vh + .rail-gallery .acard:nth-child(3) {
+  animation-delay: 80ms;
+}
+@keyframes pass-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rfilter + .vh + .rail-gallery .acard {
+    animation: none;
+  }
+}
+
+/* ---------- Settings: the essentials, in grouped rows ---------- */
+.set {
+  padding-top: 26px;
+  padding-bottom: 40px;
+}
+.set-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+}
+.set-demo {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: var(--butter);
+  color: var(--butter-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+.set-group {
+  margin-top: 26px;
+}
+.set-head {
+  padding: 0 4px 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.set-card {
+  border-radius: 22px;
+  background: var(--surface);
+  padding: 0 16px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 0;
+}
+.set-card > * + *,
+.set-card .set-more-body,
+.set-more[open] > .set-more-body {
+  border-top: 1px solid var(--line);
+}
+.set-row.is-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.set-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.set-sub {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.set-profile {
+  gap: 12px;
+}
+.set-avatar {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--lavender);
+  color: var(--lavender-ink);
+  font-weight: 700;
+  font-size: 17px;
+}
+.set-profile-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.set-name {
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  border-radius: 6px;
+}
+.set-name::placeholder {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.set-name:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.set-save {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.set-stepper {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 44px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.set-stepper button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+.set-stepper button:disabled {
+  color: #bdbab3;
+}
+.set-stepper svg {
+  width: 16px;
+  height: 16px;
+}
+.set-stepper output {
+  min-width: 24px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.set-times {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.set-times input,
+.set-select,
+.set-input {
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 0 12px;
+  font-size: 16px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.set-times input {
+  width: 128px;
+}
+.set-select {
+  max-width: 55%;
+  min-width: 0;
+}
+.set-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.set-more > summary::-webkit-details-marker {
+  display: none;
+}
+.set-chev svg {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-3);
+  transition: transform 0.3s var(--ease);
+}
+.set-more[open] .set-chev svg {
+  transform: rotate(180deg);
+}
+.set-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0 16px;
+}
+.set-card.set-more {
+  padding: 0 16px;
+}
+.set-key {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--bg);
+}
+.set-key-text {
+  font-size: 15px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.set-field-label {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.set-input {
+  width: 100%;
+}
+.set-signout {
+  margin-top: 28px;
+  width: 100%;
+  height: 52px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--rose-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+/* room under the reel page's last section for the floating AI insights button */
+article.panel {
+  padding-bottom: 76px;
+}
+
+/* ---------- Ready for you filter: one line if it can be ----------
+   The row tries each size in turn (home/page.tsx measures it) and only wraps when even the
+   tight one doesn't fit. */
+.rfilter {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.rfilter[data-fit="snug"] {
+  gap: 6px;
+}
+.rfilter[data-fit="snug"] .rchip {
+  height: 34px;
+  padding: 0 11px 0 9px;
+  gap: 5px;
+  font-size: 13px;
+}
+.rfilter[data-fit="snug"] .rchip.is-all {
+  padding-left: 11px;
+}
+.rfilter[data-fit="snug"] .rchip .i {
+  width: 15px;
+  height: 15px;
+}
+.rfilter[data-fit="tight"] {
+  gap: 5px;
+}
+.rfilter[data-fit="tight"] .rchip {
+  height: 32px;
+  padding: 0 9px 0 7px;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.rfilter[data-fit="tight"] .rchip.is-all {
+  padding-left: 9px;
+}
+.rfilter[data-fit="tight"] .rchip .i {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Home rails: four at a time, two on top and two underneath, sliding a page of
+   four (with a sliver of the next page showing) ---------- */
+.rail-2x2 {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-columns: calc((100% - 12px - 26px) / 2);
+  gap: 14px 12px;
+  scroll-snap-type: x mandatory;
+}
+.rail-2x2 > * {
+  scroll-snap-align: none;
+}
+.rail-2x2 > :nth-child(4n + 1) {
+  scroll-snap-align: start;
+}
+.rail-2x2 .tile {
+  width: auto;
+  min-width: 0;
+}
+.rail-2x2 .tile-media {
+  aspect-ratio: 4 / 5;
+}
+.rail-2x2 .acard {
+  width: auto;
+  min-width: 0;
+  padding: 12px 12px 10px;
+  border-radius: 22px;
+}
+.rail-2x2 .acard-top {
+  min-height: 46px;
+  gap: 6px;
+}
+.rail-2x2 .acard-chip {
+  min-width: 0;
+  height: 26px;
+  padding: 0 9px 0 7px;
+  gap: 4px;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail-2x2 .acard-chip .i {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+.rail-2x2 .acard-prints {
+  padding-left: 12px;
+}
+.rail-2x2 .acard-prints img {
+  width: 30px;
+  height: 40px;
+  margin-left: -12px;
+  border-radius: 8px;
+}
+/* Two prints at most in the narrow pass */
+.rail-2x2 .acard-prints img:nth-child(3) {
+  display: none;
+}
+.rail-2x2 .acard-cta {
+  margin-top: 8px;
+  font-size: 17px;
+}
+.rail-2x2 .acard-meta {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.rail-2x2 .acard-go {
+  height: 36px;
+  gap: 3px;
+  padding: 0 6px 0 10px;
+  font-size: 12px;
+}
+.rail-2x2 .acard-go .i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.acard-go-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- My collection tastes: the original tiles with bigger prints that never cover
+   the icon. Sized from the tile's own width. ---------- */
+.taste {
+  container-type: inline-size;
+}
+/* small tiles: the icon on top, the prints on their own row under it, then the name */
+.taste-top {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.taste-top > .i {
+  flex: none;
+}
+.taste .stack {
+  align-self: stretch;
+  justify-content: flex-end;
+  padding: 0 3px;
+}
+.taste .stack img {
+  width: min(58px, calc((100cqi - 6px + 24px) / 3));
+  height: auto;
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
+  margin-left: 0;
+}
+.taste .stack img + img {
+  margin-left: -12px;
+}
+/* the wide tile: the fan beside the name; a long name sends the fan above it, never over it */
+.taste-wide .taste-row {
+  flex-wrap: wrap-reverse;
+  align-items: flex-start;
+  row-gap: 14px;
+}
+.taste-wide .taste-text {
+  flex: 1 0 auto;
+  max-width: 100%;
+}
+.taste-wide .fan {
+  margin-left: auto;
+}
+.taste-wide .fan img {
+  width: 76px;
+  height: 100px;
+  margin-left: -20px;
+}
+.taste-wide .fan {
+  padding-left: 20px;
+}
+
+/* ---------- Task completion: action mode's done bar, the done chip ---------- */
+.act-chips {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.act-chips .act-kind {
+  margin-top: 0;
+}
+.act-kind.is-done {
+  background: var(--mint-ink);
+  color: #ffffff;
+}
+.donebar {
+  margin-top: 30px;
+}
+.donebar-btn {
+  height: 54px;
+  border-color: transparent;
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+.donebar-btn:hover {
+  background: #c9edd8;
+}
+.donebar-done {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 6px 12px 12px;
+  border-radius: 22px;
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+.donebar-check {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mint-ink);
+  color: #ffffff;
+  animation: done-pop 0.45s var(--ease) both;
+}
+.donebar-check .i {
+  width: 19px;
+  height: 19px;
+  stroke-width: 2.6;
+}
+@keyframes done-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+.donebar-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.donebar-text b {
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.donebar-text span {
+  font-size: 13px;
+  font-weight: 500;
+}
+.donebar-done .text-btn {
+  color: var(--mint-ink);
+}
+
+/* ---------- Home: Completed ---------- */
+.done-list {
+  margin-top: 8px;
+}
+.done-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  border-radius: 14px;
+}
+.done-list li + li .done-row {
+  border-top: 1px solid var(--line);
+}
+.done-thumb {
+  position: relative;
+  width: 46px;
+  height: 58px;
+  flex: none;
+  border-radius: 14px;
+  background: var(--p, var(--surface));
+}
+.done-thumb img {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  object-fit: cover;
+}
+.done-tick {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mint);
+  color: var(--mint-ink);
+  box-shadow: 0 0 0 2.5px #ffffff;
+}
+.done-tick .i {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+}
+.done-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.done-what {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.done-meta {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.done-more {
+  margin-top: 2px;
+  margin-left: -12px;
+}
+.done-more[aria-expanded="true"] .i {
+  transform: rotate(180deg);
+}
+.done-empty {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.done-empty .i {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--mint-ink);
+}
+
+/* A saved reel whose action is done */
+.tile-done {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--mint-ink);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px -2px rgba(30, 31, 36, 0.25);
+}
+.tile-done .i {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .donebar-check {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Settings rows that go somewhere: the whole row is the link */
+.set-link {
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.set-link:active .set-label {
+  opacity: 0.7;
+}
+.set-link-chev {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--ink-3);
 }

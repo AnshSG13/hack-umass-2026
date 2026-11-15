@@ -27,19 +27,19 @@ export const KINDS: Record<SaveType, Kind> = {
 };
 
 /** What each way of delivering an action is called on a tile, and its main button. */
-export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: string }> = {
-  cook: { label: "Cook mode", icon: "food", button: "Start cooking" },
-  shop: { label: "Prices", icon: "tag", button: "Check prices" },
-  itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary" },
-  calendar: { label: "Calendar", icon: "cal", button: "Add to calendar" },
-  workout: { label: "Workout", icon: "fit", button: "Start the workout" },
-  learn: { label: "Key points", icon: "learn", button: "See the key points" },
-  keep: { label: "Saved", icon: "bookmark", button: "" },
+export const DELIVERY: Record<Deliver, { label: string; icon: IconName; button: string; color: KindColor }> = {
+  cook: { label: "Cook mode", icon: "food", button: "Cook now", color: "peach" },
+  shop: { label: "Prices", icon: "tag", button: "Check prices", color: "rose" },
+  itinerary: { label: "Itinerary", icon: "travel", button: "Build the itinerary", color: "sky" },
+  calendar: { label: "Calendar", icon: "cal", button: "Add to calendar", color: "butter" },
+  workout: { label: "Gym routine", icon: "fit", button: "Start the workout", color: "mint" },
+  learn: { label: "Key points", icon: "learn", button: "See the key points", color: "lavender" },
+  keep: { label: "Saved", icon: "bookmark", button: "", color: "butter" },
 };
 
-/** Where an action opens: the reel's page, told what to do on arrival. */
+/** Where an action opens: action mode, apart from the reel's details. */
 export function actionHref(saveId: string, deliver: Deliver): string {
-  return `/s/${saveId}?do=${deliver}`;
+  return deliver === "keep" ? `/s/${saveId}` : `/a/${saveId}`;
 }
 
 export const KIND_ORDER: SaveType[] = ["recipe", "event", "place", "workout", "product", "tip", "other"];

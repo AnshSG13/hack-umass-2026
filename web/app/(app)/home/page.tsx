@@ -1,41 +1,147 @@
 "use client";
 
-// Home is for doing: what's due, your week, what's waiting on you, and what to buy.
-// Browsing what you've saved lives in Folders (/library).
+// Home: the greeting, what is ready for you (each opens its action), the rail of recent
+// saves, and what you've completed. Tastes, search and "Remember this" are in My collection.
+// Everything on it comes from the API.
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { useNow } from "@/components/bits";
-import { BundleCard, BundleRow, useBundles } from "@/components/bundle-card";
+import { ActionTile, ReadyTile, useBundles } from "@/components/bundle-card";
+import { Completed } from "@/components/done";
 import { Icon } from "@/components/icons";
-import { PlanCard } from "@/components/plan-card";
-import { DayList, MissedGroup } from "@/components/plans-parts";
 import { PullToRefresh } from "@/components/pull-refresh";
-import { LiveReelTile } from "@/components/reel-tile";
-import { SaveRow } from "@/components/save-row";
+import { LiveReelTile, ReelTile, TilePlaceholder } from "@/components/reel-tile";
 import { useApp } from "@/components/shell";
-import { DayPanel, PLANS_KEY, ShoppingList, useWeek, WeekStrip } from "@/components/week";
-import { api, fetcher } from "@/lib/api";
-import { greeting } from "@/lib/format";
+import { fetcher } from "@/lib/api";
+import { greeting, inFlight, plural } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
 import { STORY_REPLAY_HREF, useStorySeen } from "@/lib/story";
-import type { Bundle, PlansResponse } from "@/lib/types";
+import { KIND_ORDER, KINDS, tint } from "@/lib/kinds";
+import type { SaveType, SavesPage, TastesResponse } from "@/lib/types";
+
+/** "4 workouts", "3 recipes" -> "You have 4 new workouts and 3 recipes". */
+function newThings(parts: string[]): string {
+  const [first, ...rest] = parts;
+  const lead = first.replace(/^(\d+) /, "$1 new ");
+  const all = [lead, ...rest];
+  return all.length === 1 ? all[0] : `${all.slice(0, -1).join(", ")} and ${all[all.length - 1]}`;
+}
+
+/** Ready for you, filtered by taste: one chip per taste with actions ready, plus All. */
+function ReadyFilter({
+  counts,
+  value,
+  onChange,
+}: {
+  counts: Map<SaveType, number>;
+  value: SaveType | null;
+  onChange: (t: SaveType | null) => void;
+}) {
+  const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
+  const kinds = KIND_ORDER.filter((k) => counts.has(k));
+  // One line if it can be: the chips get smaller step by step until they fit, and only wrap
+  // when even the smallest don't. Measured, so it holds for any labels and screen width.
+  const row = useRef<HTMLDivElement>(null);
+  const signature = kinds.map((k) => `${k}${counts.get(k)}`).join(",");
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const fit = () => {
+      const oneLine = () => {
+        const chips = el.children;
+        return chips.length < 2 || (chips[chips.length - 1] as HTMLElement).offsetTop === (chips[0] as HTMLElement).offsetTop;
+      };
+      for (const size of ["roomy", "snug", "tight"]) {
+        el.dataset.fit = size;
+        if (oneLine()) return;
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [signature]);
+  return (
+    <div className="rfilter" role="group" aria-label="Show actions for" ref={row} data-fit="roomy">
+      <button type="button" className="rchip is-all" aria-pressed={value === null} onClick={() => onChange(null)}>
+        All <b>{total}</b>
+      </button>
+      {kinds.map((k) => (
+        <button
+          key={k}
+          type="button"
+          className="rchip"
+          style={tint(KINDS[k].color)}
+          aria-pressed={value === k}
+          onClick={() => onChange(value === k ? null : k)}
+        >
+          <Icon name={KINDS[k].icon} />
+          {KINDS[k].label} <b>{counts.get(k)}</b>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { openAdd, fresh } = useApp();
   const now = useNow();
   const { data: me } = useMe();
   const storySeen = useStorySeen();
-  const plans = useSWR<PlansResponse>(PLANS_KEY, fetcher);
-  const week = useWeek();
+  const tastes = useSWR<TastesResponse>("/api/tastes", fetcher);
+  const saves = useSWR<SavesPage>("/api/saves?limit=10", fetcher);
   const bundles = useBundles();
-  const [picked, setPicked] = useState<string | null>(null);
-  const [showLater, setShowLater] = useState(false);
-  const later = useSWR<PlansResponse>(showLater ? "/api/plans?range=upcoming" : null, fetcher);
+  
+  // A reel just added goes first in the rail: bring the rail and the page back to it.
+  const railRef = useRef<HTMLDivElement>(null);
+  const newest = fresh[0]?.save_id;
+  useEffect(() => {
+    if (!newest) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    railRef.current?.scrollTo({ left: 0, behavior });
+    window.scrollTo({ top: 0, behavior });
+  }, [newest]);
 
   const name = me?.name?.trim() ?? "";
-  const hello = name ? `${greeting(new Date(now).getHours())}, ${name}` : greeting(new Date(now).getHours());
+  const hour = new Date(now).getHours();
+  const hello = name ? `${greeting(hour)}, ${name}` : greeting(hour);
+
+  // "{total} saves across {n} tastes": from /api/tastes, or from the account's own counts
+  // while that hasn't answered.
+  const total = tastes.data?.total ?? me?.counts.saves;
+  const tasteCount =
+    tastes.data?.tastes.length ?? (me ? Object.values(me.counts.by_type).filter((n) => n > 0).length : undefined);
+
+  const freshIds = new Set(fresh.map((f) => f.save_id));
+  const listed = (saves.data?.items ?? []).filter((t) => !freshIds.has(t.save_id));
+  const loaded = saves.data !== undefined;
+  const isEmpty = loaded && listed.length === 0 && fresh.length === 0;
+  const readyList = bundles.data?.ready ?? [];
+  const readyActions = bundles.data?.actions ?? [];
+  const readyCount = readyList.length + readyActions.length;
+  // Filter by taste: counts per type across comparisons and single actions.
+  const [readyKind, setReadyKind] = useState<SaveType | null>(null);
+  const readyCounts = new Map<SaveType, number>();
+  for (const t of [...readyList.map((b) => b.type), ...readyActions.map((a) => a.type)]) {
+    readyCounts.set(t, (readyCounts.get(t) ?? 0) + 1);
+  }
+  const kindShown = readyKind && readyCounts.has(readyKind) ? readyKind : null;
+  const shownBundles = readyList.filter((b) => !kindShown || b.type === kindShown);
+  const shownActions = readyActions.filter((a) => !kindShown || a.type === kindShown);
+  const readyRail = useRef<HTMLDivElement>(null);
+  function pickKind(t: SaveType | null) {
+    setReadyKind(t);
+    readyRail.current?.scrollTo({ left: 0 });
+  }
+  const recap = tastes.data?.recap ?? null;
+  // Still being read right now: just added in this visit, or in the list and not done.
+  // The list is asked again when a new save finishes, so its status is the current one.
+  const statusOf = new Map((saves.data?.items ?? []).map((t) => [t.save_id, t.processing]));
+  const saving =
+    fresh.filter((f) => inFlight(statusOf.get(f.save_id) ?? f.ticket?.processing ?? "queued")).length +
+    listed.filter((t) => inFlight(t.processing)).length;
 
   // Pull down at the top: ask the server again for everything this screen shows.
   const { mutate } = useSWRConfig();
@@ -47,272 +153,133 @@ export default function HomePage() {
     [mutate],
   );
 
-  // "Not now" on a ready bundle: it leaves at once and stays away until its saves change.
-  async function dismiss(b: Bundle) {
-    void bundles.mutate((cur) => (cur ? { ...cur, ready: cur.ready.filter((x) => x.id !== b.id) } : cur), {
-      revalidate: false,
-    });
-    try {
-      await api<{ ok: boolean }>(`/api/bundles/${b.id}/dismiss`, { method: "POST" });
-    } catch {
-      void bundles.mutate();
-    }
-  }
-
-  const header = (
-    <header className="home-head">
-      <div style={{ minWidth: 0 }}>
-        <h1 className="greet">{hello}</h1>
-        {plans.data && <p className="greet-sub">This week, {plans.data.week_label}</p>}
-        {me?.is_demo && storySeen && (
-          <Link href={STORY_REPLAY_HREF} className="text-btn story-replay">
-            <Icon name="redo" />
-            Replay the story
-          </Link>
-        )}
-      </div>
-      <Link href="/settings" className="avatar" aria-label="Settings">
-        {name ? name[0].toUpperCase() : <Icon name="user" />}
-      </Link>
-    </header>
-  );
-
-  // Just added in this visit: its progress shows here until it's read.
-  const justSaved =
-    fresh.length > 0 ? (
-      <section className="blk" aria-labelledby="fresh-h">
-        <div className="gutter block-head">
-          <h2 className="block-title" id="fresh-h">
-            Just saved
-          </h2>
-        </div>
-        <div className="rail">
-          {fresh.map((f) => (
-            <LiveReelTile key={f.save_id} saveId={f.save_id} initial={f.ticket} now={now} />
-          ))}
-        </div>
-      </section>
-    ) : null;
-
-  const saveButton = (
-    <button type="button" className="btn btn-block home-save" onClick={openAdd}>
-      <Icon name="plus" />
-      Save a reel
-    </button>
-  );
-
-  if (plans.error && !plans.data) {
-    return (
-      <div className="gutter">
-        {header}
-        <div className="msg" role="alert">
-          <p>Your week didn&apos;t load. Check your connection.</p>
-          <button type="button" className="btn" onClick={() => void reload()}>
-            Try again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!plans.data || !week.data) {
-    return (
-      <div className="gutter">
-        {header}
-        <div className="stack-col" style={{ marginTop: 24 }} role="status">
-          <span className="vh">Loading your week</span>
-          <span className="skel" style={{ height: 64, borderRadius: 16, width: "100%" }} />
-          <span className="skel" style={{ height: 160, borderRadius: 24, width: "100%", marginTop: 0 }} />
-        </div>
-      </div>
-    );
-  }
-
-  const data = plans.data;
-  const wk = week.data;
-  const ready = bundles.data?.ready ?? [];
-  const started = bundles.data?.started ?? [];
-
-  // Nothing saved at all: one way forward.
-  if (me && me.counts.saves === 0 && fresh.length === 0) {
-    return (
-      <div className="gutter">
-        {header}
-        <div className="empty">
-          <h2 className="empty-title">Nothing saved yet</h2>
-          <p className="empty-text">Add a reel from Instagram and it comes back with a plan for your week.</p>
-          <button type="button" className="btn btn-primary" onClick={openAdd}>
-            <Icon name="plus" />
-            Add a reel
-          </button>
-          {me.is_demo && (
-            <p style={{ marginTop: 14, textAlign: "center" }}>
-              <Link href="/demo" className="link">
-                Try a sample reel
-              </Link>
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Plans whose time has passed ask "Did you do it?" first, whichever day they were on.
-  const allPlanned = data.days.flatMap((d) => d.items);
-  const checkins = allPlanned.filter((t) => t.plan?.followup_due);
-  const waiting = data.waiting.filter((t) => !t.plan?.missed);
-  const missed = data.waiting.filter((t) => t.plan?.missed);
-  const freeByDate = new Map(wk.free.map((f) => [f.date, f]));
-  const today = wk.days.find((d) => d.today) ?? wk.days[0];
-  const selected = wk.days.find((d) => d.date === picked) ?? today;
-  const dayItems = (data.days.find((d) => d.date === selected.date)?.items ?? []).filter(
-    (t) => !t.plan?.followup_due,
-  );
-
   return (
     <>
       <PullToRefresh onRefresh={reload} />
       <div className="gutter">
-        {header}
-        {saveButton}
+        <header className="home-head">
+          <div style={{ minWidth: 0 }}>
+            <h1 className="greet">{hello}</h1>
+            {recap ? (
+              recap.window === "new" ? (
+                <p className="greet-sub recap">
+                  You have <b>{newThings(recap.parts)}</b>
+                </p>
+              ) : (
+                <p className="greet-sub recap">
+                  This week: <b>{recap.text}</b>
+                </p>
+              )
+            ) : total !== undefined && tasteCount !== undefined && total > 0 && (
+              <p className="greet-sub">
+                {plural(total, "save", "saves")}
+                {/* A save that is still being read, or could not be, has no taste yet. */}
+                {tasteCount > 0 && ` across ${plural(tasteCount, "taste", "tastes")}`}
+              </p>
+            )}
+            {me?.is_demo && storySeen && (
+              <Link href={STORY_REPLAY_HREF} className="text-btn story-replay">
+                <Icon name="redo" />
+                Replay the story
+              </Link>
+            )}
+          </div>
+          <Link href="/settings" className="avatar" aria-label="Settings">
+            {name ? name[0].toUpperCase() : <Icon name="user" />}
+          </Link>
+        </header>
       </div>
 
-      {justSaved}
+      {readyCount > 0 && !isEmpty && (
+        <section className="blk" aria-labelledby="ready-h">
+          <div className="gutter block-head">
+            <h2 className="block-title" id="ready-h">
+              Ready for you
+              <span className="pill">{readyCount}</span>
+            </h2>
+            <Link href="/plans" className="see-all">
+              See all
+              <Icon name="right" />
+            </Link>
+          </div>
+          {readyCounts.size > 1 && <ReadyFilter counts={readyCounts} value={kindShown} onChange={pickKind} />}
+          <p className="vh" aria-live="polite">
+            {kindShown ? `Showing ${shownBundles.length + shownActions.length} ${KINDS[kindShown].label} actions` : ""}
+          </p>
+          <div className="rail rail-gallery rail-2x2" ref={readyRail} key={kindShown ?? "all"}>
+            {shownBundles.map((b) => (
+              <ReadyTile key={b.id} bundle={b} />
+            ))}
+            {shownActions.map((a) => (
+              <ActionTile key={a.save_id} item={a} />
+            ))}
+          </div>
+        </section>
+      )}
 
-      <div className="gutter">
-        {checkins.length > 0 && (
-          <section className="blk" aria-labelledby="check-h">
-            <div className="block-head">
-              <h2 id="check-h" className="block-title">
-                Did you do it?
-                <span className="pill">{checkins.length}</span>
-              </h2>
-            </div>
-            <div className="stack-col">
-              {checkins.map((t) => (
-                <PlanCard key={t.save_id} ticket={t} withReel />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="blk" aria-labelledby="week-h">
-          <div className="block-head">
-            <h2 id="week-h" className="block-title">
-              Your week
+      {isEmpty ? (
+        <div className="gutter">
+          <div className="empty">
+            <h2 className="empty-title">Nothing saved yet</h2>
+            <p className="empty-text">Add a reel from Instagram and it comes back with a plan.</p>
+            <button type="button" className="btn btn-primary" onClick={openAdd}>
+              <Icon name="plus" />
+              Add a reel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <section className="blk" aria-labelledby="recent-h">
+          <div className="gutter block-head">
+            <h2 className="block-title" id="recent-h">
+              Recently saved
+              {saving > 0 ? (
+                <span className="pill" style={tint("lavender")}>
+                  <span className="dot" aria-hidden="true" />
+                  {saving} saving
+                </span>
+              ) : (
+                fresh.length > 0 && (
+                  <span className="pill" style={tint("mint")}>
+                    {fresh.length} new
+                  </span>
+                )
+              )}
             </h2>
           </div>
-          <WeekStrip
-            days={wk.days}
-            selected={selected.date}
-            free={new Set(freeByDate.keys())}
-            onSelect={(d) => setPicked(d)}
-          />
-          <DayPanel
-            day={selected}
-            items={dayItems}
-            free={freeByDate.get(selected.date)}
-            nextFree={wk.free.find((f) => f.date > selected.date)}
-            onPick={(d) => setPicked(d)}
-          />
-        </section>
-
-        {waiting.length > 0 && (
-          <section className="blk" aria-labelledby="waiting-h">
-            <div className="block-head">
-              <h2 id="waiting-h" className="block-title">
-                Waiting on you
-                <span className="pill">{waiting.length}</span>
-              </h2>
-            </div>
-            <div className="stack-col">
-              {/* Only the first card gets the loud button, so one thing stands out. */}
-              {waiting.map((t, i) => (
-                <PlanCard key={t.save_id} ticket={t} withReel quietButton={i > 0} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {ready.length > 0 && (
-          <section className="blk" aria-labelledby="ready-h">
-            <div className="block-head">
-              <h2 id="ready-h" className="block-title">
-                Ready for you
-                <span className="pill">{ready.length}</span>
-              </h2>
-            </div>
-            <p className="blk-sub">Built from what you saved, ready to go.</p>
-            <div className="stack-col">
-              {ready.map((b) => (
-                <BundleCard key={b.id} bundle={b} onDismiss={dismiss} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {missed.length > 0 && <MissedGroup items={missed} />}
-
-        <ShoppingList week={wk} />
-
-        {started.length > 0 && (
-          <section className="blk" aria-labelledby="started-h">
-            <div className="block-head">
-              <h2 id="started-h" className="block-title">
-                Started
-              </h2>
-            </div>
-            <ul className="brows">
-              {started.map((b) => (
-                <li key={b.id}>
-                  <BundleRow bundle={b} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {data.done.length > 0 && (
-          <section className="blk" aria-labelledby="done-h">
-            <div className="block-head">
-              <h2 id="done-h" className="block-title">
-                Done this week
-              </h2>
-              <span className="block-note">{data.done.length}</span>
-            </div>
-            <ul className="rows">
-              {data.done.map((t) => (
-                <li key={t.save_id}>
-                  <SaveRow ticket={t} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {data.later_count > 0 && (
-          <section className="blk">
-            {!showLater ? (
-              <button type="button" className="btn btn-block" onClick={() => setShowLater(true)}>
-                After this week: {data.later_count} more
+          {saves.error && !loaded && fresh.length === 0 ? (
+            <div className="gutter msg" role="alert">
+              <p>Your saves didn&apos;t load. Check your connection.</p>
+              <button type="button" className="btn" onClick={() => void saves.mutate()}>
+                Try again
               </button>
-            ) : (
-              <>
-                <div className="block-head">
-                  <h2 className="block-title">After this week</h2>
-                </div>
-                {later.data ? (
-                  <DayList days={later.data.days} headingLevel="h3" />
-                ) : later.error ? (
-                  <p className="msg">Later plans didn&apos;t load. Check your connection.</p>
+            </div>
+          ) : (
+            <div className="rail rail-2x2" ref={railRef}>
+              {fresh.map((f) => (
+                <LiveReelTile key={f.save_id} saveId={f.save_id} initial={f.ticket} now={now} />
+              ))}
+              {!loaded && fresh.length === 0 && (
+                <>
+                  <TilePlaceholder />
+                  <TilePlaceholder />
+                  <TilePlaceholder />
+                  <TilePlaceholder />
+                </>
+              )}
+              {listed.map((t) =>
+                inFlight(t.processing) ? (
+                  <LiveReelTile key={t.save_id} saveId={t.save_id} initial={t} now={now} />
                 ) : (
-                  <p className="msg">Loading later plans</p>
-                )}
-              </>
-            )}
-          </section>
-        )}
-      </div>
+                  <ReelTile key={t.save_id} ticket={t} now={now} />
+                ),
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!isEmpty && loaded && <Completed />}
     </>
   );
 }

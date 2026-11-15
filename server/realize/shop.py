@@ -24,7 +24,8 @@ log = logging.getLogger("realize.shop")
 
 STALE_BUILD_S = 150
 MAX_PRODUCTS = 4
-MAX_OFFERS = 12
+MAX_PRICES = 4          # the lowest prices for what the reel shows, one per store
+MAX_ALTERNATIVES = 2    # cheaper picks for the same job
 
 # Stores and review sites a person would recognise. Matched on the end of the host name.
 STORES = {
@@ -75,6 +76,11 @@ def _matches(h: str, dom: str) -> bool:
     return h == dom or h.endswith("." + dom)
 
 
+# A price whose note says the item can't be bought now is dropped, whatever the price.
+UNAVAILABLE = re.compile(
+    r"out of stock|sold out|unavailable|not available|discontinued|pre-?order|back-?order|"
+    r"no longer (sold|available)|currently unavailable|waitlist", re.I)
+
 PRICE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)")
 
 RESEARCH_PROMPT = """Someone saved an Instagram reel about these products and wants to buy one at a good price.
@@ -86,8 +92,15 @@ A store does not need to be famous; it needs to be a real business selling the r
 coupon and deal sites, marketplaces of unknown third-party sellers, social posts, knockoffs and anything
 that looks unsafe. Prefer pages that show the price directly.
 
+Accuracy matters more than coverage:
+- Only report a price for the exact product (same model, size and version), not a similar one.
+- Only report it when the page shows the item in stock and available to buy now. Skip anything
+  marked out of stock, sold out, unavailable, discontinued, pre-order or back-order.
+- Skip prices that are only for a used, refurbished or open-box item unless you say so in the note.
+- If you are not sure a price is current, leave it out.
+
 Report short factual lines, one per price found, in this form:
-PRODUCT | STORE | PRICE | what is notable (sale, size, bundle, refurbished)
+PRODUCT | STORE | PRICE | what is notable (sale, size, bundle, refurbished, in stock)
 For each product, also report up to two cheaper alternatives that review sites recommend for the same
 use, in the same form, starting the note with "Alternative:".
 Only report prices the search results show. Write "not found" when you find none. No introduction."""
@@ -101,7 +114,7 @@ OFFER_SCHEMA: dict = {
                 "product": {"type": "string", "description": "As the reel names it, or the alternative's name"},
                 "store": {"type": "string"},
                 "price_text": {"type": "string", "description": "The price exactly as the notes give it, e.g. $49.99"},
-                "note": {"type": "string", "description": "At most 60 characters, or empty"},
+                "note": {"type": "string", "description": "At most 60 characters, or empty. Say \"out of stock\" when the notes say the item isn't available"},
                 "alternative": {"type": "boolean", "description": "true for a cheaper alternative, not the reel's product"},
                 "source": {"type": "integer", "description": "The [n] that backs this price, or 0"},
             },
@@ -178,6 +191,8 @@ def keep_offers(raw: list[dict], sources: list[dict], brands: list[str]) -> list
         price = parse_price(str(o.get("price_text") or ""))
         if not src or price is None:
             continue
+        if UNAVAILABLE.search(f'{o.get("note") or ""} {o.get("price_text") or ""}'):
+            continue
         got = source_of(src["url"], brands)
         if not got:
             continue
@@ -193,8 +208,22 @@ def keep_offers(raw: list[dict], sources: list[dict], brands: list[str]) -> list
         out.append({"product": product, "store": store, "price": price, "price_text": f"${price:,.2f}".replace(".00", ""),
                     "note": " ".join(str(o.get("note") or "").replace("Alternative:", "").split())[:70],
                     "alternative": bool(o.get("alternative")), "url": src["url"], "via": via})
-    out.sort(key=lambda x: (x["alternative"], x["product"].lower(), x["price"]))
-    return out[:MAX_OFFERS]
+    return top_offers(out)
+
+
+def top_offers(offers: list[dict]) -> list[dict]:
+    """The lowest MAX_PRICES prices, one per store, then up to MAX_ALTERNATIVES alternatives
+    (one per product). Everything else is left out so the list stays short."""
+    main, alts, stores, alt_names = [], [], set(), set()
+    for o in sorted(offers, key=lambda x: x["price"]):
+        if o["alternative"]:
+            if o["product"].lower() not in alt_names and len(alts) < MAX_ALTERNATIVES:
+                alt_names.add(o["product"].lower())
+                alts.append(o)
+        elif o["store"].lower() not in stores and len(main) < MAX_PRICES:
+            stores.add(o["store"].lower())
+            main.append(o)
+    return main + alts
 
 
 def best_by_product(offers: list[dict]) -> list[dict]:
@@ -249,7 +278,8 @@ def build(save_id, user_id: str) -> None:
             role="fast", schema=OFFER_SCHEMA, timeout_s=40,
             system=("You turn price research notes into a list. Copy prices exactly as the notes give them. "
                     "Put the [n] number that backs each price in source; 0 when no number backs it. "
-                    "Never estimate a price. Plain words, no em dashes."),
+                    "Never estimate a price. If the notes say an item is out of stock, sold out, discontinued "
+                    "or pre-order, write that in its note. Plain words, no em dashes."),
             input=f"PRODUCTS:\n{lines}\n\nNOTES:\n{notes}\n\nSOURCES:\n" +
                   "\n".join(f"[{s['n']}] {s['title']} {s['url']}" for s in sources))
         offers = keep_offers(raw.get("offers") or [], sources, brands)
@@ -272,7 +302,7 @@ def view(save: dict, user: dict) -> dict | None:
     status = s.get("status")
     if status == "building" and not building(save):
         status = "failed"
-    offers = s.get("offers") or []
+    offers = top_offers(s.get("offers") or [])   # older results kept more; show the same short list
     when = month_day(as_utc(s["done_at"]).astimezone(tz_of(user))) if s.get("done_at") else None
     return {"status": status, "offers": offers, "best": best_by_product(offers),
             "alternatives": [o for o in offers if o["alternative"]],

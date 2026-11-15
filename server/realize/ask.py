@@ -362,46 +362,4 @@ def chips(user: dict) -> list[str]:
     return out[:4]
 
 
-# Home's "Recommended actions": what Ask will do, said plainly, one per kind the user has
-# enough of. Built from counts, no LLM. Each carries the question it hands to Ask.
-ACTION_RECIPES: dict[str, dict] = {
-    "recipe": {"min": 2, "verb": "Cook", "title": "Pick something to cook tonight",
-               "one": "", "many": "Picks one of your {n} recipes for tonight",
-               "question": "What should I cook tonight from my saved recipes?"},
-    "workout": {"min": 2, "verb": "Train", "title": "Pick a workout for today",
-                "one": "", "many": "Picks one of your {n} saved workouts",
-                "question": "Which of my saved workouts should I do today?"},
-    "place": {"min": 1, "verb": "Go", "title": "Pick a place to go",
-              "one": "Brings back the spot you saved",
-              "many": "Chooses from {n} spots you saved",
-              "question": "Where should I go from the places I saved?"},
-    "event": {"min": 1, "verb": "See", "title": "See what's coming up",
-              "one": "Checks the date on the event you saved",
-              "many": "Checks the dates on {n} saved events",
-              "question": "Which of my saved events are coming up?"},
-    "product": {"min": 2, "verb": "Compare", "title": "Decide what to buy",
-                "one": "", "many": "Puts your {n} saved products side by side",
-                "question": "Compare the products I saved"},
-    "tip": {"min": 2, "verb": "Try", "title": "Put a tip to use",
-            "one": "", "many": "Picks one of {n} tips to try today",
-            "question": "Pick one tip I saved to try today"},
-}
-
-
-def recommended(user: dict) -> list[dict]:
-    """Up to 4 actions, the kinds with the most saves first."""
-    counts = {t: db.saves().count_documents({"user_id": user["_id"], "type": t,
-                                             "status": {"$in": search.SEARCHABLE}})
-              for t in ACTION_RECIPES}
-    ranked = sorted((t for t, n in counts.items() if n >= ACTION_RECIPES[t]["min"]),
-                    key=lambda t: (-counts[t], list(ACTION_RECIPES).index(t)))
-    out = []
-    for t in ranked[:4]:
-        r = ACTION_RECIPES[t]
-        out.append({"type": t, "verb": r["verb"], "title": r["title"],
-                    "detail": (r["one"] if counts[t] == 1 else r["many"]).format(n=counts[t]),
-                    "question": r["question"]})
-    return out
-
-
-__all__ = ["stream", "chips", "recommended", "propose_plans", "STEP_LABELS"]
+__all__ = ["stream", "chips", "propose_plans", "STEP_LABELS"]

@@ -81,6 +81,22 @@ def list_plans(range: str = Query(default="week", pattern="^(week|upcoming)$"),
     }
 
 
+@router.get("/api/done")
+def list_done(limit: int = Query(default=20, ge=1, le=50), user: dict = Depends(current_user)) -> dict:
+    """Home's "Completed": actions marked done, newest first, with how many this week and
+    in all. Counted in code."""
+    uid = user["_id"]
+    tz = tz_of(user)
+    today, _ = week_bounds(now_utc().astimezone(tz))
+    start = today - timedelta(days=6)  # the last 7 days, today included
+    done = list(db.plans().find({"user_id": uid, "status": "done"})
+                .sort([("done_at", -1), ("updated_at", -1)]).limit(limit))
+    week = db.plans().count_documents({"user_id": uid, "status": "done", "$or": [
+        {"done_at": {"$gte": start}}, {"done_at": None, "updated_at": {"$gte": start}}]})
+    total = db.plans().count_documents({"user_id": uid, "status": "done"})
+    return {"items": _tickets_for_plans(done, user), "week": week, "total": total}
+
+
 def _status_message(status: str) -> str:
     return {"done": "Marked done.", "skipped": "Marked skipped.", "accepted": "Undone."}[status]
 
