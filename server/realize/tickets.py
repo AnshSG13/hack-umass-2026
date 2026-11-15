@@ -45,6 +45,8 @@ def plan_view(plan: dict, user: dict, *, now: datetime | None = None) -> dict:
         "scheduled_iso": as_utc(plan["scheduled_for"]).astimezone(tz).isoformat(timespec="seconds")
         if plan.get("scheduled_for") else None,
         "followup_due": bool(accepted and plan.get("ends_at") and now_u > as_utc(plan["ends_at"])),
+        # Waiting, but its dates are behind us (actions.is_missed): Actions lists it under Missed.
+        "missed": actions.is_missed(plan),
         "confirmed_via": plan.get("confirmed_via"),
         "gcal_url": actions.gcal_url(plan) if has_cal else None,
         "ics_url": actions.ics_url(plan) if has_cal else None,

@@ -38,15 +38,22 @@ function ReelLine({ ticket }: { ticket: Ticket }) {
   );
 }
 
+/** The web's words for an extra whose server label (shared with the Shortcut menu) says
+ *  less than it does. "Just vibes" declines the plan and keeps the reel in the library. */
+const EXTRA_LABEL: Record<string, string> = { "Just vibes": "Save without a plan" };
+
 export function PlanCard({
   ticket,
   withReel = false,
+  quietButton = false,
   onChange,
   onDo,
 }: {
   ticket: Ticket;
   /** Show the reel's thumbnail and title on top, linking to its page. */
   withReel?: boolean;
+  /** Draw the main button in the plain style, for a card that isn't first in a list. */
+  quietButton?: boolean;
   /** Called with the updated ticket after any change made here. */
   onChange?: (t: Ticket) => void;
   /** On the reel's own page: do the action here (open cook mode, run price research).
@@ -86,6 +93,7 @@ export function PlanCard({
   }
 
   const reel = withReel ? <ReelLine ticket={t} /> : null;
+  const mainBtn = quietButton ? "btn" : "btn btn-primary";
   const errorLine = actions.error ? (
     <p role="alert" className="plan-error">
       {actions.error}
@@ -147,15 +155,15 @@ export function PlanCard({
         )}
         <div className="plan-btns">
           {dated ? (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void pick(first.id)}>
+            <button type="button" className={mainBtn} disabled={busy} onClick={() => void pick(first.id)}>
               {first.web_label}
             </button>
           ) : onDo ? (
-            <button type="button" className="btn btn-primary" onClick={() => onDo(action.deliver)}>
+            <button type="button" className={mainBtn} onClick={() => onDo(action.deliver)}>
               {d.button}
             </button>
           ) : (
-            <Link href={actionHref(t.save_id, action.deliver)} className="btn btn-primary">
+            <Link href={actionHref(t.save_id, action.deliver)} className={mainBtn}>
               {d.button}
             </Link>
           )}
@@ -174,7 +182,7 @@ export function PlanCard({
               disabled={busy}
               onClick={() => void actions.confirm(x.label)}
             >
-              {x.label}
+              {EXTRA_LABEL[x.label] ?? x.label}
             </button>
           ))}
         </div>
@@ -199,7 +207,7 @@ export function PlanCard({
         </p>
         {plan.why && <p className="plan-why">{plan.why}</p>}
         <div className="plan-btns">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void pick(first.id)}>
+          <button type="button" className={mainBtn} disabled={busy} onClick={() => void pick(first.id)}>
             {first.web_label}
           </button>
           {second && (
@@ -220,7 +228,7 @@ export function PlanCard({
               disabled={busy}
               onClick={() => void actions.confirm(x.label)}
             >
-              {x.label}
+              {EXTRA_LABEL[x.label] ?? x.label}
             </button>
           ))}
         </div>
@@ -257,7 +265,7 @@ export function PlanCard({
         {plan.why && <p className="plan-why">{plan.why}</p>}
         <div className="plan-btns">
           {first && (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void pick(first.id)}>
+            <button type="button" className={mainBtn} disabled={busy} onClick={() => void pick(first.id)}>
               {first.web_label}
             </button>
           )}

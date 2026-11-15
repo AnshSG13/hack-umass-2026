@@ -7,14 +7,78 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
+import { ReelThumb } from "@/components/bits";
 import { BundleCard, BundleRow, useBundles } from "@/components/bundle-card";
 import { Icon } from "@/components/icons";
 import { PlanCard } from "@/components/plan-card";
 import { SaveRow } from "@/components/save-row";
 import { useApp } from "@/components/shell";
 import { api, fetcher } from "@/lib/api";
+import { ticketTitle } from "@/lib/format";
 import { useMe } from "@/lib/hooks";
-import type { Bundle, PlansResponse } from "@/lib/types";
+import { useTicketActions } from "@/lib/ticket-actions";
+import type { Bundle, PlansResponse, Ticket } from "@/lib/types";
+
+/** A waiting event whose dates have passed: one compact line that still opens the reel,
+ *  and the card's own way out ("Just save": no plan, the reel stays in the library). */
+function MissedRow({ ticket }: { ticket: Ticket }) {
+  const [gone, setGone] = useState(false);
+  const actions = useTicketActions(ticket, { apply: () => undefined });
+  const clear = ticket.plan?.extras.find((x) => x.id === "none");
+  const when = (ticket.plan?.why ?? "").replace(/\s*It's passed\.$/, "");
+  if (gone) return null;
+  return (
+    <li className="missed-row">
+      <Link href={`/s/${ticket.save_id}`} className="row">
+        <ReelThumb thumbUrl={ticket.thumb_url} type={ticket.type} small />
+        <span className="row-main">
+          <span className="row-title">{ticketTitle(ticket)}</span>
+          {when && <span className="row-meta">{when}</span>}
+        </span>
+      </Link>
+      {clear && (
+        <button
+          type="button"
+          className="text-btn"
+          disabled={actions.busy !== null}
+          aria-label={`Clear ${ticketTitle(ticket)}, keep it in your library`}
+          onClick={async () => {
+            if ((await actions.confirm(clear.label)) !== null) setGone(true);
+          }}
+        >
+          Clear
+        </button>
+      )}
+    </li>
+  );
+}
+
+function MissedGroup({ items }: { items: Ticket[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="blk missed" aria-label="Missed">
+      <button
+        type="button"
+        className="missed-toggle"
+        aria-expanded={open}
+        aria-controls="missed-list"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>Missed</span>
+        <span className="missed-count">{items.length}</span>
+        <span className="missed-hint">{items.length === 1 ? "Its date has passed" : "Their dates have passed"}</span>
+        <Icon name="down" />
+      </button>
+      {open && (
+        <ul id="missed-list" className="rows">
+          {items.map((t) => (
+            <MissedRow key={t.save_id} ticket={t} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 function DayList({ days, headingLevel }: { days: PlansResponse["days"]; headingLevel: "h2" | "h3" }) {
   const Heading = headingLevel;
@@ -142,7 +206,10 @@ export default function PlansPage() {
     );
   }
 
-  const hasWaiting = data.waiting.length > 0;
+  // An event whose dates have passed has nothing left to plan: it sits under Missed.
+  const waiting = data.waiting.filter((t) => !t.plan?.missed);
+  const missed = data.waiting.filter((t) => t.plan?.missed);
+  const hasWaiting = waiting.length > 0;
 
   return (
     <div className="gutter">
@@ -170,7 +237,7 @@ export default function PlansPage() {
           <div className="block-head">
             <h2 id="waiting-h" className="block-title">
               Waiting on you
-              <span className="pill">{data.waiting.length}</span>
+              <span className="pill">{waiting.length}</span>
             </h2>
             <button type="button" className="add" onClick={openAdd}>
               <Icon name="plus" />
@@ -178,12 +245,15 @@ export default function PlansPage() {
             </button>
           </div>
           <div className="stack-col">
-            {data.waiting.map((t) => (
-              <PlanCard key={t.save_id} ticket={t} withReel />
+            {/* Only the first card gets the loud button, so one thing stands out. */}
+            {waiting.map((t, i) => (
+              <PlanCard key={t.save_id} ticket={t} withReel quietButton={i > 0} />
             ))}
           </div>
         </section>
       )}
+
+      {missed.length > 0 && <MissedGroup items={missed} />}
 
       {data.days.length > 0 && (
         <section className="blk" aria-labelledby="week-h">

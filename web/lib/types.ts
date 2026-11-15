@@ -35,6 +35,8 @@ export interface TicketPlan {
   long_day: string | null; // "Thursday", "today", "Nov 26" for accepted plans
   scheduled_iso: string | null;
   followup_due: boolean;
+  /** Still waiting, but an event whose dates have passed: Actions lists it under Missed. */
+  missed?: boolean;
   confirmed_via: "web" | "shortcut" | null;
   gcal_url: string | null;
   ics_url: string | null;
@@ -291,7 +293,6 @@ export interface Profile {
 }
 
 export interface OnboardingOptions {
-  identities: string[];
   age_ranges: string[];
   ethnicities: string[];
   interests: string[];
