@@ -18,6 +18,8 @@ services:
       WORKER_ID: vultr-1
     volumes:
       - ./secrets:/secrets:ro
+      # scripts read fixtures/ from REPO_ROOT, which is / inside the image
+      - ./fixtures:/fixtures:ro
     restart: unless-stopped
   web:
     build: ./web
