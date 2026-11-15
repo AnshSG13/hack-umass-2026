@@ -148,5 +148,6 @@ def delete_user_data(user_id: str) -> dict:
                        ("bundles", db.bundles()), ("deliverables", db.deliverables())):
         counts[name] = coll.delete_many({"user_id": user_id}).deleted_count
     counts["thumbnails"] = db.thumbnails().delete_many({"owner_user_id": user_id}).deleted_count
+    counts["graph_cache"] = db.graph_cache().delete_one({"_id": user_id}).deleted_count
     counts["users"] = db.users().delete_one({"_id": user_id}).deleted_count
     return counts

@@ -520,3 +520,31 @@ export interface Shop {
   dropped: number; // prices left out because their source wasn't a store or review site we know
   error: string | null;
 }
+
+// ---- GET /api/graph: the knowledge graph ----
+export type GraphNodeKind = "type" | "sub" | "save" | "interest";
+
+export interface GraphNode {
+  id: string; // "type:recipe", "sub:recipe/Desserts", "save:<id>", "interest:Baking"
+  kind: GraphNodeKind;
+  label: string;
+  type?: SaveType; // type, sub and save nodes
+  count?: number; // type and sub nodes
+  save_id?: string; // save nodes
+  thumb_url?: string | null; // save nodes
+}
+
+export type GraphLinkKind = "has" | "holds" | "related" | "likes";
+
+export interface GraphLink {
+  source: string;
+  target: string;
+  kind: GraphLinkKind;
+  weight?: number; // cosine, related and likes links
+}
+
+export interface KnowledgeGraph {
+  nodes: GraphNode[];
+  links: GraphLink[];
+  counts: { saves: number; types: number; subcategories: number; related: number; interests: number; interests_total: number };
+}

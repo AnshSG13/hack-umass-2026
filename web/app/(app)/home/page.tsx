@@ -365,6 +365,10 @@ export default function HomePage() {
             <h2 className="block-title" id="actions-h">
               Recommended actions
             </h2>
+            <Link href="/graph" className="add">
+              <Icon name="spark" />
+              See how they connect
+            </Link>
           </div>
           <ul className="recs">
             {actions.map((a) => {
