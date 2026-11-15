@@ -178,7 +178,11 @@ def main() -> int:
                               "featured": row.get("featured", "").strip().lower() == "yes",
                               "expected_type": row["expected_type"], "metadata": meta,
                               "thumb_id": thumb_id, "enrichment": enr, "embedding": emb}
-                    if existing and existing.get("thumb_id") and existing["thumb_id"] != thumb_id:
+                    if existing and existing.get("thumb_id") and not thumb_id:
+                        # The new image couldn't be fetched (Instagram's CDN can refuse a
+                        # server): keep the one every copied save already points at.
+                        sample["thumb_id"] = existing["thumb_id"]
+                    elif existing and existing.get("thumb_id") and existing["thumb_id"] != thumb_id:
                         # Saves copied from the old sample point at its thumbnail: move them to
                         # the new one before the old one goes, or their images break.
                         db.saves().update_many({"thumb_id": existing["thumb_id"]}, {"$set": {"thumb_id": thumb_id}})

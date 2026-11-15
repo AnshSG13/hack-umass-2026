@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from . import actions, db, trip
 from .config import get_settings
@@ -372,7 +373,14 @@ def build(save: dict, user: dict, kind: str, *, discussion: dict | None = None,
            "updated_at": now}
     if user.get("expires_at"):
         doc["expires_at"] = user["expires_at"]
-    db.deliverables().update_one({"_id": _id}, {"$set": doc, "$setOnInsert": {"created_at": now}}, upsert=True)
+    try:
+        db.deliverables().update_one({"_id": _id}, {"$set": doc, "$setOnInsert": {"created_at": now}}, upsert=True)
+    except DuplicateKeyError:
+        # A double tap: the other request made the same thing a moment ago. Answer with that one.
+        made = db.deliverables().find_one(key)
+        if made:
+            return made
+        raise
     return {**doc, "_id": _id, "created_at": (existing or {}).get("created_at") or now}
 
 

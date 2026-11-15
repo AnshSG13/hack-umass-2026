@@ -5,11 +5,12 @@
 // sign-in here. The share token in ?t= stands in for a key, and the request carries none.
 
 import { Suspense, useEffect } from "react";
+import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { DeliverableBlocks, safeHref } from "@/components/deliverables";
 import { Icon } from "@/components/icons";
-import { PublicBack } from "@/components/public-back";
+import { PublicBack, PublicClose } from "@/components/public-back";
 import { ApiError, publicFetcher } from "@/lib/api";
 import { useConfig } from "@/lib/hooks";
 import type { PublicDeliverable } from "@/lib/types";
@@ -111,9 +112,10 @@ function SentPage() {
     <div className="dpage">
       <header className="dpage-head">
         <PublicBack />
-        <span className="wide dpage-brand" translate="no">
+        <Link href="/" className="wide dpage-brand" translate="no">
           {d?.app_name ?? appName}
-        </span>
+        </Link>
+        <PublicClose />
       </header>
       <main>{body}</main>
     </div>

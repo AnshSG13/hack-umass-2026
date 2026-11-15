@@ -299,6 +299,8 @@ def reanalyze(save_id: str, user: dict = Depends(current_user)) -> dict:
         raise HTTPException(status_code=409, detail="This one couldn't be read. Use Try again instead.")
     if not ratelimit.allow("reanalyze", user["_id"]):
         raise HTTPException(status_code=429, detail=RATE_LIMITED)
+    if not ratelimit.demo_spend(user):
+        raise HTTPException(status_code=429, detail=ratelimit.DEMO_BUILD_MESSAGE)
     edited = [f for f in (save.get("user_edited") or []) if f not in ("type", "subcategory")]
     db.saves().update_one({"_id": save["_id"], "user_id": user["_id"]},
                           {"$set": {"status": "planned", "user_edited": edited, "enrich_error": None}})
@@ -444,6 +446,9 @@ def research_prices(save_id: str, user: dict = Depends(current_user)) -> dict:
     if user.get("is_demo") and db.saves().count_documents(
             {"user_id": user["_id"], "shop.status": {"$exists": True}}) >= demo.SHOP_LIMIT:
         raise HTTPException(status_code=429, detail=demo.SHOP_LIMIT_MESSAGE)
+    # Running it again on a reel that already has prices counts too (the line above doesn't).
+    if not ratelimit.demo_spend(user):
+        raise HTTPException(status_code=429, detail=ratelimit.DEMO_BUILD_MESSAGE)
     if shop.start(save):
         background.submit(shop.build, save["_id"], user["_id"])
     return {"shop": shop.view(db.saves().find_one({"_id": save["_id"], "user_id": user["_id"]}), user)}

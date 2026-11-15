@@ -462,8 +462,11 @@ function Proof({
   href,
   onClick,
   busy,
+  color,
 }: {
   icon: IconName;
+  /** The tint the app gives the same thing, so the tile looks like where it leads. */
+  color?: KindColor;
   title: string;
   /** null while it loads: a skeleton holds the line. */
   hint: string | null;
@@ -473,7 +476,7 @@ function Proof({
 }) {
   const body = (
     <>
-      <span className="story-proof-ico" aria-hidden="true">
+      <span className="story-proof-ico" aria-hidden="true" style={color ? tint(color) : undefined}>
         <Icon name={icon} />
       </span>
       <span className="story-proof-text">
@@ -571,29 +574,46 @@ function MoreBeat({
           {showAsk && saveId && (
             <li>
               <Proof
-                icon="ask"
-                title="Ask it anything"
-                hint={askReady ? (discussion?.title ?? "") : null}
+                icon="sparkles"
+                color="lavender"
+                title="AI insights"
+                hint={askReady ? (discussion?.title ?? "Ask the reel anything") : null}
                 href={discussion ? `/s/${saveId}?chat=${encodeURIComponent(discussion.id)}` : null}
               />
             </li>
           )}
           {tripSaveId && (
             <li>
-              <Proof icon="travel" title="Make it a trip" hint={tripHint} href={`/s/${tripSaveId}?show=trip`} />
+              <Proof
+                icon="travel"
+                color="sky"
+                title="Make it a trip"
+                hint={tripHint}
+                href={`/s/${tripSaveId}?show=trip`}
+              />
             </li>
           )}
           {saveId && (
             <li>
               <Proof
-                icon="send"
-                title="Send it to a friend"
+                icon="share"
+                color="rose"
+                title="Send something"
                 hint={making ? "Making the invite" : sendable ? (invite?.hint ?? "An invite, ready to message") : null}
                 busy={making}
                 onClick={() => void makeInvite()}
               />
             </li>
           )}
+          <li>
+            <Proof
+              icon="spark"
+              color="mint"
+              title="How your saves connect"
+              hint="A 3D map you can turn"
+              href="/graph"
+            />
+          </li>
         </ul>
         {problem && (
           <p role="alert" className="plan-error">
@@ -609,7 +629,7 @@ function MoreBeat({
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent>
-          <SheetHead>Send it to a friend</SheetHead>
+          <SheetHead>Send something</SheetHead>
           <SheetDescription>Made from the reel, ready to message to someone.</SheetDescription>
           {made && <DeliverableCard deliverable={made} />}
         </SheetContent>

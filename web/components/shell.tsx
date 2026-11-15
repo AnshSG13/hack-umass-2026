@@ -132,6 +132,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [restarting, setRestarting] = useState(false);
   const handoffId = useRef(0);
 
+  // This tab has been inside the app: a shared page opened from here knows it can go back.
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem("rl_in_app", "1");
+    } catch {
+      /* private mode: the shared page goes Home instead of back */
+    }
+  }, []);
+
   // No key on an app route: back to the landing page.
   useEffect(() => {
     if (key === null) router.replace("/");
