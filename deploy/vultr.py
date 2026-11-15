@@ -196,9 +196,22 @@ def health(domain: str) -> dict | None:
     return None
 
 
+def remote_env(target: str) -> dict[str, str]:
+    """The .env already on the server (CI deploys keep it instead of uploading one)."""
+    out = ssh(target, f"cat {REMOTE_DIR}/.env 2>/dev/null || true", capture_output=True, text=True).stdout
+    env = {}
+    for line in out.splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            key, _, value = line.partition("=")
+            env[key.strip()] = value.strip().strip('"').strip("'")
+    if not env.get("DOMAIN"):
+        die(f"{REMOTE_DIR}/.env on the server is missing or has no DOMAIN. Run one deploy from a laptop first")
+    return env
+
+
 def cmd_deploy(args: argparse.Namespace) -> None:
-    env = check_env()
     target = host(args)
+    env = remote_env(target) if args.keep_remote_env else check_env()
     dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
                            cwd=ROOT, capture_output=True, text=True).stdout.strip()
     if dirty:
@@ -217,11 +230,14 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     if archive.wait() != 0 or extract.returncode != 0:
         die("uploading the code failed")
 
-    print("Uploading .env and secrets/...")
-    scp(target, ROOT / ".env", f"{REMOTE_DIR}/.env")
-    ssh(target, f"chmod 600 {REMOTE_DIR}/.env")
     cookies = ROOT / "secrets" / "instagram_cookies.txt"
-    if cookies.exists():
+    if args.keep_remote_env:
+        print("Keeping the .env and secrets/ already on the server.")
+    else:
+        print("Uploading .env and secrets/...")
+        scp(target, ROOT / ".env", f"{REMOTE_DIR}/.env")
+        ssh(target, f"chmod 600 {REMOTE_DIR}/.env")
+    if not args.keep_remote_env and cookies.exists():
         scp(target, cookies, f"{REMOTE_DIR}/secrets/instagram_cookies.txt")
         if env.get("INSTAGRAM_COOKIES_PATH") != "/secrets/instagram_cookies.txt":
             print("note: set INSTAGRAM_COOKIES_PATH=/secrets/instagram_cookies.txt in .env to use the cookies")
@@ -248,8 +264,8 @@ def cmd_deploy(args: argparse.Namespace) -> None:
             print(f"\nLive at https://{domain}")
             return
         time.sleep(5)
-    print("Not answering over https yet. Check that DNS points at the server, then:"
-          "\n  python deploy/vultr.py logs caddy")
+    die("not answering over https. Check that DNS points at the server, then:"
+        "\n  python deploy/vultr.py logs caddy")
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -291,6 +307,8 @@ def main() -> None:
         if name == "deploy":
             sp.add_argument("--init", action="store_true", help="also create indexes and demo samples")
             sp.add_argument("--skip-samples", action="store_true", help="with --init, skip build_samples")
+            sp.add_argument("--keep-remote-env", action="store_true",
+                            help="don't upload .env or secrets/; use the server's (for GitHub Actions)")
         if name == "status":
             sp.add_argument("--containers", action="store_true", help="also show docker compose ps")
         if name == "logs":

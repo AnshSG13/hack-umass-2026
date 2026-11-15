@@ -1,0 +1,43 @@
+# Every push to main redeploys the Vultr server with deploy/vultr.py.
+# The server keeps its own .env and secrets/; only the code is shipped.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   VULTR_HOST     the server's IP, for example 140.82.6.164
+#   VULTR_SSH_KEY  a private key whose public half is in the server's
+#                  /root/.ssh/authorized_keys (README, "Deploy on every push to main")
+name: Deploy to Vultr
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vultr-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load the deploy key
+        env:
+          VULTR_SSH_KEY: ${{ secrets.VULTR_SSH_KEY }}
+          VULTR_HOST: ${{ secrets.VULTR_HOST }}
+        run: |
+          if [ -z "$VULTR_HOST" ] || [ -z "$VULTR_SSH_KEY" ]; then
+            echo "::error::Set the VULTR_HOST and VULTR_SSH_KEY repository secrets."
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VULTR_SSH_KEY" > ~/.ssh/realize_deploy
+          chmod 600 ~/.ssh/realize_deploy
+
+      - name: Deploy
+        env:
+          REALIZE_SSH_KEY: /home/runner/.ssh/realize_deploy
+          VULTR_HOST: ${{ secrets.VULTR_HOST }}
+        run: python3 -u deploy/vultr.py deploy --host "$VULTR_HOST" --keep-remote-env
