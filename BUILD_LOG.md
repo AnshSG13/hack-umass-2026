@@ -398,3 +398,7 @@ On "10/10 SoCal Asian Male Fashion Recommendations" the price research matched U
 ## 2026-11-15: the product is Reelize
 
 The owner renamed the product from Realize to Reelize (the domain was already reelize.boston). APP_NAME is Reelize in .env.example and the config default, so every screen, server message and prompt that goes through APP_NAME follows; the web fallbacks, the docs (README, SPEC, DESIGN, CLAUDE.md, shortcut/README, docs/PROMPT) and the pitch deck say Reelize too. Code names stay as they are: the realize Python package, the rl_ storage keys, MONGODB_DB=realize and the repo folder, since renaming them would move data or break deploys for no one's benefit. The live server keeps its own .env, so a CI deploy now sets its APP_NAME from .env.example when they differ. History above keeps the old name.
+
+## 2026-11-20: the intro drops the hobbies question
+
+Asked for by a teammate to shorten sign up: the intro is now interests, then the optional age range and ethnicity (`web/app/welcome/page.tsx`). Nothing else changes: `profile.hobbies` and the server's handling of it stay, and a hobby saved before now is sent back unchanged when someone redoes the intro, so its folder is kept. This reverses part of the 2026-11-14 "interests and hobbies are the folders" decision; interests still become folders.

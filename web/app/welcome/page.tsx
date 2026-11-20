@@ -2,10 +2,11 @@
 
 // The intro, one question per screen like a video app's onboarding:
 //   1. Choose what you like: interest chips, plus more specific ones Gemini suggests
-//   2. Your hobbies
-//   3. A bit about you: age, ethnicity (optional, last, so the folders come first)
-// Then each interest and hobby becomes a folder under the kind Gemini says it fits (Food >
-// Baking) and the screen shows them. New reels reuse them, or get a new sub-category when none fits.
+//   2. A bit about you: age, ethnicity (optional, last, so the folders come first)
+// Then each interest becomes a folder under the kind Gemini says it fits (Food > Baking) and the
+// screen shows them. New reels reuse them, or get a new sub-category when none fits.
+// The hobbies question was cut on 2026-11-20 to shorten the intro. Hobbies saved before then
+// stay on the profile and are sent back unchanged, so their folders are kept.
 // Ethnicity is stored on the profile only; it is never sent to Gemini. There is no gender
 // question: nothing used the answer.
 
@@ -18,23 +19,21 @@ import { useKey, useMe } from "@/lib/hooks";
 import { KINDS, tint } from "@/lib/kinds";
 import type { OnboardingOptions, Profile, StarterGroup } from "@/lib/types";
 
-type StepId = "interests" | "hobbies" | "age" | "ethnicity";
-type OwnList = "interests" | "hobbies"; // lists people can add their own entries to
+type StepId = "interests" | "age" | "ethnicity";
 
 interface Step {
   id: StepId;
-  section: 0 | 1 | 2;
+  section: 0 | 1;
   title: string;
   sub?: string;
 }
 
-const SECTIONS = ["Choose what you like", "Your hobbies", "A bit about you"];
+const SECTIONS = ["Choose what you like", "A bit about you"];
 
 const STEPS: Step[] = [
   { id: "interests", section: 0, title: "What are you into?", sub: "Pick a few, or add your own. Each one becomes a folder for your saves." },
-  { id: "hobbies", section: 1, title: "What do you do for fun?", sub: "Tap any, or add your own." },
-  { id: "age", section: 2, title: "How old are you?", sub: "Optional. Your age range helps fit your plans to you." },
-  { id: "ethnicity", section: 2, title: "What's your ethnicity?", sub: "Optional, and only you see it. It isn't used to sort or plan anything." },
+  { id: "age", section: 1, title: "How old are you?", sub: "Optional. Your age range helps fit your plans to you." },
+  { id: "ethnicity", section: 1, title: "What's your ethnicity?", sub: "Optional, and only you see it. It isn't used to sort or plan anything." },
 ];
 
 const EMPTY: Profile = { age_range: null, ethnicity: [], interests: [], hobbies: [] };
@@ -114,7 +113,7 @@ function Welcome() {
 
   const [index, setIndex] = useState(0);
   const [profile, setProfile] = useState<Profile>(EMPTY);
-  const [extra, setExtra] = useState<Record<OwnList, string[]>>({ interests: [], hobbies: [] });
+  const [extra, setExtra] = useState<string[]>([]); // interests people typed in themselves
   const [suggested, setSuggested] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
   const [phase, setPhase] = useState<"asking" | "building" | "done">("asking");
@@ -201,11 +200,11 @@ function Welcome() {
     else void finish();
   }
 
-  function addOwn(list: OwnList, value: string) {
+  function addOwn(value: string) {
     const same = (x: string) => x.toLowerCase() === value.toLowerCase();
-    const shown = [...(options?.[list] ?? []), ...extra[list], ...(list === "interests" ? suggested : [])];
-    if (!shown.some(same)) setExtra((e) => ({ ...e, [list]: [...e[list], value] }));
-    setProfile((p) => (p[list].some(same) ? p : { ...p, [list]: [...p[list], value] }));
+    const shown = [...(options?.interests ?? []), ...extra, ...suggested];
+    if (!shown.some(same)) setExtra((e) => [...e, value]);
+    setProfile((p) => (p.interests.some(same) ? p : { ...p, interests: [...p.interests, value] }));
   }
 
   function pickAge(value: string) {
@@ -350,11 +349,11 @@ function Welcome() {
           <>
             <Chips
               label="Interests"
-              values={[...options.interests, ...extra.interests]}
+              values={[...options.interests, ...extra]}
               picked={profile.interests}
               onToggle={(v) => setProfile((p) => ({ ...p, interests: toggle(p.interests, v) }))}
             />
-            <AddOwn key="interests" placeholder="Add your own" onAdd={(v) => addOwn("interests", v)} />
+            <AddOwn key="interests" placeholder="Add your own" onAdd={addOwn} />
             {(suggested.length > 0 || suggesting) && (
               <section className="ob-more" aria-live="polite">
                 <h2>
@@ -373,18 +372,6 @@ function Welcome() {
                 )}
               </section>
             )}
-          </>
-        )}
-
-        {step.id === "hobbies" && (
-          <>
-            <Chips
-              label={step.title}
-              values={[...options.hobbies, ...extra.hobbies]}
-              picked={profile.hobbies}
-              onToggle={(v) => setProfile((p) => ({ ...p, hobbies: toggle(p.hobbies, v) }))}
-            />
-            <AddOwn key="hobbies" placeholder="Add a hobby" onAdd={(v) => addOwn("hobbies", v)} />
           </>
         )}
 

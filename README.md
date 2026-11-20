@@ -33,7 +33,7 @@ What else is in the app:
   - **Reanalyze**, to read a reel again and re-sort it.
 - **Knowledge graph** (`/graph`). How your types, your own categories, sub-categories, saves and interests connect; it grows as new categories appear. Tap a reel to see its picture and title, double tap to open it. Ask uses the graph to find related saves.
 - **Your own categories.** On any reel, "File under" lists the kinds, your own categories and their sub-categories, with fields to add a new category or sub-category on the spot. Each category gets its own tile in My collection and its own page.
-- **Accounts.** Sign up with email and password, or with a key and no password. An email account can get a Shortcut key in one tap. New accounts get a short intro that asks for interests and hobbies first; each one becomes a starter sub-category.
+- **Accounts.** Sign up with email and password, or with a key and no password. An email account can get a Shortcut key in one tap. New accounts get a short intro that asks for interests first; each one becomes a starter sub-category.
 - **Demo.** "Try the demo" opens a guided story on prebuilt sample reels, so the first open never waits, then a throwaway account with the samples in it. Demo use is limited to 60 an hour per visitor address.
 
 The interface is a ticket: the top half is the reel, the stub below the perforation is the plan. Adding punches it. Done tears the stub off.
