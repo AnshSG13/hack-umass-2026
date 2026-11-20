@@ -49,7 +49,7 @@ Failures and their workarounds are in BLOCKERS.md.
 - **Creator handle.** For Instagram, yt-dlp's `uploader_id` is a numeric account id and the @handle is in `channel`. `creator.handle` uses `channel` when `uploader_id` is numeric.
 - **"This week" is a rolling 7 days starting today**, not Monday to Sunday. With a calendar week, a plan made on Saturday for Monday would be hidden under "Coming up" and the home screen would look empty all weekend.
 - **Extra modules beyond the SPEC section 3 list:** `accounts.py` (keys and users), `planops.py` (plan transitions), `tickets.py` (the Ticket shape), `runs.py` (agent_runs). They hold code the listed files would otherwise share.
-- **Extra read-only routes:** `GET /api/demo/hero` (the landing page's proposed ticket, built from the first recipe sample, writes nothing) and `GET /api/chips` (Ask starter questions from the user's data, no LLM). The spec asks for both behaviors but names no route.
+- **Extra read-only routes:** `GET /api/demo/hero` (the landing page's proposed ticket, built from the first recipe sample, writes nothing; since 2026-11-20 it also returns `tickets`, one each for the first recipe, workout and place samples, for the landing page's food, fitness and travel examples) and `GET /api/chips` (Ask starter questions from the user's data, no LLM). The spec asks for both behaviors but names no route.
 - **Stale proposals.** A proposed plan whose first option has already passed gets fresh options from `slots.py` the next time it is listed, with the old ones kept in `options_prev`, so "Waiting on you" never offers a past time.
 - **Atlas.** Server 8.0.37. `create_indexes` reports both search indexes queryable and the `$rankFusion` test query worked, so `HYBRID_MODE=auto` uses `$rankFusion`.
 

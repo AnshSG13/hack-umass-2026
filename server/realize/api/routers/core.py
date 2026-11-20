@@ -316,8 +316,10 @@ def demo_story(user: dict = Depends(current_user)) -> dict:
 @router.get("/api/demo/hero")
 def demo_hero() -> dict:
     """A real ticket in the proposed state for the landing page, built from the
-    first sample with default preferences. Nothing is written."""
-    return {"ticket": demo.hero_ticket()}
+    first sample with default preferences, plus one per landing example (food, fitness,
+    travel) in `tickets`. Nothing is written."""
+    heroes = demo.hero_tickets()
+    return {"ticket": heroes[0] if heroes else None, "tickets": heroes}
 
 
 @router.get("/api/debug/sleep")
