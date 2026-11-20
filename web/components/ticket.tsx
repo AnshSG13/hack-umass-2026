@@ -112,7 +112,7 @@ function Notch({ side }: { side: "left" | "right" }) {
 }
 
 /** 20 px notches cut into both edges, joined by a 1.5 px dashed line (dash 6, gap 6). */
-function Perforation() {
+export function Perforation() {
   return (
     <div aria-hidden="true" className="relative h-5 border-x border-line bg-ticket">
       <Notch side="left" />
@@ -203,7 +203,7 @@ function Confidence({ value }: { value: "sure" | "best_guess" }) {
   );
 }
 
-function ReelHalf({
+export function ReelHalf({
   ticket,
   href,
   footer,

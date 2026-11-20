@@ -70,11 +70,11 @@ Toast (custom component, bottom, above the tab bar, opacity 120 ms, 6 s): "Added
 
 ## 7. Screens
 ### 7.1 Landing `/` (no key)
-- Headline "Every save becomes a plan."
-- Sub: "Share a reel from Instagram. Reelize reads it, checks your week, and asks before it adds anything."
-- Hero: a real Ticket in the proposed state built from the first sample (GET /api/demo/samples); if /landing.mp4 exists, a muted looping clip (playsinline, poster) instead.
-- Primary "Try the demo" → creates a demo session → /demo. Loading: "Starting the demo". Error: "The demo didn't start. Try again."
-- Secondary "Use it for real" → /setup.
+- Headline "Bring back intentional scrolling." ("intentional" on the highlighter mark).
+- Sub: "You save reels and forget them. **Every save becomes a plan.** Just share a reel to Reelize. It handles the rest."
+- Hero, "the pile and the plan": a row of five real sample thumbnails (GET /api/demo/samples), greyscale and faded, captioned "Saved, then forgotten"; a down arrow; then three example tickets, food, fitness and travel (GET /api/demo/hero `tickets`: the first recipe, workout and place samples). They sit in one row of full-width cards that snap as you swipe, with a dot per example under it (44 px buttons; the current one ink) that also jumps on click. Each ticket's stub shows the reel's action, not a time: `action.cta` large on the highlighter mark ("Let's cook this", "Do this workout", "Plan a visit") with `action.pitch` under it at 13px on one line. Cooking's line becomes "Every step and ingredient, read from the video" once the save is `ready` (its steps and ingredients are read from the video); other actions keep their pitch and don't claim the video, since a trip plan's hours and prices come from elsewhere. The pile leaves out the examples' own reels. No time, groceries, why line or confidence while reminders aren't offered. If /landing.mp4 exists, a muted looping clip (playsinline, poster) replaces the whole hero.
+- Primary "Try the demo" → creates a demo session → /story. Loading: "Starting the demo". Error: "The demo didn't start. Try again."
+- "Create an account" (→ /signup) and "Sign in" are text links on one line under it, so the demo is the only filled button. With the demo off, "Create an account" becomes the primary button.
 - Footer (13px muted): "Built at HackUMass XIV."
 ### 7.2 Samples `/demo` (demo users)
 - Intro: "This is what happens when you share a reel from Instagram."

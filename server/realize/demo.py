@@ -231,19 +231,45 @@ def list_samples(user: dict | None) -> list[dict]:
     return out
 
 
-def hero_ticket() -> dict | None:
-    """A proposed ticket for the landing page from the first actionable sample. Writes nothing."""
+# The landing page's examples, in order: food, fitness, travel.
+HERO_KINDS = ("recipe", "workout", "place")
+
+
+def hero_tickets() -> list[dict]:
+    """One proposed ticket per HERO_KINDS from the samples (the first actionable one of each kind,
+    else the first of that kind), for the landing page. A kind with no sample is left out; with
+    no recipe at all, the first sample leads. Writes nothing."""
+    samples = list(db.sample_cache().find().sort("order", 1))
+    if not samples:
+        return []
+
+    def kind_of(s: dict) -> str | None:
+        return (s.get("enrichment") or {}).get("type")
+
+    picked: list[dict] = []
+    for kind in HERO_KINDS:
+        of_kind = [s for s in samples if kind_of(s) == kind]
+        best = next((s for s in of_kind if (s.get("cached_plan") or {}).get("actionable")), None)
+        if best or of_kind:
+            picked.append(best or of_kind[0])
+    if not picked or kind_of(picked[0]) != "recipe":
+        picked.insert(0, samples[0])
+    seen: set = set()
+    out = []
+    for s in picked:
+        if s["_id"] not in seen:
+            seen.add(s["_id"])
+            out.append(_hero_from_sample(s))
+    return out
+
+
+def _hero_from_sample(sample: dict) -> dict:
     from bson import ObjectId
 
     from . import tickets
     from .config import get_settings
     from .models import default_prefs
 
-    samples = list(db.sample_cache().find().sort("order", 1))
-    if not samples:
-        return None
-    sample = next((s for s in samples if (s.get("cached_plan") or {}).get("actionable")
-                   and (s.get("enrichment") or {}).get("type") == "recipe"), samples[0])
     user = {"_id": "u_template", "timezone": get_settings().default_timezone, "prefs": default_prefs()}
     save = save_doc_from_sample(user, sample, status="ready", source="sample")
     save["_id"] = ObjectId()
